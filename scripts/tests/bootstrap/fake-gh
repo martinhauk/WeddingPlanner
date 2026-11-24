@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+# Test double for the GitHub CLI, used by scripts/tests/bootstrap/run.sh. No network access.
+#
+# REST responses come from the JSON object in $FAKE_GH_STATE, keyed by "<METHOD> <path>"
+# (e.g. "GET repos/acme/wedding-demo"). Special values: "__204__" (success, empty body) and
+# {"__error": "<message>"} (failure). A GET without a canned response fails with HTTP 404;
+# writes without one succeed with "{}". `--jq` filters are applied with jq.
+#
+# `gh secret set NAME --env ENV --repo REPO` reads the value from stdin like the real CLI, stores
+# it in $FAKE_GH_DIR/secret-NAME-ENV and fails if the state has "SECRET NAME" = {"__error": ...}.
+#
+# Every call is appended to $FAKE_GH_LOG, one line each:
+#   GET <path> | <METHOD> <path> <body> | SECRET <name> <arguments>
+set -euo pipefail
+
+state=${FAKE_GH_STATE:?FAKE_GH_STATE is not set}
+log=${FAKE_GH_LOG:?FAKE_GH_LOG is not set}
+dir=${FAKE_GH_DIR:?FAKE_GH_DIR is not set}
+mkdir -p "$dir"
+
+# respond KEY FILTER: print the canned response for KEY; returns 2 when there is none.
+respond() {
+  local key=$1 filter=$2 value
+  if [ "$(jq --arg k "$key" 'has($k)' "$state")" != "true" ]; then
+    return 2
+  fi
+  value=$(jq -c --arg k "$key" '.[$k]' "$state")
+  if [ "$value" = '"__204__"' ]; then
+    return 0
+  fi
+  if [ "$(printf '%s' "$value" | jq 'type == "object" and has("__error")')" = "true" ]; then
+    printf 'gh: %s\n' "$(printf '%s' "$value" | jq -r '.__error')" >&2
+    exit 1
+  fi
+  if [ -n "$filter" ]; then
+    printf '%s' "$value" | jq -r "$filter"
+  else
+    printf '%s\n' "$value"
+  fi
+}
+
+if [ "${1:-}" = "secret" ] && [ "${2:-}" = "set" ]; then
+  name=${3:?secret name missing}
+  shift 3
+  printf 'SECRET %s %s\n' "$name" "$*" >>"$log"
+  env=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --env | -e) env=$2 && shift 2 ;;
+      --repo | -R) shift 2 ;;
+      *)
+        printf 'fake gh: unsupported secret set argument: %s\n' "$1" >&2
+        exit 2
+        ;;
+    esac
+  done
+  [ -n "$env" ] || {
+    printf 'fake gh: secret set without --env\n' >&2
+    exit 2
+  }
+  cat >"$dir/secret-$name-$env"
+  respond "SECRET $name" "" >/dev/null || true
+  exit 0
+fi
+
+if [ "${1:-}" = "repo" ] && [ "${2:-}" = "view" ]; then
+  printf 'REPO_VIEW\n' >>"$log"
+  respond "repo view" "" || exit 1
+  exit 0
+fi
+
+if [ "${1:-}" != "api" ]; then
+  printf 'fake gh: unsupported command: %s\n' "$*" >&2
+  exit 2
+fi
+shift
+
+method=GET
+path=""
+body=""
+jq_filter=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -X | --method)
+      method=$2
+      shift 2
+      ;;
+    --input)
+      [ "$2" = "-" ] || {
+        printf 'fake gh: only --input - is supported\n' >&2
+        exit 2
+      }
+      body=$(cat)
+      shift 2
+      ;;
+    --paginate) shift ;;
+    --jq | -q)
+      jq_filter=$2
+      shift 2
+      ;;
+    -*)
+      printf 'fake gh: unsupported flag: %s\n' "$1" >&2
+      exit 2
+      ;;
+    *)
+      path=$1
+      shift
+      ;;
+  esac
+done
+
+if [ "$method" = "GET" ]; then
+  printf 'GET %s\n' "$path" >>"$log"
+elif [ -n "$body" ]; then
+  printf '%s %s %s\n' "$method" "$path" "$(printf '%s' "$body" | jq -c .)" >>"$log"
+else
+  printf '%s %s\n' "$method" "$path" >>"$log"
+fi
+
+status=0
+respond "$method $path" "$jq_filter" || status=$?
+if [ "$status" -eq 2 ]; then
+  if [ "$method" = "GET" ]; then
+    printf 'gh: Not Found (HTTP 404)\n' >&2
+    exit 1
+  fi
+  if [ -n "$jq_filter" ]; then
+    printf '{}' | jq -r "$jq_filter"
+  else
+    printf '{}\n'
+  fi
+fi

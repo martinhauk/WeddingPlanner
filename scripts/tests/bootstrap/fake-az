@@ -1,0 +1,181 @@
+#!/usr/bin/env bash
+# Test double for the Azure CLI, used by scripts/tests/bootstrap/run.sh. No network access.
+#
+# Implements only the commands scripts/bootstrap.sh uses, backed by the JSON state file
+# $FAKE_AZ_STATE, which `provider register` and `federated-credential delete` update in place.
+# Every call is appended to $FAKE_AZ_LOG as "az <arguments>". `deployment sub create` copies its
+# parameters file to $FAKE_AZ_DIR/params-<n>.json; `deployment sub show` derives the outputs from
+# the last one, like the real template would.
+#
+# State keys:
+#   account               {id, tenantId}; null means "not signed in"
+#   subscription          body of GET /subscriptions/{id} (state, subscriptionPolicies)
+#   signedInUser          object id of the signed-in user; null for a service principal login
+#   providers             {namespace: registrationState}; missing means NotRegistered
+#   registerResult        state a provider gets after `register` (default Registered)
+#   groups                {name: location} of existing resource groups
+#   actionGroups          {"<rg>/<name>": location} of existing action groups
+#   extraCredentials      federated credential names besides github-<env>
+#   deploymentFailures    number of `deployment sub create` calls that fail first
+#   deploymentError       stderr of such a failure
+#   clientId              identityClientId output
+set -euo pipefail
+
+state=${FAKE_AZ_STATE:?FAKE_AZ_STATE is not set}
+log=${FAKE_AZ_LOG:?FAKE_AZ_LOG is not set}
+dir=${FAKE_AZ_DIR:?FAKE_AZ_DIR is not set}
+mkdir -p "$dir"
+printf 'az %s\n' "$*" >>"$log"
+
+fail() {
+  printf 'ERROR: %s\n' "$*" >&2
+  exit 1
+}
+
+update() {
+  local tmp
+  tmp=$(mktemp "$dir/state.XXXXXX")
+  jq "$@" "$state" >"$tmp"
+  mv "$tmp" "$state"
+}
+
+command=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -*) break ;;
+    *)
+      command="$command $1"
+      shift
+      ;;
+  esac
+done
+command=${command# }
+
+f_name="" f_namespace="" f_query="" f_output="" f_subscription="" f_parameters=""
+f_template="" f_identity="" f_group="" f_url="" f_location=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --yes | --only-show-errors)
+      shift
+      ;;
+    --name | -n) f_name=$2 && shift 2 ;;
+    --namespace) f_namespace=$2 && shift 2 ;;
+    --query) f_query=$2 && shift 2 ;;
+    -o | --output) f_output=$2 && shift 2 ;;
+    --subscription) f_subscription=$2 && shift 2 ;;
+    --parameters) f_parameters=$2 && shift 2 ;;
+    --template-file) f_template=$2 && shift 2 ;;
+    --identity-name) f_identity=$2 && shift 2 ;;
+    --resource-group | -g) f_group=$2 && shift 2 ;;
+    --url) f_url=$2 && shift 2 ;;
+    --location | -l) f_location=$2 && shift 2 ;;
+    --method) shift 2 ;;
+    *) fail "fake az: unsupported argument $1" ;;
+  esac
+done
+
+signed_in() { [ "$(jq '.account != null' "$state")" = "true" ]; }
+require_login() { signed_in || fail "Please run 'az login' to setup account."; }
+check_subscription() {
+  if [ -n "$f_subscription" ] && [ "$(jq -r '.account.id' "$state")" != "$f_subscription" ]; then
+    fail "Subscription '$f_subscription' not found. Check the spelling and casing and try again."
+  fi
+}
+
+case "$command" in
+  "account show")
+    require_login
+    check_subscription
+    case "$f_query" in
+      id | tenantId) jq -r --arg q "$f_query" '.account[$q]' "$state" ;;
+      *) fail "fake az: unsupported query $f_query" ;;
+    esac
+    ;;
+  rest)
+    require_login
+    case "$f_url" in
+      "/subscriptions/$(jq -r '.account.id' "$state")?api-version="*) jq '.subscription' "$state" ;;
+      *) fail "fake az: unsupported url" ;;
+    esac
+    ;;
+  "ad signed-in-user show")
+    require_login
+    if [ "$(jq '.signedInUser == null' "$state")" = "true" ]; then
+      fail "/me request is only valid with delegated authentication flow."
+    fi
+    jq -r '.signedInUser' "$state"
+    ;;
+  "provider show")
+    require_login
+    check_subscription
+    jq -r --arg ns "$f_namespace" '.providers[$ns] // "NotRegistered"' "$state"
+    ;;
+  "provider register")
+    require_login
+    check_subscription
+    [ "$f_output" = "none" ] || fail "fake az: provider register without -o none"
+    # shellcheck disable=SC2016 # $ns is a jq variable
+    update --arg ns "$f_namespace" '.providers[$ns] = (.registerResult // "Registered")'
+    ;;
+  "group exists")
+    require_login
+    jq -r --arg g "$f_name" '(.groups // {}) | has($g)' "$state"
+    ;;
+  "group show")
+    require_login
+    if [ "$(jq -r --arg g "$f_name" '(.groups // {}) | has($g)' "$state")" != "true" ]; then
+      fail "(ResourceGroupNotFound) Resource group '$f_name' could not be found."
+    fi
+    jq -r --arg g "$f_name" '.groups[$g]' "$state"
+    ;;
+  "monitor action-group show")
+    require_login
+    key="$f_group/$f_name"
+    if [ "$(jq -r --arg k "$key" '(.actionGroups // {}) | has($k)' "$state")" != "true" ]; then
+      fail "(ResourceNotFound) The Resource 'microsoft.insights/actiongroups/$f_name' was not found."
+    fi
+    jq -r --arg k "$key" '.actionGroups[$k]' "$state"
+    ;;
+  "deployment sub create")
+    require_login
+    check_subscription
+    [ "$f_output" = "none" ] || fail "fake az: deployment without -o none"
+    [ -n "$f_location" ] || fail "fake az: --location is required"
+    [ -f "$f_template" ] || fail "fake az: template not found"
+    params=${f_parameters#@}
+    [ -f "$params" ] || fail "fake az: parameters file not found"
+    n=$(find "$dir" -name 'params-*.json' | wc -l | tr -d ' ')
+    cp "$params" "$dir/params-$((n + 1)).json"
+    cp "$params" "$dir/last-params.json"
+    if [ "$(jq '(.deploymentFailures // 0) > 0' "$state")" = "true" ]; then
+      update '.deploymentFailures -= 1'
+      jq -r '.deploymentError' "$state" >&2
+      exit 1
+    fi
+    ;;
+  "deployment sub show")
+    require_login
+    [ -f "$dir/last-params.json" ] || fail "(DeploymentNotFound) Deployment '$f_name' could not be found."
+    jq --arg client "$(jq -r '.clientId' "$state")" '.parameters as $p
+      | "rg-\($p.deploymentSlug.value)-\($p.environmentName.value)" as $rg
+      | {
+          appResourceGroupName: {type: "String", value: $rg},
+          opsResourceGroupName: {type: "String", value: "\($rg)-ops"},
+          identityClientId: {type: "String", value: $client}
+        }' "$dir/last-params.json"
+    ;;
+  "identity federated-credential list")
+    require_login
+    env=${f_identity##*-}
+    jq -r --arg env "$env" '["github-\($env)"] + (.extraCredentials // []) | .[]' "$state"
+    ;;
+  "identity federated-credential delete")
+    require_login
+    [ "$f_output" = "none" ] || fail "fake az: delete without -o none"
+    # shellcheck disable=SC2016 # $n is a jq variable
+    update --arg n "$f_name" '.extraCredentials = ((.extraCredentials // []) - [$n])'
+    ;;
+  *)
+    fail "fake az: unsupported command: $command"
+    ;;
+esac
