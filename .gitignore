@@ -11,6 +11,7 @@ obj/
 # Content baked from an instance at build time (never commit real content)
 apps/web/src/content/generated/
 apps/web/public/content/
+apps/web/public/version.json
 # Generated SWA config and local SWA CLI output
 apps/web/.swa/
 
