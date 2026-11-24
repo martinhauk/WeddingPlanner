@@ -1,0 +1,21 @@
+packages:
+  - apps/*
+  - packages/*
+  - tests/*
+  - tools/*
+
+# `pnpm add` writes exact versions (no ^ or ~ ranges).
+saveExact: true
+
+# Dependencies allowed (true) or explicitly denied (false) to run install
+# (build) scripts. pnpm refuses to install while a dependency with a build
+# script is not listed here. Add an entry only with a reason in the PR.
+#   esbuild: downloads its platform binary (Vite, Vitest)
+#   sharp:   installs libvips bindings (image bake in @weddingplanner/content)
+#   keytar:  native credential store of the SWA CLI, used only by `swa login`
+#            and `swa deploy`; we use the CLI only as a local emulator and
+#            deploy from GitHub Actions, so its native build is not needed.
+allowBuilds:
+  esbuild: true
+  sharp: true
+  keytar: false
