@@ -1,3 +1,4 @@
+using Azure;
 using Azure.Data.Tables;
 
 using Shouldly;
@@ -32,7 +33,14 @@ public sealed class AzuriteTableStorageTests
         }
         finally
         {
-            await service.DeleteTableAsync(tableName, cancellationToken);
+            // A failing cleanup must not hide the original failure; the check below still catches a leftover table.
+            try
+            {
+                await service.DeleteTableAsync(tableName, cancellationToken);
+            }
+            catch (RequestFailedException)
+            {
+            }
         }
 
         (await TableExistsAsync(service, tableName, cancellationToken)).ShouldBeFalse();

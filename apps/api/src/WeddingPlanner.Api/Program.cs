@@ -38,6 +38,24 @@ internal partial class Program
     internal const string ApplicationInsightsConnectionStringKey = "APPLICATIONINSIGHTS_CONNECTION_STRING";
 
     /// <summary>
+    /// Worker trace sampling when no sampler app setting is present: the Azure Monitor exporter's
+    /// rate-limited sampler at this many traces per second. This is the exporter's own default
+    /// (<c>AzureMonitorExporterOptions.TracesPerSecond</c>, 1.10.0); a wiring test pins it so a package
+    /// upgrade cannot change it silently.
+    /// </summary>
+    internal const double DefaultWorkerTracesPerSecond = 5;
+
+    /// <summary>
+    /// Standard OpenTelemetry sampler app settings. They set sampling for the Functions host and, with the
+    /// Azure Monitor exporter values <c>microsoft.rate_limited</c> (traces per second) or
+    /// <c>microsoft.fixed_percentage</c> (ratio 0..1), for this worker too.
+    /// </summary>
+    internal const string TracesSamplerKey = "OTEL_TRACES_SAMPLER";
+
+    /// <inheritdoc cref="TracesSamplerKey"/>
+    internal const string TracesSamplerArgumentKey = "OTEL_TRACES_SAMPLER_ARG";
+
+    /// <summary>
     /// Worker middleware, outermost first: exception handling → feature gate → rate limiting →
     /// origin guard → admin authorization (<c>Admin*</c> functions only).
     /// </summary>
@@ -72,6 +90,15 @@ internal partial class Program
     /// OpenTelemetry with the Azure Monitor exporter, only when <c>APPLICATIONINSIGHTS_CONNECTION_STRING</c>
     /// is set (deployed environments). Locally and in tests nothing is exported.
     /// </summary>
+    /// <remarks>
+    /// Sampling is a deliberate choice: worker traces use the exporter's rate-limited sampler at
+    /// <see cref="DefaultWorkerTracesPerSecond"/> traces per second, unless the <c>OTEL_TRACES_SAMPLER</c> /
+    /// <c>OTEL_TRACES_SAMPLER_ARG</c> app settings say otherwise. Keep the parameterless
+    /// <c>UseAzureMonitorExporter()</c>: with exporter 1.10.0, any code-side configuration of
+    /// <c>AzureMonitorExporterOptions</c> (a delegate here or <c>services.Configure</c>) makes the exporter
+    /// ignore those app settings, so one setting would no longer tune host and worker together.
+    /// <c>ProgramWiringTests</c> pins both the default and the override.
+    /// </remarks>
     internal static void AddTelemetry(IServiceCollection services, IConfiguration configuration)
     {
         if (string.IsNullOrWhiteSpace(configuration[ApplicationInsightsConnectionStringKey]))

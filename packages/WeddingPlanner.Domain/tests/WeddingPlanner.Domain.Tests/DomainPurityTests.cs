@@ -44,6 +44,8 @@ public sealed class DomainPurityTests
     public void DomainRestoreGraphContainsNoAzureOrAspNetCorePackage()
     {
         // project.assets.json lists every transitive package and framework reference of the domain.
+        // It assumes the default obj/ next to the project: update this path if the build ever moves
+        // intermediate output (--artifacts-path, UseArtifactsOutput or a custom BaseIntermediateOutputPath).
         var assetsPath = Path.Combine(_domainProjectDirectory, "obj", "project.assets.json");
         File.Exists(assetsPath).ShouldBeTrue($"restore output missing: {assetsPath}");
 

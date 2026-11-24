@@ -25,7 +25,9 @@ Run from the repo root.
 
 Tests run on **Microsoft.Testing.Platform** (`global.json` → `test.runner`; xUnit v3 with Shouldly).
 `--filter` takes the VSTest filter syntax; the xUnit-native `--filter-not-trait "Category=Integration"`
-works too.
+works too. For coverage, VSTest data collectors such as `coverlet.collector` do not run under MTP; use an
+MTP extension instead (`Microsoft.Testing.Extensions.CodeCoverage` with `dotnet test --coverage`, or
+`coverlet.MTP`), pinned in `Directory.Packages.props` by the task that adds it.
 
 Running the API locally until S0-11 wires `pnpm dev:api`: copy
 `src/WeddingPlanner.Api/local.settings.sample.json` to `local.settings.json` (gitignored), then run
@@ -89,9 +91,26 @@ values keep it off (dark). Code default: off.
   build too (for example CA1822: a function method that uses no instance state must be `static`).
 - **Telemetry:** `host.json` sets `telemetryMode: OpenTelemetry`. The worker adds OpenTelemetry with the
   Azure Monitor exporter **only when `APPLICATIONINSIGHTS_CONNECTION_STRING` is set** (locally and in
-  tests nothing is exported). The exporter samples by default (rate-limited, 5 traces/s; override with
-  `OTEL_TRACES_SAMPLER` / `OTEL_TRACES_SAMPLER_ARG`); `host.json` keeps Application Insights sampling on
-  and `Host.Results` at Information so request durations stay visible.
+  tests nothing is exported). Sampling in this mode:
+  - **Worker:** the exporter's rate-limited sampler at 5 traces/s (`Program.DefaultWorkerTracesPerSecond`,
+    the exporter's own default, pinned by `ProgramWiringTests`). `Program.AddTelemetry` deliberately
+    calls the parameterless `UseAzureMonitorExporter()`: with exporter 1.10.0, any code-side
+    configuration of `AzureMonitorExporterOptions` (a delegate or `services.Configure`) makes the
+    exporter ignore the sampler app settings below. A wiring test fails if that happens.
+  - **Host:** sampled through the standard app settings `OTEL_TRACES_SAMPLER` / `OTEL_TRACES_SAMPLER_ARG`
+    (Microsoft Learn, "Use OpenTelemetry with Azure Functions" → "Configure OpenTelemetry with
+    environment variables"). The worker reads the same settings when they hold an Azure Monitor value:
+    `microsoft.rate_limited` with traces per second, or `microsoft.fixed_percentage` with a ratio from 0
+    to 1. Without them the host keeps its own default, which is not verified yet. If host-side sampling
+    is wanted, the app settings in the S0-04 Bicep must set them; verify on the first deploy that the
+    host honours them.
+  - **`host.json` `logging.applicationInsights`** (`samplingSettings`, `enableLiveMetricsFilters`) is
+    **inactive** in OpenTelemetry mode (Microsoft Learn, same article → "Considerations"). It stays only
+    for the classic fallback below, where it takes effect.
+  - **`Host.Results` at Information** also serves the classic fallback, where this category produces
+    the request telemetry. In OpenTelemetry mode requests come from host spans, so check on the first
+    deploy whether the category only adds one log record per invocation (keep-warm pings included,
+    against the 0.1 GB daily cap). If it does, drop it.
 
 ## Integration tests and Azurite
 
@@ -131,7 +150,9 @@ values keep it off (dark). Code default: off.
   integration. Add `Microsoft.Azure.Functions.Worker.ApplicationInsights`, call
   `services.AddApplicationInsightsTelemetryWorkerService().ConfigureFunctionsApplicationInsights()`
   (still only when the connection string is set), remove the OpenTelemetry packages and drop
-  `telemetryMode` from `host.json` (classic sampling settings then apply).
+  `telemetryMode` from `host.json`. The `logging.applicationInsights` block in `host.json` (host
+  sampling, live metrics filters) then takes effect, and `OTEL_TRACES_SAMPLER` / `_ARG` no longer
+  apply.
 - **`Azure.Functions.Sdk` migration** (the new project SDK replacing `Microsoft.NET.Sdk` +
   `Microsoft.Azure.Functions.Worker.Sdk`): a later follow-up; Microsoft Learn states it needs no code
   changes. Until then keep `Microsoft.NET.Sdk` with the Worker SDK 2.x.

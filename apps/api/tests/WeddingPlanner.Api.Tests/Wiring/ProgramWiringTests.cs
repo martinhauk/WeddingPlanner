@@ -1,9 +1,12 @@
+using Azure.Monitor.OpenTelemetry.Exporter;
+
 using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Middleware;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 
 using Shouldly;
 
@@ -16,7 +19,10 @@ using Xunit;
 
 namespace WeddingPlanner.Api.Tests.Wiring;
 
-/// <summary>Verifies the composition root in <c>Program.cs</c>: middleware order, gating and lean registrations.</summary>
+/// <summary>
+/// Verifies the composition root in <c>Program.cs</c>: middleware order, gating, lean registrations and
+/// telemetry (on only with a connection string; worker sampling default and its app-setting override).
+/// </summary>
 public sealed class ProgramWiringTests
 {
     [Fact]
@@ -87,13 +93,31 @@ public sealed class ProgramWiringTests
     [Fact]
     public void TelemetryIsOnWithAnApplicationInsightsConnectionString()
     {
-        var app = Compose(new()
-        {
-            [Program.ApplicationInsightsConnectionStringKey] =
-                "InstrumentationKey=00000000-0000-0000-0000-000000000000;IngestionEndpoint=https://example.com/",
-        });
+        var app = Compose(TelemetrySettings());
 
         app.Services.ShouldContain(descriptor => IsOpenTelemetryService(descriptor));
+    }
+
+    [Fact]
+    public void WorkerTracesAreRateLimitedByDefault()
+    {
+        var options = ResolveExporterOptions(Compose(TelemetrySettings()));
+
+        options.TracesPerSecond.ShouldBe(Program.DefaultWorkerTracesPerSecond);
+    }
+
+    [Fact]
+    public void SamplerAppSettingsOverrideWorkerSampling()
+    {
+        // Fails if code starts configuring AzureMonitorExporterOptions: the exporter then ignores these settings.
+        var settings = TelemetrySettings();
+        settings[Program.TracesSamplerKey] = "microsoft.fixed_percentage";
+        settings[Program.TracesSamplerArgumentKey] = "0.25";
+
+        var options = ResolveExporterOptions(Compose(settings));
+
+        options.TracesPerSecond.ShouldBeNull();
+        options.SamplingRatio.ShouldBe(0.25f);
     }
 
     [Fact]
@@ -108,6 +132,18 @@ public sealed class ProgramWiringTests
 
     private static bool IsOpenTelemetryService(ServiceDescriptor descriptor) =>
         descriptor.ServiceType.FullName?.StartsWith("OpenTelemetry.", StringComparison.Ordinal) == true;
+
+    private static Dictionary<string, string?> TelemetrySettings() => new()
+    {
+        [Program.ApplicationInsightsConnectionStringKey] =
+            "InstrumentationKey=00000000-0000-0000-0000-000000000000;IngestionEndpoint=https://example.com/",
+    };
+
+    private static AzureMonitorExporterOptions ResolveExporterOptions(RecordingWorkerApplicationBuilder app)
+    {
+        using var provider = app.Services.BuildServiceProvider();
+        return provider.GetRequiredService<IOptionsMonitor<AzureMonitorExporterOptions>>().Get(Options.DefaultName);
+    }
 
     private static RecordingWorkerApplicationBuilder Compose(Dictionary<string, string?> settings)
     {
