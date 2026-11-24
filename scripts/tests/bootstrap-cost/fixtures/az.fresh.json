@@ -1,0 +1,22 @@
+{
+  "account": { "id": "11111111-1111-4111-8111-111111111111" },
+  "subscription": {
+    "id": "/subscriptions/11111111-1111-4111-8111-111111111111",
+    "subscriptionId": "11111111-1111-4111-8111-111111111111",
+    "state": "Enabled",
+    "subscriptionPolicies": { "spendingLimit": "Off" }
+  },
+  "providers": {
+    "Microsoft.Consumption": "Registered",
+    "Microsoft.CostManagement": "Registered"
+  },
+  "actionGroups": {
+    "rg-wedx7k2p9-production-ops/ag-wedx7k2p9-production": "germanywestcentral"
+  },
+  "budgets": [],
+  "scheduledActions": [],
+  "budgetsError": "",
+  "scheduledActionsError": "",
+  "deploymentFailures": 0,
+  "deploymentError": ""
+}

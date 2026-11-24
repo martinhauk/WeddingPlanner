@@ -1,0 +1,52 @@
+{
+  "account": { "id": "11111111-1111-4111-8111-111111111111" },
+  "subscription": {
+    "id": "/subscriptions/11111111-1111-4111-8111-111111111111",
+    "subscriptionId": "11111111-1111-4111-8111-111111111111",
+    "state": "Enabled",
+    "subscriptionPolicies": { "spendingLimit": "Off" }
+  },
+  "providers": {
+    "Microsoft.Consumption": "Registered",
+    "Microsoft.CostManagement": "Registered"
+  },
+  "actionGroups": {
+    "rg-wedx7k2p9-production-ops/ag-wedx7k2p9-production": "germanywestcentral"
+  },
+  "budgets": [
+    {
+      "id": "/subscriptions/11111111-1111-4111-8111-111111111111/providers/Microsoft.Consumption/budgets/budget-wedx7k2p9",
+      "name": "budget-wedx7k2p9",
+      "properties": {
+        "category": "Cost",
+        "amount": 37,
+        "timeGrain": "Monthly",
+        "timePeriod": { "startDate": "2026-11-01T00:00:00Z", "endDate": "2036-10-31T00:00:00Z" },
+        "notifications": {
+          "Actual_GreaterThan_10_Percent": {
+            "contactEmails": ["maria-jose.garcia@example.org", "pablo.perez@example.org"]
+          }
+        }
+      }
+    }
+  ],
+  "scheduledActions": [
+    {
+      "id": "/subscriptions/11111111-1111-4111-8111-111111111111/providers/Microsoft.CostManagement/scheduledActions/anomaly-wedx7k2p9",
+      "name": "anomaly-wedx7k2p9",
+      "kind": "InsightAlert",
+      "properties": {
+        "notification": { "to": ["maria-jose.garcia@example.org", "pablo.perez@example.org"] },
+        "schedule": {
+          "frequency": "Daily",
+          "startDate": "2026-11-24T10:00:00Z",
+          "endDate": "2027-11-24T00:00:00Z"
+        }
+      }
+    }
+  ],
+  "budgetsError": "",
+  "scheduledActionsError": "",
+  "deploymentFailures": 0,
+  "deploymentError": ""
+}
