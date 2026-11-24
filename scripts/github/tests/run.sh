@@ -87,6 +87,7 @@ check "exits 0" status_is 0
 check "squash only, PR title, auto-merge, update branch, delete branch" json_true \
   "$(first_body 'PATCH repos/acme/wedding-demo')" \
   '.allow_merge_commit == false and .allow_rebase_merge == false and .squash_merge_commit_title == "PR_TITLE"
+   and .squash_merge_commit_message == "COMMIT_MESSAGES"
    and .allow_auto_merge == true and .allow_update_branch == true and .delete_branch_on_merge == true'
 check "enables secret scanning" called 'PATCH repos/acme/wedding-demo {"security_and_analysis":{"secret_scanning":{"status":"enabled"}}}'
 check "enables push protection" called '{"security_and_analysis":{"secret_scanning_push_protection":{"status":"enabled"}}}'

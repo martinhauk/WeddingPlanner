@@ -139,7 +139,8 @@ data}`), RSVP texts, `pages {privacy, imprint?}`, `footer` and `uiStrings` overr
 2. `pnpm content:validate --strict` validates instance, site and media references (diagnostics print
    a code and a JSON path, never values).
 3. `pnpm content:bake` (`INSTANCE_DIR`, `DEPLOY_ENV`) writes `apps/web/src/content/generated/`
-   (`site.json`, `media.json`, `build.json` with `siteUrl`, `features`, RSVP deadline and time zone), responsive WebP images with placeholders, the OG image and calendar files into
+   (`site.json`, `media.json`, `build.json` with `siteUrl`, `features`, RSVP deadline and time zone),
+   responsive WebP images with placeholders, the OG image and calendar files into
    `apps/web/public/content/`, and `public/version.json` (`{sha, builtAt, contentHash, isSample}`).
 4. Budgets: largest image variant ≤300 KB, initial JS ≤150 KB gzipped.
 5. The smoke tests check that `sha` and `contentHash` match and that `isSample` is false on `test` and
