@@ -1,0 +1,80 @@
+# Dependabot version updates: weekly, one grouped PR per ecosystem for minor and patch updates,
+# one PR per major update. Security updates are not delayed by the cooldown.
+#
+# Commit messages (and so PR titles) are Conventional Commits that pass the PR-title check in
+# ci.yml: `build(deps): bump …` for packages and images, `ci(deps): bump …` for actions.
+# Tool binaries pinned inside ci.yml (actionlint, shellcheck, gitleaks, Bicep) are not covered;
+# bump them by hand together with their SHA-256.
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Europe/Berlin
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: build(deps)
+      prefix-development: build(deps)
+    groups:
+      npm-minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Europe/Berlin
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: build(deps)
+    groups:
+      nuget-minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directories:
+      - /
+      - /.github/actions/*
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Europe/Berlin
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: ci(deps)
+    groups:
+      github-actions-minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Europe/Berlin
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: build(deps)
+    groups:
+      docker-compose-minor-and-patch:
+        update-types:
+          - minor
+          - patch

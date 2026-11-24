@@ -1,0 +1,71 @@
+{
+  "repo view": "acme/wedding-demo",
+  "GET repos/acme/wedding-demo": {
+    "full_name": "acme/wedding-demo",
+    "permissions": { "admin": true }
+  },
+  "GET repos/acme/wedding-demo/rulesets?includes_parents=false": [
+    {
+      "id": 7,
+      "name": "release tags",
+      "target": "tag",
+      "source_type": "Repository",
+      "source": "acme/wedding-demo",
+      "enforcement": "active"
+    },
+    {
+      "id": 101,
+      "name": "main",
+      "target": "branch",
+      "source_type": "Repository",
+      "source": "acme/wedding-demo",
+      "enforcement": "active",
+      "node_id": "RRS_demo101"
+    }
+  ],
+  "GET repos/acme/wedding-demo/rulesets/101": {
+    "id": 101,
+    "name": "main",
+    "target": "branch",
+    "source_type": "Repository",
+    "source": "acme/wedding-demo",
+    "enforcement": "active",
+    "conditions": {
+      "ref_name": { "exclude": [], "include": ["refs/heads/main"] }
+    },
+    "rules": [
+      {
+        "type": "required_status_checks",
+        "parameters": {
+          "strict_required_status_checks_policy": true,
+          "do_not_enforce_on_create": false,
+          "required_status_checks": [{ "context": "ci-ok", "integration_id": 15368 }]
+        }
+      },
+      { "type": "deletion" },
+      {
+        "type": "pull_request",
+        "parameters": {
+          "required_approving_review_count": 0,
+          "dismiss_stale_reviews_on_push": false,
+          "require_code_owner_review": false,
+          "require_last_push_approval": false,
+          "required_review_thread_resolution": false,
+          "automatic_copilot_code_review_enabled": false,
+          "allowed_merge_methods": ["squash"]
+        }
+      },
+      { "type": "non_fast_forward" },
+      { "type": "required_linear_history" }
+    ],
+    "node_id": "RRS_demo101",
+    "created_at": "2099-01-01T00:00:00.000Z",
+    "updated_at": "2099-01-01T00:00:00.000Z",
+    "bypass_actors": [],
+    "current_user_can_bypass": "never",
+    "_links": {
+      "self": { "href": "https://api.example.com/repos/acme/wedding-demo/rulesets/101" },
+      "html": { "href": "https://example.com/acme/wedding-demo/rules/101" }
+    }
+  }
+}

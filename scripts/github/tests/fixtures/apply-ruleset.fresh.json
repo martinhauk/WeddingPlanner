@@ -1,0 +1,17 @@
+{
+  "repo view": "acme/wedding-demo",
+  "GET repos/acme/wedding-demo": {
+    "full_name": "acme/wedding-demo",
+    "permissions": { "admin": true }
+  },
+  "GET repos/acme/wedding-demo/rulesets?includes_parents=false": [
+    {
+      "id": 7,
+      "name": "release tags",
+      "target": "tag",
+      "source_type": "Repository",
+      "source": "acme/wedding-demo",
+      "enforcement": "active"
+    }
+  ]
+}
