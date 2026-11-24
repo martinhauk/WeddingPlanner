@@ -1,0 +1,675 @@
+# PR gate (S0-08). The single required check is `ci-ok` (.github/rulesets/main.json).
+#
+# - changes:     decides which path-filtered jobs run (pull requests only; every other event runs
+#                everything) and reads the pinned Azurite image from docker-compose.yml.
+# - web:         Biome, tsc, Vitest, strict validation of the sample instance, JSON Schema drift,
+#                build with the sample instance, size limit.
+# - api:         Azurite service container, dotnet format, Release build (warnings are errors),
+#                dotnet test including the storage integration tests.
+# - infra:       az bicep build + lint of infra/app and infra/bootstrap, build-params with dummy
+#                values, the offline infra tests.
+# - hygiene:     (every run) PR title, actionlint, shellcheck, gitleaks, dependency review, the
+#                offline tests of the owner-run scripts.
+# - e2e-build → e2e (device matrix) → screenshots: (every run) the sample site is built once,
+#                every Playwright device project runs in its own job, and their screenshots are
+#                merged into the `screenshots-<sha>` artifact with an index.html contact sheet.
+#                Visual comparison is informational only: nothing here diffs screenshots.
+# - ci-ok:       passes only when every needed job succeeded or was skipped by the path filter.
+#
+# Contract with @weddingplanner/e2e (S0-10): the project names of the matrix below, the scripts
+# `test:pr` (accepts --project) and `screenshots:index`, and screenshots written to
+# tests/e2e/screenshots/<project>/. While tests/e2e/ does not exist, the e2e and screenshots jobs
+# skip the browser install, the tests and the uploads. Optional scripts run with --if-present:
+# `schema` (@weddingplanner/content, S1-01) and `size` (any package, S1-05).
+#
+# Security: no Azure login, no OIDC, no secrets, read-only token, no pull_request_target. Fork
+# runs need approval (scripts/github/setup-repo.sh). Every action is pinned to a commit SHA and
+# every downloaded tool to a version and SHA-256. PR CI only ever builds samples/instance/, so
+# the public artifacts never contain real content.
+name: ci
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+  # deploy.yml runs the same gate on every main commit.
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  # A new push to a PR cancels its superseded run. Other events get a group of their own, so a
+  # calling workflow never waits for or cancels this one.
+  group: ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}-{1}', github.run_id, github.run_attempt) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  # The bake reads these. CI builds the fictional sample instance only: its artifacts are public.
+  INSTANCE_DIR: samples/instance
+  DEPLOY_ENV: e2e
+  # The commit under test: the PR head (not the temporary merge commit) on pull requests.
+  GIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+  # Tool versions; bump each together with its SHA-256 (from the release's checksums or a
+  # download). Dependabot does not update these.
+  ACTIONLINT_VERSION: 1.7.12
+  ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+  SHELLCHECK_VERSION: 0.11.0
+  SHELLCHECK_SHA256: 8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198
+  GITLEAKS_VERSION: 8.30.1
+  GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+  BICEP_VERSION: 0.49.2
+
+jobs:
+  changes:
+    name: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      web: ${{ steps.filter.outputs.web }}
+      api: ${{ steps.filter.outputs.api }}
+      infra: ${{ steps.filter.outputs.infra }}
+      azurite-image: ${{ steps.azurite.outputs.image }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Detect the changed areas
+        id: filter
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "Event $EVENT_NAME: no path filter, every job runs."
+            web=true api=true infra=true
+          else
+            web=false api=false infra=false
+            # The first parent of the PR merge commit is the tip of main, so this is exactly
+            # what the PR would merge. --no-renames lists both sides of a move.
+            changed="$RUNNER_TEMP/changed-files.txt"
+            git diff --name-only --no-renames HEAD^1 HEAD >"$changed"
+            echo "::group::Changed files ($(wc -l <"$changed"))"
+            cat "$changed"
+            echo "::endgroup::"
+            while IFS= read -r file; do
+              case "$file" in
+                # The pipeline itself changed: run everything.
+                .github/workflows/ci.yml | .github/actions/*) web=true api=true infra=true ;;
+              esac
+              case "$file" in
+                apps/api/* | packages/WeddingPlanner.*/* | packages/api-contracts/fixtures/* | \
+                  *.cs | *.csproj | *.props | *.targets | *.slnx | global.json | .editorconfig | \
+                  docker-compose.yml | nuget.config | NuGet.config | .config/dotnet-tools.json)
+                  api=true
+                  ;;
+              esac
+              case "$file" in
+                infra/*) infra=true ;;
+              esac
+              case "$file" in
+                # .NET-only packages; their Biome-checked files are caught below.
+                packages/WeddingPlanner.*/*) ;;
+                apps/web/* | packages/* | samples/* | tests/* | tools/* | package.json | \
+                  pnpm-lock.yaml | pnpm-workspace.yaml | tsconfig*.json | .nvmrc | .gitignore | \
+                  .editorconfig)
+                  web=true
+                  ;;
+              esac
+              case "$file" in
+                # Biome checks these file types anywhere in the repo.
+                *.ts | *.tsx | *.mts | *.cts | *.js | *.jsx | *.mjs | *.cjs | *.json | *.jsonc | \
+                  *.md | *.yml | *.yaml | *.html | *.css)
+                  web=true
+                  ;;
+              esac
+            done <"$changed"
+          fi
+          {
+            echo "web=$web"
+            echo "api=$api"
+            echo "infra=$infra"
+          } >>"$GITHUB_OUTPUT"
+          echo "web=$web api=$api infra=$infra"
+
+      - name: Read the pinned Azurite image from docker-compose.yml
+        id: azurite
+        run: |
+          # One pinned tag for local runs and CI (ADR 0008); Dependabot updates docker-compose.yml.
+          image=$(sed -n -E 's/^[[:space:]]+image:[[:space:]]*(mcr\.microsoft\.com\/azure-storage\/azurite:[^[:space:]#]+).*$/\1/p' docker-compose.yml | head -n 1)
+          if ! [[ $image =~ ^mcr\.microsoft\.com/azure-storage/azurite:[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error file=docker-compose.yml::Pin the azurite image to an exact version (mcr.microsoft.com/azure-storage/azurite:x.y.z); CI runs the same image as a service container."
+            exit 1
+          fi
+          echo "image=$image" >>"$GITHUB_OUTPUT"
+          echo "Azurite image: $image"
+
+  web:
+    name: web
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js and pnpm
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Biome (lint, format, imports)
+        run: pnpm exec biome ci .
+
+      - name: Typecheck (tsc --noEmit)
+        run: pnpm typecheck
+
+      - name: Unit tests (Vitest)
+        run: pnpm test
+
+      - name: Validate the sample instance (strict)
+        run: pnpm content:validate samples/instance --strict
+
+      - name: JSON Schema drift check
+        run: |
+          pnpm --filter @weddingplanner/content --if-present run schema
+          # The bake and the build only write gitignored files, so any change here is a
+          # generated file that is stale or missing from the commit.
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::Generated files are out of date. Run 'pnpm --filter @weddingplanner/content schema' and commit the result."
+            git status --porcelain
+            git --no-pager diff --stat
+            exit 1
+          fi
+
+      - name: Build with the sample instance
+        run: pnpm build
+
+      - name: Size limit
+        run: pnpm --recursive --if-present run size
+
+  api:
+    name: api
+    needs: changes
+    if: needs.changes.outputs.api == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      # Service containers cannot override the image's command; Azurite's default command
+      # already listens on 0.0.0.0:10000-10002 and the pinned version accepts the API version
+      # of Azure.Data.Tables, so --skipApiVersionCheck is not needed.
+      azurite:
+        image: ${{ needs.changes.outputs.azurite-image }}
+        ports:
+          - 10000:10000
+          - 10001:10001
+          - 10002:10002
+        options: >-
+          --health-cmd "nc -z 127.0.0.1 10000 && nc -z 127.0.0.1 10001 && nc -z 127.0.0.1 10002"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      # The integration tests accept only loopback endpoints; this is Azurite on 127.0.0.1.
+      AZURITE_CONNECTION_STRING: UseDevelopmentStorage=true
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up .NET
+        uses: ./.github/actions/setup-dotnet
+
+      - name: Restore
+        run: dotnet restore WeddingPlanner.slnx
+
+      - name: Format and code style (dotnet format --verify-no-changes)
+        run: dotnet format WeddingPlanner.slnx --verify-no-changes --no-restore
+
+      - name: Build (Release, warnings as errors)
+        run: dotnet build WeddingPlanner.slnx -c Release --no-restore -warnaserror -p:SourceRevisionId="$GIT_SHA"
+
+      - name: Test (unit and Azurite integration tests)
+        run: dotnet test --solution WeddingPlanner.slnx -c Release --no-build
+
+  infra:
+    name: infra
+    needs: changes
+    if: needs.changes.outputs.infra == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # Offline, quiet and deterministic: the pinned Bicep below, never a newer one on the PATH.
+      AZURE_BICEP_CHECK_VERSION: "false"
+      AZURE_BICEP_USE_BINARY_FROM_PATH: "false"
+      AZURE_CORE_COLLECT_TELEMETRY: "false"
+      AZURE_CORE_NO_COLOR: "true"
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Bicep ${{ env.BICEP_VERSION }}
+        run: |
+          az bicep install --version "v$BICEP_VERSION"
+          az bicep version
+
+      - name: Build and lint every Bicep file (no diagnostics allowed)
+        run: |
+          # Bicep diagnostics look like "main.bicep(12,3) : Warning rule-name: message".
+          diagnostic='\([0-9]+,[0-9]+\) : (Error|Warning|Info) '
+          failed=0
+          count=0
+          while IFS= read -r file; do
+            count=$((count + 1))
+            echo "::group::$file"
+            status=0
+            out=$(az bicep build --file "$file" --stdout 2>&1 >/dev/null </dev/null) || status=$?
+            lint=$(az bicep lint --file "$file" 2>&1 </dev/null) || status=$?
+            printf '%s\n%s\n' "$out" "$lint"
+            echo "::endgroup::"
+            if [ "$status" -ne 0 ] || printf '%s\n%s\n' "$out" "$lint" | grep -Eq "$diagnostic"; then
+              echo "::error file=$file::az bicep build/lint reported problems (see the log)"
+              failed=1
+            fi
+          done < <(git ls-files 'infra/app/*.bicep' 'infra/bootstrap/*.bicep')
+          echo "Checked $count Bicep file(s)."
+          [ "$count" -gt 0 ] || failed=1
+          exit "$failed"
+
+      - name: Build the parameter files with dummy values
+        env:
+          # Variable names from infra/app/main.bicepparam (S0-04). Dummy values only: nothing
+          # here reaches Azure.
+          DEPLOYMENT_SLUG: wedabc123
+          ENVIRONMENT_NAME: e2e
+          DATA_LOCATION: germanywestcentral
+          SWA_LOCATION: westeurope
+          FEATURES_RSVP: "true"
+          FEATURES_ADMIN: "true"
+          RSVP_DEADLINE: 2099-06-30T23:59:59
+          RSVP_TIME_ZONE: Europe/Berlin
+        run: |
+          diagnostic='\([0-9]+,[0-9]+\) : (Error|Warning|Info) '
+          failed=0
+          count=0
+          while IFS= read -r file; do
+            count=$((count + 1))
+            status=0
+            out=$(az bicep build-params --file "$file" --stdout 2>&1 >/dev/null </dev/null) || status=$?
+            lint=$(az bicep lint --file "$file" 2>&1 </dev/null) || status=$?
+            printf '%s: %s %s\n' "$file" "$out" "$lint"
+            if [ "$status" -ne 0 ] || printf '%s\n%s\n' "$out" "$lint" | grep -Eq "$diagnostic"; then
+              echo "::error file=$file::az bicep build-params/lint failed (see the log)"
+              failed=1
+            fi
+          done < <(git ls-files 'infra/*.bicepparam')
+          echo "Checked $count parameter file(s)."
+          exit "$failed"
+
+      - name: Offline infra tests
+        run: |
+          git ls-files ':(glob)infra/**/tests/run.sh' >"$RUNNER_TEMP/suites.txt"
+          if [ ! -s "$RUNNER_TEMP/suites.txt" ]; then
+            echo "No infra test suites (infra/**/tests/run.sh)."
+            exit 0
+          fi
+          while IFS= read -r suite; do
+            echo "::group::$suite"
+            bash "$suite" </dev/null
+            echo "::endgroup::"
+          done <"$RUNNER_TEMP/suites.txt"
+
+  hygiene:
+    name: hygiene
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out (full history for gitleaks)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: PR title is a Conventional Commit summary
+        if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          # docs/conventions/git-and-pull-requests.md: <type>(<optional scope>): <summary>
+          types='feat|fix|docs|test|refactor|perf|build|ci|chore|revert'
+          scopes='web|api|domain|content|contracts|e2e|infra|ci|ops|docs|deps'
+          pattern="^($types)(\(($scopes)\))?!?: (.+)$"
+          printf 'PR title: %s\n' "$PR_TITLE"
+          if ! [[ $PR_TITLE =~ $pattern ]]; then
+            echo "::error::The PR title must be '<type>(<scope>): <summary>' with a type of ${types//|/, } and an optional scope of ${scopes//|/, }."
+            exit 1
+          fi
+          summary=${BASH_REMATCH[4]}
+          if [[ $summary =~ ^[[:space:]] || $summary =~ [[:space:]]$ ]]; then
+            echo "::error::The PR title summary must not start or end with whitespace."
+            exit 1
+          fi
+          if [[ $summary =~ ^[A-Z][a-z] ]]; then
+            echo "::error::Start the PR title summary in lower case (imperative mood), e.g. 'add …' instead of 'Add …'."
+            exit 1
+          fi
+          if [[ $summary == *. ]]; then
+            echo "::error::The PR title summary must not end with a period."
+            exit 1
+          fi
+          echo "OK: Conventional Commit summary."
+
+      - name: Install actionlint, shellcheck and gitleaks (pinned, SHA-256 verified)
+        run: |
+          bin="$RUNNER_TEMP/bin"
+          mkdir -p "$bin"
+          cd "$RUNNER_TEMP" || exit 1
+          # fetch URL SHA256 FILE: download and verify, or fail.
+          fetch() {
+            curl -fsSL --retry 3 -o "$3" "$1"
+            echo "$2  $3" | sha256sum --check --strict
+          }
+          fetch "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
+            "$ACTIONLINT_SHA256" actionlint.tar.gz
+          tar -xzf actionlint.tar.gz -C "$bin" actionlint
+          fetch "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz" \
+            "$SHELLCHECK_SHA256" shellcheck.tar.xz
+          tar -xJf shellcheck.tar.xz -C "$bin" --strip-components=1 "shellcheck-v${SHELLCHECK_VERSION}/shellcheck"
+          fetch "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            "$GITLEAKS_SHA256" gitleaks.tar.gz
+          tar -xzf gitleaks.tar.gz -C "$bin" gitleaks
+          echo "$bin" >>"$GITHUB_PATH"
+
+      - name: actionlint (workflows, with shellcheck on run scripts)
+        run: |
+          actionlint -version
+          actionlint -color
+
+      - name: shellcheck (every shell script)
+        run: |
+          shebang='^#!.*[/[:space:]](ba|da|k)?sh([[:space:]]|$)'
+          scripts=()
+          while IFS= read -r -d '' file; do
+            [ -f "$file" ] || continue
+            case "${file##*/}" in
+              *.sh | *.bash) scripts+=("$file") ;;
+              *.*) ;;
+              *)
+                first=""
+                IFS= read -r first <"$file" || true
+                if [[ $first =~ $shebang ]]; then scripts+=("$file"); fi
+                ;;
+            esac
+          done < <(git ls-files -z)
+          shellcheck --version
+          printf '%s\n' "${scripts[@]}"
+          shellcheck "${scripts[@]}"
+
+      - name: gitleaks (secrets in the new commits, redacted)
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            log_opts="--no-merges $BASE_SHA..$HEAD_SHA"
+          else
+            log_opts="-1"
+          fi
+          gitleaks version
+          gitleaks git --redact --no-banner --verbose --log-opts="$log_opts" .
+
+      - name: Dependency review (new vulnerable dependencies)
+        if: github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: moderate
+          comment-summary-in-pr: never
+
+      - name: Offline tests of the owner-run scripts (fake gh and az)
+        run: |
+          git ls-files ':(glob)scripts/**/tests/**/run.sh' ':(glob)scripts/**/tests/**/*.test.sh' \
+            >"$RUNNER_TEMP/suites.txt"
+          if [ ! -s "$RUNNER_TEMP/suites.txt" ]; then
+            echo "No script test suites (scripts/**/tests/**/{run,*.test}.sh)."
+            exit 0
+          fi
+          while IFS= read -r suite; do
+            echo "::group::$suite"
+            bash "$suite" </dev/null
+            echo "::endgroup::"
+          done <"$RUNNER_TEMP/suites.txt"
+
+  e2e-build:
+    name: e2e build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js and pnpm
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Build the sample site
+        run: pnpm --filter @weddingplanner/web build
+
+      - name: Share the sample site with the device matrix
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-sample-site
+          path: apps/web/dist/
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
+
+  e2e:
+    name: e2e (${{ matrix.project }})
+    needs: e2e-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - iphone-17
+          - android-budget
+          - tablet-portrait
+          - tablet-landscape
+          - laptop
+          - desktop-fhd
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Look for the Playwright harness (tests/e2e)
+        id: harness
+        run: |
+          if [ -f tests/e2e/package.json ]; then
+            echo "present=true" >>"$GITHUB_OUTPUT"
+          else
+            echo "present=false" >>"$GITHUB_OUTPUT"
+            echo "::notice::tests/e2e/ does not exist yet (S0-10): skipping browsers, tests and uploads."
+          fi
+
+      - name: Set up Node.js and pnpm
+        if: steps.harness.outputs.present == 'true'
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Download the sample site
+        if: steps.harness.outputs.present == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ci-sample-site
+          path: apps/web/dist
+
+      - name: Playwright version
+        if: steps.harness.outputs.present == 'true'
+        id: playwright
+        run: |
+          version=$(pnpm --filter @weddingplanner/e2e exec playwright --version | sed -n -E 's/^Version ([0-9][0-9A-Za-z.+-]*)$/\1/p')
+          if [ -z "$version" ]; then
+            echo "::error::Cannot read the Playwright version of @weddingplanner/e2e."
+            exit 1
+          fi
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+          echo "Playwright $version"
+
+      - name: Cache Chromium and WebKit
+        if: steps.harness.outputs.present == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium-webkit
+
+      - name: Install Chromium and WebKit with their system dependencies
+        if: steps.harness.outputs.present == 'true'
+        run: pnpm --filter @weddingplanner/e2e exec playwright install --with-deps chromium webkit
+
+      - name: Playwright (${{ matrix.project }})
+        if: steps.harness.outputs.present == 'true'
+        env:
+          PROJECT: ${{ matrix.project }}
+        run: pnpm --filter @weddingplanner/e2e --if-present test:pr --project="$PROJECT"
+
+      - name: Upload the screenshots
+        if: ${{ !cancelled() && steps.harness.outputs.present == 'true' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-screenshots-${{ matrix.project }}
+          path: tests/e2e/screenshots/
+          if-no-files-found: warn
+          retention-days: 1
+          overwrite: true
+
+      - name: Upload the Playwright report (on failure)
+        if: ${{ failure() && steps.harness.outputs.present == 'true' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-e2e-report-${{ matrix.project }}
+          path: |
+            tests/e2e/playwright-report/
+            tests/e2e/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+          overwrite: true
+
+  screenshots:
+    name: screenshots
+    needs:
+      - e2e-build
+      - e2e
+    # Also after failed device jobs: their screenshots help to see what went wrong.
+    if: ${{ !cancelled() && needs.e2e-build.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Look for the Playwright harness (tests/e2e)
+        id: harness
+        run: |
+          if [ -f tests/e2e/package.json ]; then
+            echo "present=true" >>"$GITHUB_OUTPUT"
+          else
+            echo "present=false" >>"$GITHUB_OUTPUT"
+            echo "::notice::tests/e2e/ does not exist yet (S0-10): no contact sheet."
+          fi
+
+      - name: Set up Node.js and pnpm
+        if: steps.harness.outputs.present == 'true'
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Merge the screenshots of all device projects
+        if: steps.harness.outputs.present == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: ci-screenshots-*
+          merge-multiple: true
+          path: tests/e2e/screenshots
+
+      - name: Build the contact sheet (index.html)
+        if: steps.harness.outputs.present == 'true'
+        run: pnpm --filter @weddingplanner/e2e --if-present screenshots:index
+
+      - name: Upload screenshots-${{ env.GIT_SHA }}
+        id: upload
+        if: steps.harness.outputs.present == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: screenshots-${{ env.GIT_SHA }}
+          path: tests/e2e/screenshots/
+          if-no-files-found: warn
+          retention-days: 14
+          overwrite: true
+
+      - name: Summary
+        if: steps.harness.outputs.present == 'true'
+        env:
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+        run: |
+          {
+            echo "### Screenshots"
+            echo
+            if [ -n "$ARTIFACT_URL" ]; then
+              echo "Download [screenshots-$GIT_SHA]($ARTIFACT_URL) (kept 14 days) and open \`index.html\`."
+            else
+              echo "No screenshots were recorded."
+            fi
+          } >>"$GITHUB_STEP_SUMMARY"
+
+  ci-ok:
+    name: ci-ok
+    needs:
+      - changes
+      - web
+      - api
+      - infra
+      - hygiene
+      - e2e-build
+      - e2e
+      - screenshots
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every needed job succeeded or was skipped by the path filter
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          # web, api and infra may be skipped when the path filter says so; every other job,
+          # and every filtered job the filter selected, must have succeeded.
+          failed=0
+          for job in $(jq -r 'keys[]' <<<"$NEEDS"); do
+            result=$(jq -r --arg job "$job" '.[$job].result' <<<"$NEEDS")
+            case "$job" in
+              web | api | infra) selected=$(jq -r --arg job "$job" '.changes.outputs[$job] // "false"' <<<"$NEEDS") ;;
+              *) selected=true ;;
+            esac
+            if [ "$result" = "success" ] || { [ "$selected" != "true" ] && [ "$result" = "skipped" ]; }; then
+              printf 'ok      %-12s %s\n' "$job" "$result"
+            else
+              printf 'FAILED  %-12s %s (path filter: %s)\n' "$job" "$result" "$selected"
+              echo "::error::Job $job: $result"
+              failed=1
+            fi
+          done
+          exit "$failed"

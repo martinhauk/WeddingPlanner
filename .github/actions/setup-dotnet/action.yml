@@ -1,0 +1,32 @@
+# Shared setup for every job that builds the .NET solution (ci.yml; reusable by deploy workflows).
+# The SDK version comes from global.json (including its rollForward policy). The NuGet package
+# folder is cached, keyed on everything that decides the restored packages; the repo has no
+# packages.lock.json, so the built-in cache of actions/setup-dotnet cannot be used.
+name: Set up .NET
+description: Install the .NET SDK from global.json and restore the NuGet package cache.
+
+runs:
+  using: composite
+  steps:
+    - name: Quiet .NET CLI (no logo, no telemetry, no first-run experience)
+      shell: bash
+      run: |
+        {
+          echo "DOTNET_NOLOGO=true"
+          echo "DOTNET_CLI_TELEMETRY_OPTOUT=true"
+          echo "DOTNET_SKIP_FIRST_TIME_EXPERIENCE=true"
+          echo "NUGET_PACKAGES=$HOME/.nuget/packages"
+        } >>"$GITHUB_ENV"
+
+    - name: Install the .NET SDK (version from global.json)
+      uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+      with:
+        global-json-file: global.json
+
+    - name: Restore the NuGet package cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.nuget/packages
+        key: nuget-${{ runner.os }}-${{ hashFiles('global.json', 'Directory.Packages.props', 'Directory.Build.props', '**/*.csproj', '**/nuget.config', '**/NuGet.config') }}
+        restore-keys: |
+          nuget-${{ runner.os }}-
