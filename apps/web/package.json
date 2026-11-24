@@ -1,0 +1,34 @@
+{
+  "name": "@weddingplanner/web",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Public one-pager of WeddingPlanner (Vite + React + TypeScript), built from baked content.",
+  "type": "module",
+  "scripts": {
+    "bake": "node ../../packages/content/src/cli.ts bake",
+    "dev": "pnpm run bake && vite",
+    "build": "pnpm run bake && vite build",
+    "preview": "vite preview",
+    "typecheck": "pnpm run bake && tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@weddingplanner/content": "workspace:*",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@testing-library/dom": "10.4.2",
+    "@testing-library/jest-dom": "8.0.0",
+    "@testing-library/react": "16.3.3",
+    "@testing-library/user-event": "14.6.13",
+    "@types/node": "24.19.2",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.3.0",
+    "jsdom": "31.0.1",
+    "typescript": "7.0.2",
+    "vite": "8.3.8",
+    "vitest": "5.1.1"
+  }
+}
