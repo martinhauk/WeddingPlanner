@@ -1,0 +1,87 @@
+{
+  "repo view": "acme/wedding-demo",
+  "GET repos/acme/wedding-demo": {
+    "full_name": "acme/wedding-demo",
+    "private": false,
+    "permissions": { "admin": true }
+  },
+  "GET repos/acme/wedding-demo/actions/oidc/customization/sub": {
+    "use_default": true,
+    "use_immutable_subject": true,
+    "sub_claim_prefix": "repo:acme@4242/wedding-demo@987654"
+  },
+  "GET repos/acme/wedding-demo/environments/e2e": {
+    "name": "e2e",
+    "can_admins_bypass": false,
+    "protection_rules": [{ "id": 1, "type": "branch_policy" }]
+  },
+  "GET repos/acme/wedding-demo/environments/test": {
+    "name": "test",
+    "can_admins_bypass": false,
+    "protection_rules": [{ "id": 2, "type": "branch_policy" }]
+  },
+  "GET repos/acme/wedding-demo/environments/production": {
+    "name": "production",
+    "can_admins_bypass": false,
+    "protection_rules": [
+      {
+        "id": 3,
+        "type": "required_reviewers",
+        "prevent_self_review": false,
+        "reviewers": [{ "type": "User", "reviewer": { "login": "acme", "id": 4242 } }]
+      },
+      { "id": 4, "type": "branch_policy" }
+    ]
+  },
+  "GET repos/acme/wedding-demo/environments/e2e/variables?per_page=30": {
+    "total_count": 5,
+    "variables": [
+      { "name": "API_LOCKDOWN", "value": "false" },
+      { "name": "AZURE_CLIENT_ID", "value": "44444444-4444-4444-8444-444444444444" },
+      { "name": "AZURE_RESOURCE_GROUP", "value": "rg-wedsample1-e2e" },
+      { "name": "AZURE_SUBSCRIPTION_ID", "value": "11111111-1111-4111-8111-111111111111" },
+      { "name": "AZURE_TENANT_ID", "value": "22222222-2222-4222-8222-222222222222" }
+    ]
+  },
+  "GET repos/acme/wedding-demo/environments/test/variables?per_page=30": {
+    "total_count": 5,
+    "variables": [
+      { "name": "AZURE_CLIENT_ID", "value": "44444444-4444-4444-8444-444444444444" },
+      { "name": "AZURE_RESOURCE_GROUP", "value": "rg-wedx7k2p9-test" },
+      { "name": "AZURE_SUBSCRIPTION_ID", "value": "11111111-1111-4111-8111-111111111111" },
+      { "name": "AZURE_TENANT_ID", "value": "22222222-2222-4222-8222-222222222222" },
+      { "name": "INSTANCE_REPO", "value": "acme/wedding-instance" }
+    ]
+  },
+  "GET repos/acme/wedding-demo/environments/production/variables?per_page=30": {
+    "total_count": 5,
+    "variables": [
+      { "name": "AZURE_CLIENT_ID", "value": "44444444-4444-4444-8444-444444444444" },
+      { "name": "AZURE_RESOURCE_GROUP", "value": "rg-wedx7k2p9-production" },
+      { "name": "AZURE_SUBSCRIPTION_ID", "value": "11111111-1111-4111-8111-111111111111" },
+      { "name": "AZURE_TENANT_ID", "value": "22222222-2222-4222-8222-222222222222" },
+      { "name": "INSTANCE_REPO", "value": "acme/wedding-instance" }
+    ]
+  },
+  "GET repos/acme/wedding-demo/environments/test/secrets/INSTANCE_REPO_DEPLOY_KEY": {
+    "name": "INSTANCE_REPO_DEPLOY_KEY",
+    "created_at": "2099-01-01T00:00:00Z",
+    "updated_at": "2099-01-01T00:00:00Z"
+  },
+  "GET repos/acme/wedding-demo/environments/production/secrets/INSTANCE_REPO_DEPLOY_KEY": {
+    "name": "INSTANCE_REPO_DEPLOY_KEY",
+    "created_at": "2099-01-01T00:00:00Z",
+    "updated_at": "2099-01-01T00:00:00Z"
+  },
+  "GET repos/acme/wedding-instance": {
+    "full_name": "acme/wedding-instance",
+    "private": true,
+    "permissions": { "admin": true }
+  },
+  "GET repos/acme/wedding-instance/keys?per_page=100": [
+    { "id": 3, "title": "maintainer-laptop", "read_only": false },
+    { "id": 7, "title": "deploy-test", "read_only": true },
+    { "id": 8, "title": "deploy-production", "read_only": true }
+  ],
+  "POST repos/acme/wedding-instance/keys": { "id": 101, "read_only": true }
+}
