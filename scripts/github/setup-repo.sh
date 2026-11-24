@@ -173,6 +173,11 @@ configure_merges() {
     ok "squash only, auto-merge, update branch, delete branch on merge"
     return
   fi
+  # GitHub only accepts certain title/message combinations, so always send both squash settings together.
+  if printf '%s' "$diff" | jq -e 'has("squash_merge_commit_title") or has("squash_merge_commit_message")' >/dev/null; then
+    diff=$(jq -n --argjson d "$diff" --argjson want "$want" \
+      '$d + {squash_merge_commit_title: $want.squash_merge_commit_title, squash_merge_commit_message: $want.squash_merge_commit_message}')
+  fi
   keys=$(printf '%s' "$diff" | jq -r 'to_entries | map("\(.key)=\(.value)") | join(", ")')
   changed "set $keys"
   api_write PATCH "repos/$REPO" "$diff"
