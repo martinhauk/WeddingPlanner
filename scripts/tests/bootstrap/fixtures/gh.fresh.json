@@ -1,0 +1,55 @@
+{
+  "repo view": "acme/wedding-demo",
+  "GET repos/acme/wedding-demo": {
+    "full_name": "acme/wedding-demo",
+    "private": false,
+    "permissions": { "admin": true }
+  },
+  "GET repos/acme/wedding-demo/actions/oidc/customization/sub": {
+    "use_default": true,
+    "use_immutable_subject": true,
+    "sub_claim_prefix": "repo:acme@4242/wedding-demo@987654"
+  },
+  "GET repos/acme/wedding-demo/environments/e2e": {
+    "name": "e2e",
+    "can_admins_bypass": false,
+    "protection_rules": [{ "id": 1, "type": "branch_policy" }]
+  },
+  "GET repos/acme/wedding-demo/environments/test": {
+    "name": "test",
+    "can_admins_bypass": false,
+    "protection_rules": [{ "id": 2, "type": "branch_policy" }]
+  },
+  "GET repos/acme/wedding-demo/environments/production": {
+    "name": "production",
+    "can_admins_bypass": false,
+    "protection_rules": [
+      {
+        "id": 3,
+        "type": "required_reviewers",
+        "prevent_self_review": false,
+        "reviewers": [{ "type": "User", "reviewer": { "login": "acme", "id": 4242 } }]
+      },
+      { "id": 4, "type": "branch_policy" }
+    ]
+  },
+  "GET repos/acme/wedding-demo/environments/e2e/variables?per_page=30": {
+    "total_count": 0,
+    "variables": []
+  },
+  "GET repos/acme/wedding-demo/environments/test/variables?per_page=30": {
+    "total_count": 0,
+    "variables": []
+  },
+  "GET repos/acme/wedding-demo/environments/production/variables?per_page=30": {
+    "total_count": 0,
+    "variables": []
+  },
+  "GET repos/acme/wedding-instance": {
+    "full_name": "acme/wedding-instance",
+    "private": true,
+    "permissions": { "admin": true }
+  },
+  "GET repos/acme/wedding-instance/keys?per_page=100": [],
+  "POST repos/acme/wedding-instance/keys": { "id": 101, "read_only": true }
+}

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "slug": "wedx7k2p9",
+  "dataLocation": "germanywestcentral",
+  "swaLocation": "westeurope",
+  "budgetAmount": 15,
+  "alertEmails": ["pablo.perez@example.org", "maria-jose.garcia@example.org"],
+  "adminEmails": ["pablo.perez@example.org"],
+  "rsvp": { "deadline": "2099-06-01T23:59:59+02:00", "timeZone": "Europe/Berlin" },
+  "environments": {
+    "test": { "features": { "rsvp": true, "admin": true } },
+    "production": { "features": { "rsvp": false, "admin": false } }
+  }
+}
