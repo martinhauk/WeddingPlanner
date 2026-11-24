@@ -1,0 +1,63 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output (JS and .NET)
+dist/
+bin/
+obj/
+*.tsbuildinfo
+
+# Content baked from an instance at build time (never commit real content)
+apps/web/src/content/generated/
+apps/web/public/content/
+# Generated SWA config and local SWA CLI output
+apps/web/.swa/
+
+# Defensive: a local checkout of a private instance repo, if placed in the repo root
+/.instance/
+
+# Secrets and local settings
+local.settings.json
+scripts/*.env
+.env
+.env.*
+!.env.example
+
+# Azurite (local storage emulator) data
+.azurite/
+__azurite_db_*.json
+__blobstorage__/
+__queuestorage__/
+
+# Test output
+coverage/
+TestResults/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+tests/e2e/screenshots/
+
+# Tooling caches and logs
+.vite/
+.cache/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Editors and OS
+.DS_Store
+Thumbs.db
+.idea/
+.vs/
+*.user
+*.suo
+*.swp
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Claude Code: local settings and agent worktrees
+.claude/settings.local.json
+.claude/worktrees/
