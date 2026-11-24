@@ -112,7 +112,8 @@ autocompletion via `$schema`.
   monthly quota the site stops instead). A budget alert is a backstop, and an edge lockdown stops API
   executions within minutes.
 - Data at rest in `germanywestcentral`; the Static Web App in `westeurope`.
-- No secrets in GitHub: deploys use OIDC; secrets are computed or fetched at deploy time and masked.
+- No Azure credentials in GitHub: deploys use OIDC; Azure secrets are computed or fetched at deploy
+  time and masked. The only GitHub secret per environment is the read-only `INSTANCE_REPO_DEPLOY_KEY`.
 - This repository is public and contains no personal data; see
   [repo hygiene](docs/conventions/repo-hygiene.md).
 
