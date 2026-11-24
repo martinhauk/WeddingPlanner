@@ -1,0 +1,26 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinhauk/WeddingPlanner/main/packages/content/schema/site.schema.json",
+  "schemaVersion": 1,
+  "i18n": {
+    "languages": ["de", "en", "es"],
+    "defaultLanguage": "de"
+  },
+  "couple": {
+    "names": ["Anna", "Ben"],
+    "displayName": {
+      "de": "Anna & Ben",
+      "en": "Anna & Ben",
+      "es": "Anna y Ben"
+    }
+  },
+  "event": {
+    "start": "2099-06-20T14:00:00+02:00",
+    "end": "2099-06-21T01:00:00+02:00",
+    "timeZone": "Europe/Berlin",
+    "title": {
+      "de": "Wir heiraten",
+      "en": "We're getting married",
+      "es": "Nos casamos"
+    }
+  }
+}
