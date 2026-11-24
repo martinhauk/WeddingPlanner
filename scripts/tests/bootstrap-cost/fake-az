@@ -1,0 +1,166 @@
+#!/usr/bin/env bash
+# Test double for the Azure CLI, used by scripts/tests/bootstrap-cost/run.sh. No network access.
+#
+# Implements only the commands scripts/bootstrap-cost.sh uses, backed by the JSON state file
+# $FAKE_AZ_STATE. Every call is appended to $FAKE_AZ_LOG as "az <arguments>". A successful
+# `deployment sub create` copies its parameters file to $FAKE_AZ_DIR/params-<n>.json and, like the
+# real template, creates or updates the budget and the anomaly alert in the state.
+#
+# State keys:
+#   account                {id}; null means "not signed in"
+#   subscription           body of GET /subscriptions/{id} (state, subscriptionPolicies)
+#   providers              {namespace: registrationState}; missing means NotRegistered
+#   actionGroups           {"<rg>/<name>": location} of existing action groups
+#   budgets                the subscription's budgets (GET .../Microsoft.Consumption/budgets)
+#   scheduledActions       the subscription's scheduled actions
+#   budgetsError           stderr of a failing budgets list ("" = success)
+#   scheduledActionsError  stderr of a failing scheduled actions list
+#   deploymentFailures     number of `deployment sub create` calls that fail first
+#   deploymentError        stderr of such a failure
+set -euo pipefail
+
+state=${FAKE_AZ_STATE:?FAKE_AZ_STATE is not set}
+log=${FAKE_AZ_LOG:?FAKE_AZ_LOG is not set}
+dir=${FAKE_AZ_DIR:?FAKE_AZ_DIR is not set}
+mkdir -p "$dir"
+printf 'az %s\n' "$*" >>"$log"
+
+fail() {
+  printf 'ERROR: %s\n' "$*" >&2
+  exit 1
+}
+
+update() {
+  local tmp
+  tmp=$(mktemp "$dir/state.XXXXXX")
+  jq "$@" "$state" >"$tmp"
+  mv "$tmp" "$state"
+}
+
+command=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -*) break ;;
+    *)
+      command="$command $1"
+      shift
+      ;;
+  esac
+done
+command=${command# }
+
+f_name="" f_namespace="" f_query="" f_output="" f_subscription="" f_parameters=""
+f_template="" f_group="" f_url="" f_location="" f_method=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --only-show-errors) shift ;;
+    --name | -n) f_name=$2 && shift 2 ;;
+    --namespace) f_namespace=$2 && shift 2 ;;
+    --query) f_query=$2 && shift 2 ;;
+    -o | --output) f_output=$2 && shift 2 ;;
+    --subscription) f_subscription=$2 && shift 2 ;;
+    --parameters) f_parameters=$2 && shift 2 ;;
+    --template-file) f_template=$2 && shift 2 ;;
+    --resource-group | -g) f_group=$2 && shift 2 ;;
+    --url) f_url=$2 && shift 2 ;;
+    --location | -l) f_location=$2 && shift 2 ;;
+    --method) f_method=$2 && shift 2 ;;
+    *) fail "fake az: unsupported argument $1" ;;
+  esac
+done
+
+signed_in() { [ "$(jq '.account != null' "$state")" = "true" ]; }
+require_login() { signed_in || fail "Please run 'az login' to setup account."; }
+sub_id() { jq -r '.account.id' "$state"; }
+check_subscription() {
+  if [ -n "$f_subscription" ] && [ "$(sub_id)" != "$f_subscription" ]; then
+    fail "Subscription '$f_subscription' not found. Check the spelling and casing and try again."
+  fi
+}
+# list_or_fail KEY ERROR_KEY: print {value: state[KEY]} or fail with state[ERROR_KEY].
+list_or_fail() {
+  if [ -n "$(jq -r --arg k "$2" '.[$k] // ""' "$state")" ]; then
+    jq -r --arg k "$2" '.[$k]' "$state" >&2
+    exit 1
+  fi
+  jq --arg k "$1" '{value: (.[$k] // [])}' "$state"
+}
+
+case "$command" in
+  "account show")
+    require_login
+    case "$f_query" in
+      id) jq -r '.account.id' "$state" ;;
+      *) fail "fake az: unsupported query $f_query" ;;
+    esac
+    ;;
+  rest)
+    require_login
+    [ "$f_method" = "get" ] || fail "fake az: only GET is supported"
+    sub="/subscriptions/$(sub_id)"
+    case "$f_url" in
+      "$sub?api-version="*) jq '.subscription' "$state" ;;
+      "$sub/providers/Microsoft.Consumption/budgets?api-version=2026-06-01")
+        list_or_fail budgets budgetsError
+        ;;
+      "$sub/providers/Microsoft.CostManagement/scheduledActions?api-version=2026-06-01")
+        list_or_fail scheduledActions scheduledActionsError
+        ;;
+      *) fail "fake az: unsupported url" ;;
+    esac
+    ;;
+  "provider show")
+    require_login
+    check_subscription
+    [ "$f_query" = "registrationState" ] || fail "fake az: unsupported query $f_query"
+    jq -r --arg ns "$f_namespace" '.providers[$ns] // "NotRegistered"' "$state"
+    ;;
+  "monitor action-group show")
+    require_login
+    check_subscription
+    if [ "$(jq -r --arg g "${f_group}" '(.actionGroups // {}) | keys | map(startswith($g + "/")) | any' "$state")" != "true" ]; then
+      fail "(ResourceGroupNotFound) Resource group '$f_group' could not be found."
+    fi
+    key="$f_group/$f_name"
+    if [ "$(jq -r --arg k "$key" '(.actionGroups // {}) | has($k)' "$state")" != "true" ]; then
+      fail "(ResourceNotFound) The Resource 'microsoft.insights/actiongroups/$f_name' under resource group '$f_group' was not found."
+    fi
+    [ "$f_output" = "none" ] || jq -r --arg n "$f_name" '{name: $n}' "$state"
+    ;;
+  "deployment sub create")
+    require_login
+    check_subscription
+    [ "$f_output" = "none" ] || fail "fake az: deployment without -o none"
+    [ -n "$f_location" ] || fail "fake az: --location is required"
+    [ -f "$f_template" ] || fail "fake az: template not found"
+    params=${f_parameters#@}
+    [ -f "$params" ] || fail "fake az: parameters file not found"
+    n=$(find "$dir" -name 'params-*.json' | wc -l | tr -d ' ')
+    cp "$params" "$dir/params-$((n + 1)).json"
+    if [ "$(jq '(.deploymentFailures // 0) > 0' "$state")" = "true" ]; then
+      update '.deploymentFailures -= 1'
+      jq -r '.deploymentError' "$state" >&2
+      exit 1
+    fi
+    # Like the template: one budget and one anomaly alert named after the slug.
+    # shellcheck disable=SC2016 # $p is a jq variable
+    update --slurpfile p "$params" '($p[0].parameters) as $p
+      | ("budget-" + $p.deploymentSlug.value) as $b
+      | ("anomaly-" + $p.deploymentSlug.value) as $a
+      | .budgets = ([(.budgets // [])[] | select(.name != $b)] + [{
+          name: $b,
+          properties: {category: "Cost", amount: $p.budgetAmount.value, timeGrain: "Monthly",
+            timePeriod: {startDate: $p.budgetStartDate.value},
+            notifications: {"Actual_GreaterThan_10_Percent": {contactEmails: $p.alertReceivers.value.emails}}}
+        }])
+      | .scheduledActions = ([(.scheduledActions // [])[] | select(.name != $a)] + [{
+          name: $a, kind: "InsightAlert",
+          properties: {notification: {to: $p.alertReceivers.value.emails},
+            schedule: {frequency: "Daily", startDate: $p.anomalyAlertStartDate.value,
+              endDate: $p.anomalyAlertEndDate.value}}
+        }])'
+    ;;
+  *)
+    fail "fake az: unsupported command: $command"
+    ;;
+esac
