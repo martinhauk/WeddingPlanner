@@ -201,7 +201,6 @@ function createOutput(input: {
   // Parsing guards the output contract; only the fields listed here can reach the web app.
   const build = buildInfoSchema.parse({
     siteUrl: input.siteUrl,
-    isSample,
     features: { rsvp: input.features.rsvp, admin: input.features.admin },
     rsvpDeadline: new Date(instance.rsvp.deadline).toISOString(),
     rsvpTimeZone: instance.rsvp.timeZone,

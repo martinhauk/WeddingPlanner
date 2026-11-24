@@ -10,8 +10,6 @@ import { featuresSchema } from './instance.ts';
 export const buildInfoSchema = z.strictObject({
   /** Absolute origin of the deployed site (no trailing slash), for absolute URLs such as OG tags. */
   siteUrl: z.url({ protocol: /^https?$/ }),
-  /** `true` when the fictional sample instance was baked. */
-  isSample: z.boolean(),
   /** Feature flags of the target environment (`instance.json` `environments.<env>.features`). */
   features: featuresSchema,
   /** RSVP deadline as a UTC ISO 8601 instant (display only; the API decides). */
@@ -29,6 +27,7 @@ export const versionInfoSchema = z.strictObject({
   builtAt: z.iso.datetime(),
   /** SHA-256 over `site.json` and the source media bytes; independent of the environment. */
   contentHash: z.string().regex(/^[0-9a-f]{64}$/),
+  /** `true` when the fictional sample instance was baked (`instance.json` `sample`). */
   isSample: z.boolean(),
 });
 

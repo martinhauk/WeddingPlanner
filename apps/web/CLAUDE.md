@@ -36,12 +36,11 @@ the repo). Never copy real content into this repo.
 
 ## What the bake writes
 
-All of it is gitignored; never commit it or edit it by hand (`apps/web/.gitignore` adds
-`public/version.json` to the root ignores).
+All of it is gitignored (root `.gitignore`); never commit it or edit it by hand.
 
 - `src/content/generated/site.json`: the validated `site.json` (without `$schema`).
 - `src/content/generated/media.json`: `MediaManifest`, one variant per image for now.
-- `src/content/generated/build.json`: `BuildInfo` = `{siteUrl, isSample, features, rsvpDeadline,
+- `src/content/generated/build.json`: `BuildInfo` = `{siteUrl, features, rsvpDeadline (UTC),
   rsvpTimeZone}` for `DEPLOY_ENV`.
 - `public/content/media/<hash>.<ext>`: media under content-hashed names (immutable caching).
 - `public/version.json`: `{sha, builtAt, contentHash, isSample}`, served as `/version.json` for the

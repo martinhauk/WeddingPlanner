@@ -46,7 +46,6 @@ describe('bake: the sample instance for e2e', () => {
     const build = buildInfoSchema.parse(await readJson(path.join(generated, 'build.json')));
     expect(build).toEqual({
       siteUrl: 'https://wedding.example.com',
-      isSample: true,
       features: { rsvp: true, admin: true },
       rsvpDeadline: '2099-05-01T21:59:00.000Z',
       rsvpTimeZone: 'Europe/Berlin',
