@@ -1,0 +1,35 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinhauk/WeddingPlanner/main/packages/content/schema/instance.schema.json",
+  "schemaVersion": 1,
+  "sample": true,
+  "slug": "wedsample",
+  "dataLocation": "germanywestcentral",
+  "swaLocation": "westeurope",
+  "budgetAmount": 10,
+  "alertEmails": ["alerts@example.com"],
+  "adminEmails": ["anna@example.com", "ben@example.com"],
+  "rsvp": {
+    "deadline": "2099-05-01T23:59:00+02:00",
+    "timeZone": "Europe/Berlin"
+  },
+  "environments": {
+    "e2e": {
+      "features": {
+        "rsvp": true,
+        "admin": true
+      }
+    },
+    "test": {
+      "features": {
+        "rsvp": true,
+        "admin": true
+      }
+    },
+    "production": {
+      "features": {
+        "rsvp": false,
+        "admin": false
+      }
+    }
+  }
+}
