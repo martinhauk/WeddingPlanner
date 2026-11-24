@@ -1,0 +1,28 @@
+<Project>
+  <!-- Shared settings for every .NET project in the repo (owned by S0-03). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!-- Analyzers: latest rule set, code style enforced in the build, warnings fail the build. -->
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <CodeAnalysisTreatWarningsAsErrors>true</CodeAnalysisTreatWarningsAsErrors>
+
+    <!-- Reproducible builds; CI additionally normalises source paths. -->
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+
+    <!-- InformationalVersion = Version + "+" + SourceRevisionId (pass -p:SourceRevisionId=<sha>). -->
+    <IncludeSourceRevisionInInformationalVersion>true</IncludeSourceRevisionInInformationalVersion>
+
+    <Authors>WeddingPlanner contributors</Authors>
+    <Company>WeddingPlanner</Company>
+    <Product>WeddingPlanner</Product>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+</Project>

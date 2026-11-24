@@ -1,0 +1,35 @@
+<Project>
+  <!--
+    Central package management (owned by S0-03): every NuGet version lives here, exactly pinned.
+    Project files reference packages without a version. Add a package only with a reason in the PR.
+  -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <!-- Azure Functions isolated worker (Microsoft.NET.Sdk + Worker SDK 2.x + ASP.NET Core integration). -->
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.Azure.Functions.Worker" Version="2.52.0" />
+    <PackageVersion Include="Microsoft.Azure.Functions.Worker.Sdk" Version="2.1.0" />
+    <PackageVersion Include="Microsoft.Azure.Functions.Worker.Extensions.Http.AspNetCore" Version="2.1.1" />
+  </ItemGroup>
+
+  <!-- Storage. -->
+  <ItemGroup>
+    <PackageVersion Include="Azure.Data.Tables" Version="12.13.0" />
+  </ItemGroup>
+
+  <!-- Telemetry: OpenTelemetry with the Azure Monitor exporter (only active with a connection string). -->
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.Azure.Functions.Worker.OpenTelemetry" Version="1.2.0" />
+    <PackageVersion Include="Azure.Monitor.OpenTelemetry.Exporter" Version="1.10.0" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.21.0" />
+  </ItemGroup>
+
+  <!-- Tests. -->
+  <ItemGroup>
+    <PackageVersion Include="xunit.v3" Version="4.0.3" />
+    <PackageVersion Include="Shouldly" Version="4.3.0" />
+    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.11.1" />
+  </ItemGroup>
+</Project>

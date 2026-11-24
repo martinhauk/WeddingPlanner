@@ -1,0 +1,18 @@
+<Solution>
+  <Folder Name="/apps/" />
+  <Folder Name="/apps/api/">
+    <Project Path="apps/api/src/WeddingPlanner.Api/WeddingPlanner.Api.csproj" />
+    <Project Path="apps/api/tests/WeddingPlanner.Api.Tests/WeddingPlanner.Api.Tests.csproj" />
+  </Folder>
+  <Folder Name="/packages/" />
+  <Folder Name="/packages/WeddingPlanner.Domain/">
+    <Project Path="packages/WeddingPlanner.Domain/src/WeddingPlanner.Domain/WeddingPlanner.Domain.csproj" />
+    <Project Path="packages/WeddingPlanner.Domain/tests/WeddingPlanner.Domain.Tests/WeddingPlanner.Domain.Tests.csproj" />
+  </Folder>
+  <Folder Name="/Solution Items/">
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Packages.props" />
+    <File Path="global.json" />
+    <File Path="docker-compose.yml" />
+  </Folder>
+</Solution>

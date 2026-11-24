@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Pure domain logic (RSVP rules, name matching, CSV). No Azure.* or Microsoft.AspNetCore.*
+    references: DomainPurityTests enforces this.
+  -->
+  <PropertyGroup>
+    <RootNamespace>WeddingPlanner.Domain</RootNamespace>
+  </PropertyGroup>
+</Project>
