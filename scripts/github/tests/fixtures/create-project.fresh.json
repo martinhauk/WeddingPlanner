@@ -1,0 +1,38 @@
+{
+  "repo view": "acme/wedding-demo",
+  "GET repos/acme/wedding-demo/labels?per_page=100": [
+    { "name": "bug", "color": "d73a4a", "description": "Something isn't working" },
+    { "name": "area:web", "color": "000000", "description": "Old description" }
+  ],
+  "GET repos/acme/wedding-demo/milestones?state=all&per_page=100": [],
+  "graphql ProjectsByOwner": {
+    "data": {
+      "repository": { "id": "R_demo" },
+      "repositoryOwner": { "id": "U_acme", "projectsV2": { "nodes": [] } }
+    }
+  },
+  "graphql CreateProject": {
+    "data": { "createProjectV2": { "projectV2": { "id": "PVT_new", "number": 3 } } }
+  },
+  "graphql ProjectFields": {
+    "data": {
+      "node": {
+        "fields": {
+          "nodes": [
+            { "id": "F_title", "name": "Title", "dataType": "TITLE" },
+            {
+              "id": "F_status",
+              "name": "Status",
+              "dataType": "SINGLE_SELECT",
+              "options": [
+                { "id": "o_todo", "name": "Todo", "color": "GRAY", "description": "" },
+                { "id": "o_prog", "name": "In progress", "color": "YELLOW", "description": "" },
+                { "id": "o_done", "name": "Done", "color": "GREEN", "description": "" }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}
