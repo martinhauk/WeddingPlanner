@@ -1,0 +1,29 @@
+# Shared setup for every job that needs the JS workspace (ci.yml; reusable by deploy workflows).
+# pnpm comes from pnpm/action-setup at the exact version of package.json#packageManager (never
+# corepack), Node.js from .nvmrc. The pnpm store is cached, keyed on pnpm-lock.yaml.
+name: Set up Node.js and pnpm
+description: Install pnpm (package.json#packageManager) and Node.js (.nvmrc) with a cached pnpm store, then run a frozen install.
+
+inputs:
+  install:
+    description: Run `pnpm install --frozen-lockfile` after the setup ("true" or "false").
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - name: Install pnpm (version from package.json#packageManager)
+      uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
+    - name: Install Node.js (version from .nvmrc) and restore the pnpm store
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version-file: .nvmrc
+        cache: pnpm
+        cache-dependency-path: pnpm-lock.yaml
+
+    - name: Install dependencies (frozen lockfile)
+      if: inputs.install == 'true'
+      shell: bash
+      run: pnpm install --frozen-lockfile
