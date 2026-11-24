@@ -1,0 +1,156 @@
+{
+  "repo view": "acme/wedding-demo",
+  "GET repos/acme/wedding-demo/labels?per_page=100": [
+    { "name": "bug", "color": "d73a4a", "description": "Something isn't working" },
+    { "name": "area:web", "color": "1d76db", "description": "Frontend (React/Vite)" },
+    { "name": "area:api", "color": "5319e7", "description": ".NET Functions API / Domain" },
+    { "name": "area:infra", "color": "0e8a16", "description": "Bicep / Azure infrastructure" },
+    { "name": "area:ci", "color": "fbca04", "description": "GitHub Actions / CI/CD" },
+    {
+      "name": "area:content",
+      "color": "c5def5",
+      "description": "Content schema, bake, instance repo"
+    },
+    {
+      "name": "area:docs",
+      "color": "d4c5f9",
+      "description": "README, CLAUDE.md, conventions, ADRs"
+    },
+    { "name": "area:e2e", "color": "f9d0c4", "description": "Playwright / end-to-end tests" },
+    { "name": "area:ops", "color": "bfd4f2", "description": "Operations scripts and runbooks" },
+    { "name": "type:feature", "color": "a2eeef", "description": "New functionality" },
+    { "name": "type:chore", "color": "ededed", "description": "Tooling, setup, maintenance" },
+    {
+      "name": "type:bug",
+      "color": "d73a4a",
+      "description": "Something does not work as documented"
+    },
+    {
+      "name": "priority:critical-path",
+      "color": "B60205",
+      "description": "On the critical path to RSVP go-live"
+    },
+    {
+      "name": "needs:owner",
+      "color": "d93f0b",
+      "description": "Blocked on a manual step by the owner"
+    },
+    {
+      "name": "blocked",
+      "color": "e99695",
+      "description": "Waiting for another issue or an external dependency"
+    },
+    {
+      "name": "incident",
+      "color": "b60205",
+      "description": "Deployed environment unhealthy (opened and closed by the uptime check)"
+    }
+  ],
+  "GET repos/acme/wedding-demo/milestones?state=all&per_page=100": [
+    {
+      "number": 1,
+      "title": "Stage 0 – Foundation & CI/CD",
+      "description": "Repo skeleton, tooling, infra, pipelines, walking skeleton live"
+    },
+    {
+      "number": 2,
+      "title": "Stage 1 – Public site",
+      "description": "All public sections, content pipeline, environments, go-live with real content"
+    },
+    {
+      "number": 3,
+      "title": "Stage 2 – RSVP",
+      "description": "RSVP API + UI, cookies/edit link, abuse protection, write-path e2e; RSVP opens"
+    },
+    {
+      "number": 4,
+      "title": "Stage 3 – Admin",
+      "description": "Admin area: responses, guest list, fuzzy matching, settings, CSV export"
+    }
+  ],
+  "graphql ProjectsByOwner": {
+    "data": {
+      "repository": { "id": "R_demo" },
+      "repositoryOwner": {
+        "id": "U_acme",
+        "projectsV2": {
+          "nodes": [
+            {
+              "id": "PVT_other",
+              "number": 1,
+              "title": "Another project",
+              "closed": false,
+              "repositories": { "nodes": [] }
+            },
+            {
+              "id": "PVT_demo",
+              "number": 2,
+              "title": "wedding-demo",
+              "closed": false,
+              "repositories": { "nodes": [{ "nameWithOwner": "acme/wedding-demo" }] }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "graphql ProjectFields": {
+    "data": {
+      "node": {
+        "fields": {
+          "nodes": [
+            { "id": "F_title", "name": "Title", "dataType": "TITLE" },
+            {
+              "id": "F_status",
+              "name": "Status",
+              "dataType": "SINGLE_SELECT",
+              "options": [
+                { "id": "o_todo", "name": "Todo", "color": "GRAY", "description": "" },
+                { "id": "o_prog", "name": "In Progress", "color": "YELLOW", "description": "" },
+                { "id": "o_rev", "name": "In Review", "color": "PURPLE", "description": "" },
+                { "id": "o_done", "name": "Done", "color": "GREEN", "description": "" }
+              ]
+            },
+            {
+              "id": "F_stage",
+              "name": "Stage",
+              "dataType": "SINGLE_SELECT",
+              "options": [
+                { "id": "s0", "name": "Stage 0", "color": "GRAY", "description": "" },
+                { "id": "s1", "name": "Stage 1", "color": "BLUE", "description": "" },
+                { "id": "s2", "name": "Stage 2", "color": "GREEN", "description": "" },
+                { "id": "s3", "name": "Stage 3", "color": "PURPLE", "description": "" }
+              ]
+            },
+            {
+              "id": "F_area",
+              "name": "Area",
+              "dataType": "SINGLE_SELECT",
+              "options": [
+                { "id": "a1", "name": "web", "color": "BLUE", "description": "" },
+                { "id": "a2", "name": "api", "color": "PURPLE", "description": "" },
+                { "id": "a3", "name": "infra", "color": "GREEN", "description": "" },
+                { "id": "a4", "name": "ci", "color": "YELLOW", "description": "" },
+                { "id": "a5", "name": "content", "color": "ORANGE", "description": "" },
+                { "id": "a6", "name": "docs", "color": "GRAY", "description": "" },
+                { "id": "a7", "name": "e2e", "color": "PINK", "description": "" },
+                { "id": "a8", "name": "ops", "color": "RED", "description": "" }
+              ]
+            },
+            {
+              "id": "F_size",
+              "name": "Size",
+              "dataType": "SINGLE_SELECT",
+              "options": [
+                { "id": "z1", "name": "S", "color": "GREEN", "description": "" },
+                { "id": "z2", "name": "M", "color": "YELLOW", "description": "" },
+                { "id": "z3", "name": "L", "color": "ORANGE", "description": "" }
+              ]
+            },
+            { "id": "F_expert", "name": "Expert", "dataType": "TEXT" }
+          ]
+        }
+      }
+    }
+  }
+}

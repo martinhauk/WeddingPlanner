@@ -1,0 +1,74 @@
+name: Bug
+description: Something does not work as documented.
+title: "bug: "
+labels: ["type:bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This repository is **public**. Do not include real names, guest data, places, dates,
+        photos, emails, phone numbers, hostnames or URLs of a deployed site, tokens or secrets,
+        and no screenshots of real content. Reproduce with the sample instance where possible.
+        Security problems: do not open an issue; use "Report a security vulnerability" instead.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - web (public site)
+        - web (admin)
+        - api
+        - content (schema, bake, sample)
+        - infra
+        - ci / deploy
+        - e2e tests
+        - ops scripts
+        - docs
+    validations:
+      required: true
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Where does it happen?
+      options:
+        - local development
+        - pull request CI
+        - e2e environment
+        - test environment
+        - production environment
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: Observed behaviour, including error codes or messages (redact anything personal).
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Ideally with the sample instance (`samples/instance/`).
+      value: |
+        1.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Device and browser, commit SHA (from `/version.json`), workflow run link.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: This issue contains no personal data, hostnames, tokens or secrets.
+          required: true

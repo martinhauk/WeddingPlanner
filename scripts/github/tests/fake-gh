@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# Test double for the GitHub CLI, used by scripts/github/tests/run.sh. No network access.
+#
+# Responses come from the JSON object in $FAKE_GH_STATE, keyed by "<METHOD> <path>" for REST
+# calls (e.g. "GET repos/acme/wedding-demo") and "graphql <OperationName>" for GraphQL.
+# Special values: "__204__" (success, empty body) and {"__error": "<message>"} (failure).
+# A GET without a canned response fails with HTTP 404; writes and mutations without one
+# succeed with "{}". Every call is appended to $FAKE_GH_LOG, one line each:
+#   GET <path> | <METHOD> <path> <body> | QUERY <name> | MUTATION <name> <variables>
+set -euo pipefail
+
+state=${FAKE_GH_STATE:?FAKE_GH_STATE is not set}
+log=${FAKE_GH_LOG:?FAKE_GH_LOG is not set}
+
+if [ "${1:-}" = "repo" ] && [ "${2:-}" = "view" ]; then
+  printf 'REPO_VIEW\n' >>"$log"
+  jq -r '."repo view"' "$state"
+  exit 0
+fi
+if [ "${1:-}" != "api" ]; then
+  printf 'fake gh: unsupported command: %s\n' "$*" >&2
+  exit 2
+fi
+shift
+
+method=GET
+path=""
+body=""
+jq_filter=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -X | --method)
+      method=$2
+      shift 2
+      ;;
+    --input)
+      [ "$2" = "-" ] || {
+        printf 'fake gh: only --input - is supported\n' >&2
+        exit 2
+      }
+      body=$(cat)
+      shift 2
+      ;;
+    --paginate) shift ;;
+    --jq | -q)
+      jq_filter=$2
+      shift 2
+      ;;
+    -*)
+      printf 'fake gh: unsupported flag: %s\n' "$1" >&2
+      exit 2
+      ;;
+    *)
+      path=$1
+      shift
+      ;;
+  esac
+done
+
+if [ "$path" = "graphql" ]; then
+  operation=$(printf '%s' "$body" | jq -r '.query' | grep -oE '(query|mutation) [A-Za-z0-9_]+' | head -n 1)
+  kind=${operation%% *}
+  name=${operation#* }
+  if [ "$kind" = "mutation" ]; then
+    printf 'MUTATION %s %s\n' "$name" "$(printf '%s' "$body" | jq -c '.variables')" >>"$log"
+  else
+    printf 'QUERY %s\n' "$name" >>"$log"
+  fi
+  key="graphql $name"
+elif [ "$method" = "GET" ]; then
+  printf 'GET %s\n' "$path" >>"$log"
+  key="GET $path"
+else
+  if [ -n "$body" ]; then
+    printf '%s %s %s\n' "$method" "$path" "$(printf '%s' "$body" | jq -c .)" >>"$log"
+  else
+    printf '%s %s\n' "$method" "$path" >>"$log"
+  fi
+  key="$method $path"
+fi
+
+if [ "$(jq --arg k "$key" 'has($k)' "$state")" = "true" ]; then
+  value=$(jq -c --arg k "$key" '.[$k]' "$state")
+  if [ "$value" = '"__204__"' ]; then
+    exit 0
+  fi
+  if [ "$(printf '%s' "$value" | jq 'type == "object" and has("__error")')" = "true" ]; then
+    printf 'gh: %s\n' "$(printf '%s' "$value" | jq -r '.__error')" >&2
+    exit 1
+  fi
+  if [ -n "$jq_filter" ]; then
+    printf '%s' "$value" | jq -r "$jq_filter"
+  else
+    printf '%s\n' "$value"
+  fi
+  exit 0
+fi
+
+if [ "$method" = "GET" ] && [ "$path" != "graphql" ]; then
+  printf 'gh: Not Found (HTTP 404)\n' >&2
+  exit 1
+fi
+printf '{}\n'

@@ -1,0 +1,34 @@
+{
+  "name": "weddingplanner",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Wedding invitation and RSVP site: static one-pager on Azure Static Web Apps with a .NET Functions API.",
+  "type": "module",
+  "packageManager": "pnpm@12.23.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present --filter \"!@weddingplanner/e2e\" test",
+    "build": "pnpm -r --if-present build",
+    "dev": "concurrently --names web,api --prefix-colors cyan,magenta --kill-others-on-fail \"pnpm:dev:web\" \"pnpm:dev:api\"",
+    "dev:web": "pnpm --filter @weddingplanner/web --if-present dev",
+    "dev:api": "pnpm --filter @weddingplanner/api --if-present dev",
+    "storage:up": "docker compose up --detach --wait",
+    "storage:down": "docker compose down",
+    "e2e": "pnpm --filter @weddingplanner/e2e --if-present test",
+    "smoke": "pnpm --filter @weddingplanner/e2e --if-present smoke",
+    "content:validate": "node packages/content/src/cli.ts validate",
+    "content:bake": "node packages/content/src/cli.ts bake"
+  },
+  "devDependencies": {
+    "@azure/static-web-apps-cli": "2.1.0",
+    "@biomejs/biome": "2.6.8",
+    "concurrently": "10.0.7",
+    "typescript": "7.0.2"
+  }
+}
