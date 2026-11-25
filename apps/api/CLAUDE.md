@@ -33,48 +33,80 @@ Running the API locally until S0-11 wires `pnpm dev:api`: copy
 `src/WeddingPlanner.Api/local.settings.sample.json` to `local.settings.json` (gitignored), then run
 `func start` in `src/WeddingPlanner.Api/` (Azure Functions Core Tools v4) and open
 `http://localhost:7071/api/health`. The sample switches every feature on and points storage at Azurite.
+Keep `Rsvp__Deadline` there in the space form (`2099-05-01 23:59:00+02:00`): Core Tools rewrites
+`T`-separated date strings from `local.settings.json` into culture-formatted dates before the worker sees
+them (verified with Core Tools 4.17), which leaves the RSVP API `not_configured`. Add
+`"Storage__TablePrefix": "<letters and digits>"` to keep a local run's tables apart in a shared Azurite.
 
 ## Layout and ownership
 
 `Program.cs` pre-wires every middleware and feature registration, so feature tasks only edit their
 own folder. Do not edit files owned by another task; ask the lead agent instead.
 
-| Path (under `src/WeddingPlanner.Api/`)                                         | Owner                                               |
-| ------------------------------------------------------------------------------ | --------------------------------------------------- |
-| `Program.cs`, `host.json`, `WeddingPlanner.Api.csproj`                         | S0-03                                               |
-| `local.settings.sample.json`                                                   | S0-03, extended by S0-11                            |
-| `Features/Health/` (`HealthFunction`, `HealthResponse`, `AppVersion`)          | S0-03; `ProbeFunction.cs`: S0-09                    |
-| `Features/FeatureFlags/` (`FeaturesOptions`, `FeatureMap`, `ApiFeature`)       | S0-03                                               |
-| `Pipeline/` (exception handling, feature gate, origin guard)                   | stubs/gate by S0-03, bodies by S2-02                |
-| `Http/` (JSON options, problem details, body reader)                           | S2-02; `Http/CookieWriter.cs`: S0-09                |
-| `RateLimiting/`                                                                | S2-05                                               |
-| `Security/` (admin authorization)                                              | S3-01                                               |
-| `Storage/` (`AddStorage`, table names, concurrency helpers)                    | S2-03; `Storage/<Table>/` repositories: their tasks |
-| `Features/Rsvp/` (`AddRsvpFeature`)                                            | S2-07, S2-08                                        |
-| `Features/Admin/{Rsvps,Guests,Matching,Export,Settings}/` (`AddAdmin…Feature`) | S3-02, S3-03, S3-05, S3-06, S3-07                   |
+| Path (under `src/WeddingPlanner.Api/`)                                         | Owner                                                            |
+| ------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
+| `Program.cs`, `host.json`, `WeddingPlanner.Api.csproj`                         | S0-03                                                            |
+| `local.settings.sample.json`                                                   | S0-03, extended by S0-11                                         |
+| `Features/Health/` (`HealthFunction`, `HealthResponse`, `AppVersion`)          | S0-03; `ProbeFunction.cs`: S0-09                                 |
+| `Features/FeatureFlags/` (`FeaturesOptions`, `FeatureMap`, `ApiFeature`)       | S0-03                                                            |
+| `Pipeline/` (exception handling, feature gate, origin guard)                   | gate by S0-03, bodies by S2-02 (done in T3)                      |
+| `Http/` (`ApiJson`, `ApiResult`, `ApiProblem`, `JsonBody`, `ClientAddress`)    | S2-02 (done in T3); `Http/CookieWriter.cs`: S0-09                |
+| `RateLimiting/` (`RateLimitingMiddleware`, `SlidingWindowLimiter`, options)    | S2-05 (done in T3)                                               |
+| `Security/` (admin authorization)                                              | S3-01                                                            |
+| `Storage/` (`AddStorage`, `TableStorage`, `ConcurrencyConflictException`)      | S2-03 (done in T3); `Storage/<Table>/` repositories: their tasks |
+| `Features/Rsvp/` (`AddRsvpFeature`, functions, cookies, credential)            | S2-07, S2-08 (done in T3); `Storage/Rsvps/` too                  |
+| `Features/Admin/{Rsvps,Guests,Matching,Export,Settings}/` (`AddAdmin…Feature`) | S3-02, S3-03, S3-05, S3-06, S3-07                                |
 
 Tests mirror the source folders under `tests/WeddingPlanner.Api.Tests/<Folder>/`. Shared test code
 from S0-03: `Support/TestFunctionContext` (a `FunctionContext` with an ASP.NET Core `HttpContext`, for
 middleware tests), `Integration/Azurite` (connection string, local-endpoint guard, table prefix,
-unreachable hint) and `Wiring/ProgramWiringTests` (middleware order and default wiring). Reuse them;
-S2-03 builds its storage fixture in `Fixtures/` on the same conventions.
+unreachable hint) and `Wiring/ProgramWiringTests` (middleware order and default wiring). Reuse them.
+RSVP test support: `Support/RsvpHarness` (the feature composed like `Program.cs`, with `FakeTimeProvider`,
+a capturing logger and `Support/InMemoryRsvpRepository`), `Support/TestHttp` (requests, executing an
+`IActionResult`, reading cookies) and `Integration/AzuriteRsvpStore` (the real repository on a random
+table prefix, deleted on dispose).
 
 ## Request pipeline
 
 Worker middleware, outermost first (`Program.ConfigurePipeline`):
 
-1. `ExceptionHandlingMiddleware` (stub; S2-02 maps exceptions to 500 `internal_error`).
+1. `ExceptionHandlingMiddleware`: an unhandled exception becomes 500 `internal_error` problem+json
+   (`no-store`, no details). Only the function name and exception type are logged, never the message
+   (storage errors carry host names; others may echo request data).
 2. `FeatureGateMiddleware`: maps functions to features by **function-name prefix** (`Rsvp*` →
    `Features__Rsvp`, `Admin*` → `Features__Admin`, case-insensitive). A disabled feature answers
    404 `application/problem+json` (`code: not_found`, `Cache-Control: no-store`) before anything else
    runs: no counters, no I/O, no cookies. Every other function (`Health`, `HealthProbe`) is never gated.
-3. `RateLimitingMiddleware` (stub; S2-05).
-4. `RequestOriginGuardMiddleware` (stub; S2-02).
+3. `RateLimitingMiddleware`: `Rsvp*` functions only, in memory per worker instance. Per client 10
+   writes per 10 minutes and 60 reads per minute, plus 120 writes per minute per instance for all
+   clients; 429 `rate_limited` with `Retry-After`. The client key comes from `Http/ClientAddress`
+   (`RateLimiting__ClientIpHeader`, default `x-azure-clientip`, then the first `X-Forwarded-For` entry,
+   then the connection address; IPv6 per /64) and is never logged. All limits are app settings with
+   code defaults (`RateLimitingOptions`).
+4. `RequestOriginGuardMiddleware`: writes to gated functions (`Rsvp*`, `Admin*`). `Sec-Fetch-Site:
+   cross-site` → 403 `cross_site_request`; a body that is not `application/json` (UTF-8) → 415 (a body is
+   required for POST/PUT/PATCH); `Content-Length` above 16 KB (`Rsvp*`) or 256 KB (`Admin*`) → 413. The
+   function's `JsonBody` reader enforces the same limit for bodies without a length.
 5. `AdminAuthorizationMiddleware`, only for `Admin*` functions via `UseWhen` (stub; S3-01).
 
 Name every function with its feature prefix (`RsvpCreate`, `AdminGuestsImport`, …). Flags bind
 leniently: only a value that parses as `true` switches a feature on; missing, empty or malformed
 values keep it off (dark). Code default: off.
+
+## RSVP API
+
+Contract, cookies, errors and storage layout: [`docs/api.md`](../../docs/api.md). In short:
+`GET /api/rsvp/status` (`RsvpStatus`), `POST /api/rsvp` (`RsvpCreate`) and `GET`/`PUT`/`DELETE
+/api/rsvp/me` (`RsvpGetMine`, `RsvpUpdateMine`, `RsvpDeleteMine`) in `Features/Rsvp/`. Validation,
+sanitising, person ids and the deadline are pure domain code in
+`packages/WeddingPlanner.Domain/src/WeddingPlanner.Domain/Rsvp/`. The `Rsvps` table is accessed only
+through `Storage/Rsvps/IRsvpRepository` (`TableRsvpRepository`), which stores the SHA-256 hash of the
+edit token, never the token. Settings: `Rsvp__Deadline`, `Rsvp__TimeZone` (from Bicep),
+`Rsvp__MaxCompanions` (5), `Rsvp__MaxActiveRsvps` (300), `Rsvp__CookieLifetimeDays` (365).
+
+Responses: return `Http/ApiResult` (`ApiResult.Json`) or `Http/ApiProblem.Create(status, code)`
+with a code from `ProblemCodes`. Both serialise with `ApiJson.Options` (camelCase, nulls omitted,
+duplicate members rejected) and need no MVC services, so middleware can write them too.
 
 ## Ground rules
 

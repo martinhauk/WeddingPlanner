@@ -76,6 +76,7 @@ internal partial class Program
         AddTelemetry(services, configuration);
 
         services.AddFeatureFlags();
+        services.AddRateLimiting();
         services.AddStorage();
 
         services.AddRsvpFeature();
