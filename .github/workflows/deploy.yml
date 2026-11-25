@@ -131,7 +131,7 @@ jobs:
           azure_static_web_apps_api_token: ${{ steps.token.outputs.token }}
           app_location: apps/web/dist
           api_location: api-publish
-          output_location: ''
+          output_location: ""
           skip_app_build: true
           skip_api_build: true
           production_branch: main
