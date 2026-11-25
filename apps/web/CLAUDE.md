@@ -90,9 +90,10 @@ What the config enforces (details and the SWA quirks behind them are in the gene
   `resolveText(text, language, site.i18n)` (current language, then default, then the first
   configured language with a value).
 - **Languages:** the list comes from `site.i18n.languages`, never hard-coded. Every UI string exists
-  in de, en and es (until the i18n core lands, in `src/app/strings.ts`).
-- **Dates** are formatted with `Intl` in the event's time zone (`event.timeZone`), never the
-  visitor's.
+  in de, en and es, in a `defineStrings` module (see [UI strings](#ui-strings-i18n));
+  `src/app/strings.ts` serves only the placeholder page until S1-05 replaces it.
+- **Dates** are formatted in the event's time zone (`event.timeZone`), never the visitor's, with
+  `formatDate`, `formatTime`, `formatDateTime` and `formatDateRange` from `src/i18n/`.
 - **Feature flags** come from the baked `build.json` (`features.<name>`). A flag only hides UI; the API
   enforces the same flag on its side. Guest-visible features ship dark. See
   [`docs/conventions/feature-flags.md`](../../docs/conventions/feature-flags.md).
@@ -104,6 +105,37 @@ What the config enforces (details and the SWA quirks behind them are in the gene
 - **Sections:** a section task touches only `src/sections/<type>/`, its schema file in
   `packages/content`, its own string module and its e2e spec.
 - **Admin:** each admin task touches only `src/admin/<area>/`; public pages never import admin code.
+
+## UI strings (i18n)
+
+`src/i18n/` is a small in-house i18n on `Intl` (no library, for the bundle budget). Import it from
+`src/i18n/index.ts`.
+
+1. Put the strings next to the feature, in its own module (`src/sections/<type>/strings.ts`):
+
+   ```ts
+   export const heroStrings = defineStrings('hero', {
+     de: { save: 'Termin speichern', guests: { one: '{count} Gast', other: '{count} Gäste' } },
+     en: { save: 'Save the date', guests: { one: '{count} guest', other: '{count} guests' } },
+     es: { save: 'Guarda la fecha', guests: { one: '{count} invitado', other: '{count} invitados' } },
+   });
+   ```
+
+   English defines the keys; de and es must have exactly the same ones, or `tsc` fails. The
+   namespace (`hero`) is unique per module.
+2. Read them with `const t = useStrings(heroStrings)`: `t('save')`; `t(key, { couple })` fills a
+   `{couple}` placeholder; `t.plural('guests', n)` picks a plural form (form names are
+   `Intl.PluralRules` categories, `other` is required, `{count}` is the localized number). Format
+   dates before you pass them in.
+3. Lookup order: content override `site.uiStrings["<namespace>.<key>"]` (a `Localizable`; one plural
+   form is `"<namespace>.<key>.<form>"`) in the current language, the module's dictionary for the
+   current language, English, then the default language. A content language without a built-in
+   dictionary gets English UI text unless content overrides it.
+4. `useLanguage()` gives `language`, `languages` and `setLanguage` (persists `wp.lang`, updates
+   `<html lang>` and an explicit `?lang`). `detectLanguage` picks the start language: `?lang`, the
+   stored choice, `navigator.languages` on the primary subtag, then the default.
+5. Component tests wrap the component in
+   `<I18nProvider i18n={site.i18n} initialLanguage="en">` and check each language they render.
 
 ## Tests
 
