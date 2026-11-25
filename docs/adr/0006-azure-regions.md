@@ -33,3 +33,12 @@ edge regardless of region.
 - **Everything in westeurope:** simpler, but data at rest outside Germany for no benefit.
 - **Bring-your-own Functions in germanywestcentral:** requires SWA Standard (monthly cost, billed
   bandwidth overage).
+
+## Update 2026-11-25: Static Web Apps in eastus2
+
+The first deployment was rejected: `westeurope` is "currently not accepting new customers" for
+Static Web Apps (capacity restriction on new subscriptions). The owner decided to run the SWA (static
+content on the global CDN, managed API compute) in **`eastus2`** for now and **not** to request
+access. Data at rest stays in `germanywestcentral`. A follow-up issue tracks re-checking `westeurope`
+from time to time; moving back means recreating the SWA (new default hostname), which is cheap
+before a custom domain exists.
