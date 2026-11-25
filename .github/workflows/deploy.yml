@@ -1,0 +1,154 @@
+# Deploy v1 (minimal): every push to main deploys the e2e environment.
+#
+# Steps: derive Bicep parameters from the instance (samples/instance for e2e) -> OIDC login ->
+# app infra (SWA Free, storage, monitoring, alerts) -> build web (bake + vite) and API
+# (dotnet publish) -> upload with a deploy token fetched at runtime -> read-only smoke test.
+#
+# Hygiene (CLAUDE.md): no secrets in logs, hostnames and the deploy token are masked,
+# `-o none` on deployments, no environment.url. Skips cleanly while the environment has no
+# Azure variables (bootstrap not run yet).
+name: deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-e2e
+  cancel-in-progress: false
+
+jobs:
+  e2e:
+    name: deploy e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: e2e
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      DEPLOY_ENV: e2e
+      INSTANCE_DIR: samples/instance
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+    steps:
+      - name: Skip when the environment is not bootstrapped
+        id: gate
+        run: |
+          if [ -z "$AZURE_CLIENT_ID" ] || [ -z "$AZURE_RESOURCE_GROUP" ]; then
+            echo "::notice::e2e has no Azure variables yet (run scripts/bootstrap.sh --env e2e); skipping."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check out
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Derive Bicep parameters from the instance
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          f="$INSTANCE_DIR/instance.json"
+          slug=$(jq -r '.slug' "$f")
+          if ! [[ $slug =~ ^wed[0-9a-z]{3,8}$ ]]; then
+            echo "::error::instance.json slug does not match ^wed[0-9a-z]{3,8}$"; exit 1
+          fi
+          {
+            echo "DEPLOYMENT_SLUG=$slug"
+            echo "ENVIRONMENT_NAME=$DEPLOY_ENV"
+            echo "DATA_LOCATION=$(jq -r '.dataLocation // "germanywestcentral"' "$f")"
+            echo "SWA_LOCATION=$(jq -r '.swaLocation // "westeurope"' "$f")"
+            echo "FEATURES_RSVP=$(jq -r --arg e "$DEPLOY_ENV" '.environments[$e].features.rsvp // false' "$f")"
+            echo "FEATURES_ADMIN=$(jq -r --arg e "$DEPLOY_ENV" '.environments[$e].features.admin // false' "$f")"
+            echo "RSVP_DEADLINE=$(jq -r '.rsvp.deadline' "$f")"
+            echo "RSVP_TIME_ZONE=$(jq -r '.rsvp.timeZone' "$f")"
+          } >> "$GITHUB_ENV"
+
+      - name: Azure login (OIDC)
+        if: steps.gate.outputs.run == 'true'
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy app infrastructure
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          az deployment group create --name app-infra --resource-group "$AZURE_RESOURCE_GROUP" \
+            --parameters infra/app/main.bicepparam -o none
+          out=$(az deployment group show --name app-infra --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.outputs -o json)
+          host=$(jq -r '.swaDefaultHostname.value' <<<"$out")
+          echo "::add-mask::$host"
+          {
+            echo "SWA_NAME=$(jq -r '.swaName.value' <<<"$out")"
+            echo "SWA_HOST=$host"
+          } >> "$GITHUB_ENV"
+
+      - name: Set up Node and pnpm
+        if: steps.gate.outputs.run == 'true'
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Set up .NET
+        if: steps.gate.outputs.run == 'true'
+        uses: ./.github/actions/setup-dotnet
+
+      - name: Build web (bake + vite)
+        if: steps.gate.outputs.run == 'true'
+        env:
+          GIT_SHA: ${{ github.sha }}
+        run: SITE_URL="https://$SWA_HOST" pnpm --filter @weddingplanner/web build
+
+      - name: Build API (dotnet publish)
+        if: steps.gate.outputs.run == 'true'
+        run: dotnet publish apps/api/src/WeddingPlanner.Api/WeddingPlanner.Api.csproj -c Release -o api-publish
+
+      - name: Fetch deploy token
+        if: steps.gate.outputs.run == 'true'
+        id: token
+        run: |
+          token=$(az staticwebapp secrets list --name "$SWA_NAME" --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.apiKey -o tsv)
+          echo "::add-mask::$token"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+
+      - name: Upload to Static Web Apps
+        if: steps.gate.outputs.run == 'true'
+        uses: Azure/static-web-apps-deploy@1a947af9992250f3bc2e68ad0754c0b0c11566c9 # v1
+        with:
+          action: upload
+          azure_static_web_apps_api_token: ${{ steps.token.outputs.token }}
+          app_location: apps/web/dist
+          api_location: api-publish
+          output_location: ''
+          skip_app_build: true
+          skip_api_build: true
+          production_branch: main
+
+      - name: Smoke test (read-only)
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          for _ in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "https://$SWA_HOST/") || true
+            [ "$code" = "200" ] && break
+            sleep 10
+          done
+          [ "$code" = "200" ] || { echo "::error::home page returned $code"; exit 1; }
+          health=$(curl -s -o /dev/null -w '%{http_code}' "https://$SWA_HOST/api/health") || true
+          echo "home: 200, /api/health: $health"
+          {
+            echo "### e2e deployed"
+            echo "- commit: \`${GITHUB_SHA::7}\`"
+            echo "- home: 200, /api/health: $health"
+          } >> "$GITHUB_STEP_SUMMARY"
