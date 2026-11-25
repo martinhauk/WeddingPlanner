@@ -22,6 +22,9 @@ internal sealed class InMemoryRsvpRepository : IRsvpRepository
     /// <summary>Number of <see cref="CountAsync"/> calls.</summary>
     public int CountCalls { get; private set; }
 
+    /// <summary>When set, <see cref="CountAsync"/> throws the exception it returns (a storage failure).</summary>
+    public Func<Exception>? CountFailure { get; set; }
+
     /// <summary>Runs before a replace or delete is applied, for example to simulate a concurrent change.</summary>
     public Action<string>? BeforeWrite { get; set; }
 
@@ -87,7 +90,7 @@ internal sealed class InMemoryRsvpRepository : IRsvpRepository
     {
         Calls++;
         CountCalls++;
-        return Task.FromResult(_items.Count);
+        return CountFailure is { } failure ? Task.FromException<int>(failure()) : Task.FromResult(_items.Count);
     }
 
     /// <summary>Changes the ETag of a stored reply, as a concurrent write would.</summary>

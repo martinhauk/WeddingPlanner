@@ -28,7 +28,9 @@ public sealed class RsvpCreateFunctionTests
         response.ContentType.ShouldBe("application/json; charset=utf-8");
         response.Headers.CacheControl.ToString().ShouldBe("no-store");
         response.Headers.Location.ToString().ShouldBe("/api/rsvp/me");
-        response.Headers.ETag.ToString().ShouldNotBeNullOrEmpty();
+        var etag = response.Headers.ETag.ToString();
+        etag.ShouldStartWith("\"", customMessage: "a strong entity tag");
+        TestHttp.ReadJson(httpContext).GetProperty("version").GetString().ShouldBe(etag);
 
         var credentialCookie = TestHttp.SetCookie(httpContext, "wp_rsvp").ShouldNotBeNull();
         credentialCookie.ShouldMatch(CookiePattern);
@@ -208,6 +210,25 @@ public sealed class RsvpCreateFunctionTests
     }
 
     [Fact]
+    public async Task LogsTheCapacityWarningAtMostOncePerHour()
+    {
+        using var harness = new RsvpHarness(settings: new Dictionary<string, string?> { ["Rsvp:MaxActiveRsvps"] = "1" });
+        (await harness.PostAsync()).Response.StatusCode.ShouldBe(StatusCodes.Status201Created);
+
+        (await harness.PostAsync()).Response.StatusCode.ShouldBe(StatusCodes.Status503ServiceUnavailable);
+        (await harness.PostAsync()).Response.StatusCode.ShouldBe(StatusCodes.Status503ServiceUnavailable);
+        CapacityWarnings(harness).ShouldBe(1, "refusals are not logged one by one");
+
+        harness.Time.Advance(TimeSpan.FromMinutes(59));
+        (await harness.PostAsync()).Response.StatusCode.ShouldBe(StatusCodes.Status503ServiceUnavailable);
+        CapacityWarnings(harness).ShouldBe(1);
+
+        harness.Time.Advance(TimeSpan.FromMinutes(1));
+        (await harness.PostAsync()).Response.StatusCode.ShouldBe(StatusCodes.Status503ServiceUnavailable);
+        CapacityWarnings(harness).ShouldBe(2, "an hour later the cap is reported again");
+    }
+
+    [Fact]
     public async Task AnswersNotConfiguredWithoutStorage()
     {
         using var harness = new RsvpHarness();
@@ -351,4 +372,7 @@ public sealed class RsvpCreateFunctionTests
             .Select(error => $"{error.GetProperty("field").GetString()}:{error.GetProperty("code").GetString()}")
             .ToList();
     }
+
+    private static int CapacityWarnings(RsvpHarness harness) =>
+        harness.Logs.Records.Count(record => record.StartsWith("Warning", StringComparison.Ordinal) && record.Contains("RSVP capacity", StringComparison.Ordinal));
 }

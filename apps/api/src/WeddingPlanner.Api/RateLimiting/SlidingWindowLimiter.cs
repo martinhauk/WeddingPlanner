@@ -18,7 +18,7 @@ public sealed class SlidingWindowLimiter
     private readonly TimeProvider _timeProvider;
     private readonly int _maxKeys;
     private readonly Lock _gate = new();
-    private readonly Dictionary<string, Queue<DateTimeOffset>> _permits = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, LinkedList<DateTimeOffset>> _permits = new(StringComparer.Ordinal);
     private int _callsSincePrune;
 
     /// <summary>Creates a limiter.</summary>
@@ -76,25 +76,52 @@ public sealed class SlidingWindowLimiter
                     return false;
                 }
 
-                permits = new Queue<DateTimeOffset>();
+                permits = new LinkedList<DateTimeOffset>();
                 _permits[key] = permits;
             }
 
-            while (permits.Count > 0 && permits.Peek() <= now - _window)
+            while (permits.First is { } oldest && oldest.Value <= now - _window)
             {
-                permits.Dequeue();
+                permits.RemoveFirst();
             }
 
             if (permits.Count >= _permitLimit)
             {
-                var wait = permits.Peek() + _window - now;
+                var wait = permits.First!.Value + _window - now;
                 retryAfter = wait < TimeSpan.FromSeconds(1) ? TimeSpan.FromSeconds(1) : wait;
                 return false;
             }
 
-            permits.Enqueue(now);
+            permits.AddLast(now);
             retryAfter = TimeSpan.Zero;
             return true;
+        }
+    }
+
+    /// <summary>
+    /// Gives back the newest permit of <paramref name="key"/>, for a request that a later check refused after
+    /// <see cref="TryAcquire"/> succeeded, and forgets the key once it holds no permit.
+    /// </summary>
+    public void Release(string key)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+
+        lock (_gate)
+        {
+            if (!_permits.TryGetValue(key, out var permits))
+            {
+                return;
+            }
+
+            if (permits.Count > 0)
+            {
+                permits.RemoveLast();
+            }
+
+            if (permits.Count == 0)
+            {
+                _permits.Remove(key);
+            }
         }
     }
 
@@ -104,7 +131,7 @@ public sealed class SlidingWindowLimiter
         var cutoff = now - _window;
         foreach (var (key, permits) in _permits)
         {
-            if (permits.Count == 0 || permits.Last() <= cutoff)
+            if (permits.Last is not { } newest || newest.Value <= cutoff)
             {
                 _permits.Remove(key);
             }

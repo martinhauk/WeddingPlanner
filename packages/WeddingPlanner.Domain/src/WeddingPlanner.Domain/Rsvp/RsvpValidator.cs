@@ -120,6 +120,13 @@ public static partial class RsvpValidator
             return [];
         }
 
+        if (draftTags.Count > RsvpLimits.MaxDietaryTagEntries)
+        {
+            // One error for the list instead of one per entry, so the response stays small.
+            errors.Add(new(field, RsvpValidationCodes.TooMany));
+            return [];
+        }
+
         for (var index = 0; index < draftTags.Count; index++)
         {
             if (!DietaryTags.IsKnown(draftTags[index]))
@@ -146,7 +153,7 @@ public static class RsvpValidationCodes
     /// <summary>The text is longer than its limit.</summary>
     public const string TooLong = "too_long";
 
-    /// <summary>The reply names more people than allowed.</summary>
+    /// <summary>The reply names more people, or a person more dietary tag entries, than allowed.</summary>
     public const string TooMany = "too_many";
 
     /// <summary>A dietary tag that is not one of <see cref="DietaryTags.All"/>.</summary>

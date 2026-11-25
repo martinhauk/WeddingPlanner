@@ -33,6 +33,7 @@ public static class RsvpFeatureServiceCollectionExtensions
             });
 
         services.AddSingleton<RsvpSettings>();
+        services.AddSingleton<RsvpLogThrottle>();
         services.AddSingleton<IRsvpRepository, TableRsvpRepository>();
         services.AddSingleton<RsvpStatusCache>();
         return services;

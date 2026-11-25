@@ -11,19 +11,21 @@ using WeddingPlanner.Domain.Rsvp;
 namespace WeddingPlanner.Api.Features.Rsvp;
 
 /// <summary>
-/// <c>POST /api/rsvp</c>: creates the caller's reply and sets the RSVP cookies. Answers 201 <c>{rsvp}</c> with
-/// <c>ETag</c> and <c>Location: /api/rsvp/me</c>.
+/// <c>POST /api/rsvp</c>: creates the caller's reply and sets the RSVP cookies. Answers 201 <c>{rsvp, version}</c>
+/// with <c>ETag</c> (the same value as <c>version</c>) and <c>Location: /api/rsvp/me</c>.
 /// </summary>
 /// <remarks>
 /// Order of checks (cheap ones first, I/O last): 503 <c>not_configured</c>, 403 <c>rsvp_closed</c>, body
 /// (415/413/400 <c>invalid_json</c>), 400 <c>validation_failed</c> (honeypot included), 409 <c>rsvp_exists</c> when
 /// the request already carries a valid <c>wp_rsvp</c> cookie, 503 <c>capacity_reached</c> at the cap. The cap is
 /// checked by counting before the insert, so two simultaneous requests may exceed it by one; it is a cost guard,
-/// not a business limit.
+/// not a business limit. Refusals at the cap are not logged one by one: the warning is written at most once per
+/// hour and worker instance (<see cref="RsvpLogThrottle"/>).
 /// </remarks>
 public sealed partial class RsvpCreateFunction(
     IRsvpRepository repository,
     RsvpSettings settings,
+    RsvpLogThrottle logThrottle,
     TimeProvider timeProvider,
     ILogger<RsvpCreateFunction> logger)
 {
@@ -73,7 +75,11 @@ public sealed partial class RsvpCreateFunction(
 
         if (await repository.CountAsync(cancellationToken) >= settings.MaxActiveRsvps)
         {
-            LogCapacityReached(logger, settings.MaxActiveRsvps);
+            if (logThrottle.ShouldLogCapacityReached())
+            {
+                LogCapacityReached(logger, settings.MaxActiveRsvps);
+            }
+
             return ApiProblem.Create(StatusCodes.Status503ServiceUnavailable, ProblemCodes.CapacityReached);
         }
 
@@ -82,11 +88,12 @@ public sealed partial class RsvpCreateFunction(
         var stored = await repository.AddAsync(record, cancellationToken);
 
         RsvpCookies.Set(response, credential, answer.Attending, settings.CookieLifetime);
-        response.Headers.ETag = stored.ETag;
+        var version = RsvpHttp.PublicETag(stored.ETag);
+        response.Headers.ETag = version;
         response.Headers.Location = MineLocation;
-        return ApiResult.Json(StatusCodes.Status201Created, new RsvpCreatedResponse(RsvpView.From(stored.Record)));
+        return ApiResult.Json(StatusCodes.Status201Created, new RsvpCreatedResponse(RsvpView.From(stored.Record), version));
     }
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "RSVP capacity of {MaxActiveRsvps} replies reached; new replies are refused.")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "RSVP capacity of {MaxActiveRsvps} replies reached; new replies are refused (logged at most once per hour).")]
     private static partial void LogCapacityReached(ILogger logger, int maxActiveRsvps);
 }

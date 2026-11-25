@@ -56,6 +56,41 @@ public sealed class RsvpValidatorTests
     }
 
     [Fact]
+    public void AcceptsUpToTenTagEntries()
+    {
+        var tags = Enumerable.Repeat<string?>(DietaryTags.Vegan, RsvpLimits.MaxDietaryTagEntries).ToList();
+
+        Valid(Draft(people: [Person("Anna", tags)])).People[0].DietaryTags.ShouldBe([DietaryTags.Vegan]);
+    }
+
+    [Fact]
+    public void RejectsMoreThanTenTagEntriesWithOneError()
+    {
+        var tags = Enumerable.Repeat<string?>(null, 2000).ToList();
+
+        var errors = Invalid(Draft(people: [Person("Anna", tags), Person("Ben", [DietaryTags.Vegan, .. tags])]));
+
+        errors.ShouldBe(
+        [
+            new("people[0].dietary.tags", RsvpValidationCodes.TooMany),
+            new("people[1].dietary.tags", RsvpValidationCodes.TooMany),
+        ]);
+    }
+
+    [Fact]
+    public void RejectsANameOfOnlyInvisibleCharacters()
+    {
+        var errors = Invalid(Draft(people: [Person("\u200B"), Person("\u200D\uFE0F"), Person("\u3164")]));
+
+        errors.ShouldBe(
+        [
+            new("people[0].name", RsvpValidationCodes.Required),
+            new("people[1].name", RsvpValidationCodes.Required),
+            new("people[2].name", RsvpValidationCodes.Required),
+        ]);
+    }
+
+    [Fact]
     public void DropsDietaryDataForANo()
     {
         var answer = Valid(Draft(attending: false, people: [Person("Ben", [DietaryTags.Vegan, "unknown"], "secret note")]));

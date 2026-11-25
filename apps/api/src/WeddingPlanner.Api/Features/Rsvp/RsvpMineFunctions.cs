@@ -16,11 +16,12 @@ namespace WeddingPlanner.Api.Features.Rsvp;
 /// </summary>
 /// <remarks>
 /// <list type="bullet">
-///   <item><c>GET</c>: 200 <c>{rsvp, open, deadline}</c> with <c>ETag</c>; works after the deadline (read-only), and
-///   refreshes the cookies' lifetime.</item>
-///   <item><c>PUT</c>: replaces the reply while open. Requires <c>If-Match</c> with the ETag from the last read
-///   (428 <c>precondition_required</c> without it, 412 <c>precondition_failed</c> when the reply changed since).
-///   Person ids sent back are kept. 200 <c>{rsvp, open, deadline}</c> with the new <c>ETag</c>.</item>
+///   <item><c>GET</c>: 200 <c>{rsvp, version, open, deadline}</c> with <c>ETag</c> (the same value as
+///   <c>version</c>); works after the deadline (read-only), and refreshes the cookies' lifetime.</item>
+///   <item><c>PUT</c>: replaces the reply while open. Requires <c>If-Match</c> with the ETag or <c>version</c> from
+///   the last read (428 <c>precondition_required</c> without it, 412 <c>precondition_failed</c> when the reply
+///   changed since). Person ids sent back are kept. 200 <c>{rsvp, version, open, deadline}</c> with the new
+///   <c>ETag</c>.</item>
 ///   <item><c>DELETE</c>: deletes the reply while open (<c>If-Match</c> optional) and clears the cookies; 204.</item>
 /// </list>
 /// After the deadline <c>PUT</c> and <c>DELETE</c> answer 403 <c>rsvp_closed</c>.
@@ -104,7 +105,7 @@ public sealed class RsvpMineFunctions(IRsvpRepository repository, RsvpSettings s
             return RsvpHttp.NotFound(request);
         }
 
-        if (!Matches(ifMatch, session.Stored.ETag))
+        if (!RsvpHttp.IfMatchMatches(ifMatch, session.Stored.ETag))
         {
             return RsvpHttp.PreconditionFailed();
         }
@@ -151,7 +152,7 @@ public sealed class RsvpMineFunctions(IRsvpRepository repository, RsvpSettings s
             return RsvpHttp.NotFound(request);
         }
 
-        if (RsvpHttp.ReadIfMatch(request) is { } ifMatch && !Matches(ifMatch, session.Stored.ETag))
+        if (RsvpHttp.ReadIfMatch(request) is { } ifMatch && !RsvpHttp.IfMatchMatches(ifMatch, session.Stored.ETag))
         {
             return RsvpHttp.PreconditionFailed();
         }
@@ -172,12 +173,11 @@ public sealed class RsvpMineFunctions(IRsvpRepository repository, RsvpSettings s
     private ApiResult Mine(HttpResponse response, RsvpCredential credential, StoredRsvp stored)
     {
         RsvpCookies.Set(response, credential, stored.Record.Answer.Attending, settings.CookieLifetime);
-        response.Headers.ETag = stored.ETag;
+        var version = RsvpHttp.PublicETag(stored.ETag);
+        response.Headers.ETag = version;
 
         var deadline = settings.Deadline;
         var open = deadline?.IsOpenAt(timeProvider.GetUtcNow()) ?? false;
-        return ApiResult.Json(StatusCodes.Status200OK, new RsvpMineResponse(RsvpView.From(stored.Record), open, deadline?.Utc.UtcDateTime));
+        return ApiResult.Json(StatusCodes.Status200OK, new RsvpMineResponse(RsvpView.From(stored.Record), version, open, deadline?.Utc.UtcDateTime));
     }
-
-    private static bool Matches(string ifMatch, string etag) => ifMatch == "*" || string.Equals(ifMatch, etag, StringComparison.Ordinal);
 }

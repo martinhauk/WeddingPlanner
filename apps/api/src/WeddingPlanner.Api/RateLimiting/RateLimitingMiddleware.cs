@@ -22,7 +22,8 @@ namespace WeddingPlanner.Api.RateLimiting;
 ///   <see cref="RateLimitingOptions.InstanceWritesPerMinute"/> per worker instance for all clients together;</item>
 ///   <item>reads: <see cref="RateLimitingOptions.ReadsPerClient"/> per <see cref="RateLimitingOptions.ReadWindow"/>.</item>
 /// </list>
-/// A refused request answers 429 <c>rate_limited</c> problem+json with <c>Retry-After</c> in seconds. The client
+/// A write the instance backstop refuses gives its per-client permit back. A refused request answers 429
+/// <c>rate_limited</c> problem+json with <c>Retry-After</c> in seconds. The client
 /// key comes from <see cref="ClientAddress"/> and is never logged. Health, probe and admin functions are not
 /// limited here (the admin area is behind the platform login).
 /// </remarks>
@@ -74,6 +75,20 @@ public sealed class RateLimitingMiddleware : IFunctionsWorkerMiddleware
             return _readsPerClient.TryAcquire(key, out retryAfter);
         }
 
-        return _writesPerClient.TryAcquire(key, out retryAfter) && _instanceWrites.TryAcquire(InstanceKey, out retryAfter);
+        // The client's own limit first, so a client refused by it never uses up the shared instance budget.
+        if (!_writesPerClient.TryAcquire(key, out retryAfter))
+        {
+            return false;
+        }
+
+        if (_instanceWrites.TryAcquire(InstanceKey, out retryAfter))
+        {
+            return true;
+        }
+
+        // Refused by the backstop: give the client's permit back, so the refusal neither costs that client quota nor
+        // leaves a key behind.
+        _writesPerClient.Release(key);
+        return false;
     }
 }

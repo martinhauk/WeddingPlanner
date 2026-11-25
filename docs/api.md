@@ -34,13 +34,13 @@ created, changed and deleted **until and including** the deadline.
 
 ## Endpoints
 
-| Method and route       | Function         | Success                               | Purpose                                      |
-| ---------------------- | ---------------- | ------------------------------------- | -------------------------------------------- |
-| `GET /api/rsvp/status` | `RsvpStatus`     | 200 status                            | Whether the form is open, deadline, limits   |
-| `POST /api/rsvp`       | `RsvpCreate`     | 201 `{rsvp}`, cookies, ETag, Location | Create this browser's reply                  |
-| `GET /api/rsvp/me`     | `RsvpGetMine`    | 200 `{rsvp, open, deadline}`, ETag    | Read the own reply (also after the deadline) |
-| `PUT /api/rsvp/me`     | `RsvpUpdateMine` | 200 `{rsvp, open, deadline}`, ETag    | Replace the own reply (needs `If-Match`)     |
-| `DELETE /api/rsvp/me`  | `RsvpDeleteMine` | 204, cookies cleared                  | Delete the own reply                         |
+| Method and route       | Function         | Success                                        | Purpose                                      |
+| ---------------------- | ---------------- | ---------------------------------------------- | -------------------------------------------- |
+| `GET /api/rsvp/status` | `RsvpStatus`     | 200 status                                     | Whether the form is open, deadline, limits   |
+| `POST /api/rsvp`       | `RsvpCreate`     | 201 `{rsvp, version}`, cookies, ETag, Location | Create this browser's reply                  |
+| `GET /api/rsvp/me`     | `RsvpGetMine`    | 200 `{rsvp, version, open, deadline}`, ETag    | Read the own reply (also after the deadline) |
+| `PUT /api/rsvp/me`     | `RsvpUpdateMine` | 200 `{rsvp, version, open, deadline}`, ETag    | Replace the own reply (needs `If-Match`)     |
+| `DELETE /api/rsvp/me`  | `RsvpDeleteMine` | 204, cookies cleared                           | Delete the own reply                         |
 
 ### `GET /api/rsvp/status`
 
@@ -65,7 +65,9 @@ created, changed and deleted **until and including** the deadline.
 `open` means new replies are accepted: configured, deadline not passed, and fewer than
 `Rsvp__MaxActiveRsvps` replies stored (`full`). The answer is cached in memory for 60 seconds per worker
 instance and sent with `Cache-Control: public, max-age=60`, so `open` may lag the deadline by up to a
-minute; writes check the deadline exactly. No cookies, no personal data.
+minute; writes check the deadline exactly. No cookies, no personal data. If counting the stored replies
+fails (storage error, network failure or timeout), the status reports `full: false`, is not cached, and
+the failure is logged by exception type only, at most once per hour and worker instance.
 
 ### Request body of `POST /api/rsvp` and `PUT /api/rsvp/me`
 
@@ -91,17 +93,21 @@ minute; writes check the deadline exactly. No cookies, no personal data.
 | `people`                | 1 to 6 entries (the guest plus up to `maxCompanions`); a "no" may name several people            |
 | `people[].name`         | required, 1 to 80 characters after sanitising                                                    |
 | `people[].id`           | optional; on `PUT`, send back the ids from the last read to keep them (admin matching uses them) |
-| `people[].dietary.tags` | any of `vegetarian`, `vegan`, `glutenFree`, `lactoseFree` (exact spelling); others are rejected  |
+| `people[].dietary.tags` | at most 10 of `vegetarian`, `vegan`, `glutenFree`, `lactoseFree` (exact spelling)                |
 | `people[].dietary.note` | optional, at most 200 characters                                                                 |
 | `message`               | optional, at most 1000 characters, line breaks kept                                              |
 | `language`              | required language tag such as `de`, `en`, `es` (stored lower case)                               |
 | `website`               | honeypot: hidden in the form, must be empty                                                      |
 
 Text is NFC-normalised and trimmed; control characters, lone surrogates, Unicode noncharacters (such as
-U+FFFE) and bidirectional formatting characters are removed; names and notes collapse whitespace to
-single spaces. For a "no", dietary data
-is dropped and never stored. Unknown members are ignored; duplicate members, wrong types or a non-object
-body are 400 `invalid_json`. Lengths count UTF-16 code units, like `maxlength` in the browser.
+U+FFFE), format characters (category Cf: bidirectional controls, BOM, soft hyphen, zero-width space,
+word joiner, tag characters and the like, except the joiners ZWJ and ZWNJ) and the Hangul fillers U+3164
+and U+FFA0 are removed; names and notes collapse whitespace to single spaces. Text with nothing visible
+left (only whitespace, joiners or variation selectors) counts as empty, so such a name is `required`.
+An unknown tag is `unknown_tag` per entry; more than 10 entries are one `too_many` for the whole list.
+For a "no", dietary data is dropped and never stored. Unknown members are ignored; duplicate members,
+wrong types or a non-object body are 400 `invalid_json`. Lengths count UTF-16 code units, like
+`maxlength` in the browser.
 
 ### The reply (`rsvp`)
 
@@ -133,9 +139,12 @@ body are 400 `invalid_json`. Lengths count UTF-16 code units, like `maxlength` i
   `GET` and `PUT` refresh both; `DELETE` and an unknown cookie clear both with `Max-Age=0`.
 - A `POST` that carries a valid `wp_rsvp` cookie answers 409 `rsvp_exists`; an unknown or malformed
   cookie is ignored and a new reply is created.
-- `GET` returns the reply's `ETag`. `PUT` requires `If-Match` with it (428 `precondition_required`
-  without, 412 `precondition_failed` when the reply changed since); `*` skips the check. `DELETE` checks
-  `If-Match` only when sent.
+- `POST`, `GET` and `PUT` return the reply's entity tag twice: as a strong `ETag` header and as
+  `version` in the body (the same string, quotes included), so the client still has it if a proxy drops
+  or weakens the header. `PUT` requires `If-Match` with it (428 `precondition_required` without, 412
+  `precondition_failed` when the reply changed since); `*` skips the check. `If-Match` may list several
+  tags, and a `W/` prefix is ignored. `DELETE` checks `If-Match` only when sent. Internally the tag is
+  the Table Storage ETag without its `W/` prefix.
 
 ## Errors
 
@@ -167,13 +176,17 @@ In the worker pipeline, before any storage I/O (`apps/api/CLAUDE.md`, "Request p
   `RateLimiting__WritesPerClient`, `__WriteWindowSeconds`, `__ReadsPerClient`, `__ReadWindowSeconds`,
   `__InstanceWritesPerMinute`. The client key is the address in `RateLimiting__ClientIpHeader` (default
   `x-azure-clientip`), else the first `X-Forwarded-For` entry without port, else the connection address;
-  IPv6 counts per /64. Addresses are never logged or stored.
+  IPv6 counts per /64. Addresses are never logged or stored. A write that the instance limit refuses
+  gives its per-client permit back, and a write that the client limit refuses never uses the instance
+  budget.
 - **CSRF:** `SameSite=Strict` credential cookie, JSON-only bodies (a cross-site JSON request needs a
   preflight the API never answers; no CORS headers), and writes with `Sec-Fetch-Site: cross-site` are
   rejected.
 - **Size:** bodies above 16 KB are rejected; at most 300 replies are stored.
 - **Logs** contain no names, messages, dietary data, tokens, cookies or addresses; unexpected exceptions
-  are logged by type only.
+  are logged by type only. Refusals are not logged per request: reaching the reply cap is a warning at
+  most once per hour and worker instance, so spam at the cap cannot fill the daily Application Insights
+  cap.
 
 ## Storage
 

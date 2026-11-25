@@ -82,7 +82,8 @@ Worker middleware, outermost first (`Program.ConfigurePipeline`):
    clients; 429 `rate_limited` with `Retry-After`. The client key comes from `Http/ClientAddress`
    (`RateLimiting__ClientIpHeader`, default `x-azure-clientip`, then the first `X-Forwarded-For` entry,
    then the connection address; IPv6 per /64) and is never logged. All limits are app settings with
-   code defaults (`RateLimitingOptions`).
+   code defaults (`RateLimitingOptions`). The client limit is checked first; a write the instance
+   backstop refuses gives its client permit back (`SlidingWindowLimiter.Release`).
 4. `RequestOriginGuardMiddleware`: writes to gated functions (`Rsvp*`, `Admin*`). `Sec-Fetch-Site:
    cross-site` → 403 `cross_site_request`; a body that is not `application/json` (UTF-8) → 415 (a body is
    required for POST/PUT/PATCH); `Content-Length` above 16 KB (`Rsvp*`) or 256 KB (`Admin*`) → 413. The
@@ -126,6 +127,9 @@ duplicate members rejected) and need no MVC services, so middleware can write th
   headers yourself: `CookieWriterTests.NoOtherApiCodeWritesCookies` fails if any other source file does.
 - **No personal data in logs:** never log names, messages, dietary data, tokens, cookies or IP
   addresses. Default log level is Warning (worker and host).
+- **No per-request logging of refusals** (`docs/cost-and-abuse.md`): a warning that a flood of requests
+  can trigger (cap reached, storage failing under load) goes through a throttle such as
+  `Features/Rsvp/RsvpLogThrottle` (at most once per hour and worker instance).
 - **Analyzers:** `AnalysisLevel` `latest-recommended` with warnings as errors, so CA rules fail the
   build too (for example CA1822: a function method that uses no instance state must be `static`).
 - **Telemetry:** `host.json` sets `telemetryMode: OpenTelemetry`. The worker adds OpenTelemetry with the
