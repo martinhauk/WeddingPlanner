@@ -36,15 +36,27 @@ public sealed class ClientAddressTests
     }
 
     [Fact]
-    public void FallsBackToTheConnectionAddress()
+    public void IgnoresTheConnectionAddress()
     {
-        ClientAddress.ResolveKey(Request([], IPAddress.Parse("192.0.2.44"))).ShouldBe("192.0.2.44");
+        // On the Functions host the connection address is the host or proxy peer, the same for every guest.
+        ClientAddress.ResolveKey(Request([], IPAddress.Parse("192.0.2.44"))).ShouldBeNull();
     }
 
     [Fact]
-    public void UsesOneSharedKeyWithoutAnyAddress()
+    public void ReturnsNoKeyWithoutAnyAddress()
     {
-        ClientAddress.ResolveKey(Request([])).ShouldBe(ClientAddress.UnknownKey);
+        ClientAddress.ResolveKey(Request([])).ShouldBeNull();
+    }
+
+    [Theory]
+    [InlineData("not-an-address", "")]
+    [InlineData("", "unknown, 203.0.113.1")]
+    [InlineData(" ", " , 203.0.113.1")]
+    public void ReturnsNoKeyWhenNoHeaderYieldsAnAddress(string clientIpHeader, string forwardedFor)
+    {
+        var request = Request(new() { ["X-Azure-ClientIP"] = clientIpHeader, ["X-Forwarded-For"] = forwardedFor }, IPAddress.Parse("192.0.2.44"));
+
+        ClientAddress.ResolveKey(request).ShouldBeNull();
     }
 
     [Fact]

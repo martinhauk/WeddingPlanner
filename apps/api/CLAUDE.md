@@ -80,10 +80,16 @@ Worker middleware, outermost first (`Program.ConfigurePipeline`):
 3. `RateLimitingMiddleware`: `Rsvp*` functions only, in memory per worker instance. Per client 10
    writes per 10 minutes and 60 reads per minute, plus 120 writes per minute per instance for all
    clients; 429 `rate_limited` with `Retry-After`. The client key comes from `Http/ClientAddress`
-   (`RateLimiting__ClientIpHeader`, default `x-azure-clientip`, then the first `X-Forwarded-For` entry,
-   then the connection address; IPv6 per /64) and is never logged. All limits are app settings with
-   code defaults (`RateLimitingOptions`). The client limit is checked first; a write the instance
-   backstop refuses gives its client permit back (`SlidingWindowLimiter.Release`).
+   (`RateLimiting__ClientIpHeader`, default `x-azure-clientip`, then the first `X-Forwarded-For` entry;
+   IPv6 per /64) and is never logged. On the Functions host the worker never sees the client's
+   `X-Forwarded-For` (the host replaces it, and the connection address is the host or proxy peer for
+   every guest), so the single-address header is the only real per-client source; the connection
+   address is never used. Without it `ResolveKey` returns `null`: the request skips the per-client
+   limits and only the per-instance write backstop applies. All limits are app settings with code
+   defaults (`RateLimitingOptions`). The client limit is checked first; a write the instance backstop
+   refuses gives its client permit back (`SlidingWindowLimiter.Release`). Before `Features__Rsvp` is
+   turned on in `production`, the probe (`scripts/smoke/api-probe.sh` or `GET /api/health/probe`, see
+   "Platform probe") must confirm on `e2e` that `x-azure-clientip` is present and not spoofable.
 4. `RequestOriginGuardMiddleware`: writes to gated functions (`Rsvp*`, `Admin*`). `Sec-Fetch-Site:
    cross-site` → 403 `cross_site_request`; a body that is not `application/json` (UTF-8) → 415 (a body is
    required for POST/PUT/PATCH); `Content-Length` above 16 KB (`Rsvp*`) or 256 KB (`Admin*`) → 413. The
