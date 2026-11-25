@@ -345,8 +345,15 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
           # docs/conventions/git-and-pull-requests.md: <type>(<optional scope>): <summary>
+          # Dependabot always capitalises "Bump"; accept its titles as long as the prefix is valid.
+          if [[ $PR_AUTHOR == 'dependabot[bot]' && $PR_TITLE =~ ^(build|ci)\(deps\):\ Bump\  ]]; then
+            printf 'PR title (Dependabot): %s\n' "$PR_TITLE"
+            echo "OK: Dependabot title."
+            exit 0
+          fi
           types='feat|fix|docs|test|refactor|perf|build|ci|chore|revert'
           scopes='web|api|domain|content|contracts|e2e|infra|ci|ops|docs|deps'
           pattern="^($types)(\(($scopes)\))?!?: (.+)$"
