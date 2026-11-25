@@ -68,6 +68,55 @@ public sealed class TextSanitizerTests
         TextSanitizer.MultiLine("Anna" + C(codePoint) + "Ben").ShouldBe("AnnaBen");
     }
 
+    [Theory]
+    [InlineData(0xFFFE)]
+    [InlineData(0xFFFF)]
+    [InlineData(0xFDD0)]
+    [InlineData(0xFDEF)]
+    [InlineData(0x1FFFE)]
+    [InlineData(0x1FFFF)]
+    [InlineData(0x10FFFE)]
+    [InlineData(0x10FFFF)]
+    public void StripsNoncharacters(int codePoint)
+    {
+        TextSanitizer.IsNoncharacter(codePoint).ShouldBeTrue();
+        TextSanitizer.SingleLine("Anna" + C(codePoint) + "Ben").ShouldBe("AnnaBen");
+        TextSanitizer.MultiLine("Hallo" + C(codePoint) + "\nBen").ShouldBe("Hallo\nBen");
+        TextSanitizer.SingleLine(C(codePoint)).ShouldBe(string.Empty);
+    }
+
+    [Theory]
+    [InlineData(0xFDCF)]
+    [InlineData(0xFDF0)]
+    [InlineData(0xFFFD)]
+    [InlineData(0x1FFFD)]
+    [InlineData(0x20000)]
+    public void KeepsCharactersNextToTheNoncharacterRanges(int codePoint)
+    {
+        TextSanitizer.IsNoncharacter(codePoint).ShouldBeFalse();
+        TextSanitizer.SingleLine("Anna" + C(codePoint)).ShouldBe("Anna" + C(codePoint));
+    }
+
+    [Fact]
+    public void NeverThrowsForAnyCodeUnitOrCodePoint()
+    {
+        for (var unit = 0; unit <= 0xFFFF; unit++)
+        {
+            var text = "A" + (char)unit + "e" + C(0x0301);
+            Should.NotThrow(() => TextSanitizer.SingleLine(text));
+            Should.NotThrow(() => TextSanitizer.MultiLine(text));
+        }
+
+        for (var plane = 1; plane <= 0x10; plane++)
+        {
+            foreach (var low in new[] { 0x0000, 0xFFFD, 0xFFFE, 0xFFFF })
+            {
+                var text = "A" + C((plane << 16) | low);
+                Should.NotThrow(() => TextSanitizer.SingleLine(text));
+            }
+        }
+    }
+
     [Fact]
     public void RemovesLoneSurrogatesButKeepsPairs()
     {

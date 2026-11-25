@@ -97,8 +97,9 @@ minute; writes check the deadline exactly. No cookies, no personal data.
 | `language`              | required language tag such as `de`, `en`, `es` (stored lower case)                               |
 | `website`               | honeypot: hidden in the form, must be empty                                                      |
 
-Text is NFC-normalised and trimmed; control characters, lone surrogates and bidirectional formatting
-characters are removed; names and notes collapse whitespace to single spaces. For a "no", dietary data
+Text is NFC-normalised and trimmed; control characters, lone surrogates, Unicode noncharacters (such as
+U+FFFE) and bidirectional formatting characters are removed; names and notes collapse whitespace to
+single spaces. For a "no", dietary data
 is dropped and never stored. Unknown members are ignored; duplicate members, wrong types or a non-object
 body are 400 `invalid_json`. Lengths count UTF-16 code units, like `maxlength` in the browser.
 
