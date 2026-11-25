@@ -24,8 +24,10 @@ namespace WeddingPlanner.Api.RateLimiting;
 /// </list>
 /// A write the instance backstop refuses gives its per-client permit back. A refused request answers 429
 /// <c>rate_limited</c> problem+json with <c>Retry-After</c> in seconds. The client
-/// key comes from <see cref="ClientAddress"/> and is never logged. Health, probe and admin functions are not
-/// limited here (the admin area is behind the platform login).
+/// key comes from <see cref="ClientAddress"/> and is never logged. A request without a client key (no usable
+/// client-address header) skips the per-client limits, so guests are never pooled into one shared bucket; its
+/// writes still count against the per-instance backstop. Health, probe and admin functions are not limited
+/// here (the admin area is behind the platform login).
 /// </remarks>
 public sealed class RateLimitingMiddleware : IFunctionsWorkerMiddleware
 {
@@ -69,14 +71,21 @@ public sealed class RateLimitingMiddleware : IFunctionsWorkerMiddleware
 
     private bool TryAcquire(HttpRequest request, out TimeSpan retryAfter)
     {
+        // Null when no client-address header is usable: then only the per-instance write backstop applies.
         var key = ClientAddress.ResolveKey(request, _clientIpHeader);
         if (!RequestOriginGuardMiddleware.IsWrite(request.Method))
         {
+            if (key is null)
+            {
+                retryAfter = TimeSpan.Zero;
+                return true;
+            }
+
             return _readsPerClient.TryAcquire(key, out retryAfter);
         }
 
         // The client's own limit first, so a client refused by it never uses up the shared instance budget.
-        if (!_writesPerClient.TryAcquire(key, out retryAfter))
+        if (key is not null && !_writesPerClient.TryAcquire(key, out retryAfter))
         {
             return false;
         }
@@ -88,7 +97,11 @@ public sealed class RateLimitingMiddleware : IFunctionsWorkerMiddleware
 
         // Refused by the backstop: give the client's permit back, so the refusal neither costs that client quota nor
         // leaves a key behind.
-        _writesPerClient.Release(key);
+        if (key is not null)
+        {
+            _writesPerClient.Release(key);
+        }
+
         return false;
     }
 }

@@ -1,3 +1,5 @@
+using System.Net;
+
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,6 +18,8 @@ namespace WeddingPlanner.Api.Tests.RateLimiting;
 /// <summary>Documentation addresses only (RFC 5737).</summary>
 public sealed class RateLimitingMiddlewareTests
 {
+    private const string ProxyPeerAddress = "192.0.2.10";
+
     private readonly FakeTimeProvider _time = new(new DateTimeOffset(2099, 4, 1, 10, 0, 0, TimeSpan.Zero));
 
     [Fact]
@@ -123,6 +127,48 @@ public sealed class RateLimitingMiddlewareTests
         (await InvokeAsync(middleware, "RsvpCreate", "POST", "203.0.113.2")).FunctionRan.ShouldBeTrue();
     }
 
+    [Fact]
+    public async Task WithoutAClientHeaderOnlyTheInstanceLimitApplies()
+    {
+        var middleware = Middleware(new()
+        {
+            ["RateLimiting:WritesPerClient"] = "1",
+            ["RateLimiting:ReadsPerClient"] = "1",
+            ["RateLimiting:InstanceWritesPerMinute"] = "3",
+        });
+
+        for (var index = 0; index < 3; index++)
+        {
+            (await InvokeAsync(middleware, "RsvpCreate", "POST", clientAddress: null)).FunctionRan.ShouldBeTrue("no per-client write limit");
+        }
+
+        var (httpContext, ran) = await InvokeAsync(middleware, "RsvpUpdateMine", "PUT", clientAddress: null);
+        ran.ShouldBeFalse("the instance limit still applies");
+        httpContext.Response.StatusCode.ShouldBe(StatusCodes.Status429TooManyRequests);
+        httpContext.Response.Headers.RetryAfter.ToString().ShouldBe("60");
+
+        for (var index = 0; index < 5; index++)
+        {
+            (await InvokeAsync(middleware, "RsvpStatus", "GET", clientAddress: null)).FunctionRan.ShouldBeTrue("no per-client read limit");
+        }
+
+        _time.Advance(TimeSpan.FromMinutes(1));
+        (await InvokeAsync(middleware, "RsvpCreate", "POST", "203.0.113.1")).FunctionRan.ShouldBeTrue(
+            "a keyed client's bucket is untouched by requests without a key");
+    }
+
+    [Fact]
+    public async Task RequestsWithoutAClientHeaderDoNotShareAPerClientBucket()
+    {
+        var middleware = Middleware(new() { ["RateLimiting:WritesPerClient"] = "1", ["RateLimiting:ReadsPerClient"] = "1" });
+
+        // Two guests behind the same host or proxy peer: neither may be refused because of the other.
+        (await InvokeAsync(middleware, "RsvpCreate", "POST", clientAddress: null)).FunctionRan.ShouldBeTrue();
+        (await InvokeAsync(middleware, "RsvpCreate", "POST", clientAddress: null)).FunctionRan.ShouldBeTrue();
+        (await InvokeAsync(middleware, "RsvpGetMine", "GET", clientAddress: null)).FunctionRan.ShouldBeTrue();
+        (await InvokeAsync(middleware, "RsvpGetMine", "GET", clientAddress: null)).FunctionRan.ShouldBeTrue();
+    }
+
     [Theory]
     [InlineData("Health", "GET")]
     [InlineData("HealthProbe", "GET")]
@@ -187,11 +233,17 @@ public sealed class RateLimitingMiddlewareTests
         RateLimitingMiddleware middleware,
         string functionName,
         string method,
-        string clientAddress)
+        string? clientAddress)
     {
         var httpContext = TestFunctionContext.CreateHttpContext();
         httpContext.Request.Method = method;
-        httpContext.Request.Headers["X-Azure-ClientIP"] = clientAddress;
+
+        // The connection address is the host or proxy peer, the same for every guest; it must never be the key.
+        httpContext.Connection.RemoteIpAddress = IPAddress.Parse(ProxyPeerAddress);
+        if (clientAddress is not null)
+        {
+            httpContext.Request.Headers["X-Azure-ClientIP"] = clientAddress;
+        }
 
         var functionRan = false;
         await middleware.Invoke(new TestFunctionContext(functionName, httpContext: httpContext), _ =>

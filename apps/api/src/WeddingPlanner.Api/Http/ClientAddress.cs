@@ -11,23 +11,26 @@ namespace WeddingPlanner.Api.Http;
 /// </summary>
 /// <remarks>
 /// Sources, first match wins: the configured single-address header (default <c>X-Azure-ClientIP</c>, one of the
-/// headers the platform probe reports), then the first <c>X-Forwarded-For</c> entry (port removed), then the
-/// connection address. IPv6 addresses are reduced to their /64 prefix, because one client usually controls a
-/// whole /64. Which header the Static Web Apps proxy sets, and whether it overwrites a client-sent value, is
-/// measured with the probe (<c>scripts/smoke/api-probe.sh</c>); the per-instance write limit covers spoofed keys.
+/// headers the platform probe reports), then the first <c>X-Forwarded-For</c> entry (port removed). IPv6
+/// addresses are reduced to their /64 prefix, because one client usually controls a whole /64. The connection
+/// address is deliberately not used: on the Functions host it is the host or proxy peer, the same for every
+/// guest, so it would put all guests into one bucket. The host also replaces a client-sent
+/// <c>X-Forwarded-For</c>, so in practice the single-address header is the only per-client source. Which header
+/// the Static Web Apps proxy sets, and whether it overwrites a client-sent value, is measured with the probe
+/// (<c>scripts/smoke/api-probe.sh</c>); the per-instance write limit covers spoofed and missing keys.
 /// </remarks>
 public static class ClientAddress
 {
     /// <summary>The header read first unless <c>RateLimiting__ClientIpHeader</c> names another one.</summary>
     public const string DefaultHeaderName = "x-azure-clientip";
 
-    /// <summary>Key used when no address can be determined (all such requests share one bucket).</summary>
-    public const string UnknownKey = "unknown";
-
-    /// <summary>Returns the rate-limit key of <paramref name="request"/>.</summary>
+    /// <summary>
+    /// Returns the rate-limit key of <paramref name="request"/>, or <see langword="null"/> when no header yields a
+    /// client address (the request then has no per-client key).
+    /// </summary>
     /// <param name="request">The request.</param>
     /// <param name="headerName">Single-address header to read first; empty to skip it.</param>
-    public static string ResolveKey(HttpRequest request, string? headerName = DefaultHeaderName)
+    public static string? ResolveKey(HttpRequest request, string? headerName = DefaultHeaderName)
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -38,12 +41,7 @@ public static class ClientAddress
 
         var forwardedFor = request.Headers["x-forwarded-for"].ToString();
         var firstEntry = forwardedFor.Split(',', 2)[0];
-        if (TryParse(firstEntry, out var fromForwardedFor))
-        {
-            return ToKey(fromForwardedFor);
-        }
-
-        return request.HttpContext.Connection.RemoteIpAddress is { } remote ? ToKey(remote) : UnknownKey;
+        return TryParse(firstEntry, out var fromForwardedFor) ? ToKey(fromForwardedFor) : null;
     }
 
     /// <summary>Parses an address with or without port (<c>203.0.113.7:51234</c>, <c>[2001:db8::1]:443</c>).</summary>
