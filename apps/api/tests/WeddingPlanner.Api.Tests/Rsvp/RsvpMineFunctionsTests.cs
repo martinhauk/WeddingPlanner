@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 
 using Microsoft.AspNetCore.Http;
@@ -27,6 +28,8 @@ public sealed class RsvpMineFunctionsTests
         httpContext.Response.Headers.CacheControl.ToString().ShouldBe("no-store");
         httpContext.Response.Headers.ETag.ToString().ShouldBe(created.Response.Headers.ETag.ToString());
         var body = TestHttp.ReadJson(httpContext);
+        body.EnumerateObject().Select(property => property.Name).ShouldBe(["rsvp", "version", "open", "deadline"]);
+        body.GetProperty("version").GetString().ShouldBe(httpContext.Response.Headers.ETag.ToString());
         body.GetProperty("open").GetBoolean().ShouldBeTrue();
         body.GetProperty("deadline").GetString().ShouldBe("2099-05-01T21:59:00Z");
         body.GetProperty("rsvp").GetProperty("id").GetString().ShouldBe(TestHttp.ReadJson(created).GetProperty("rsvp").GetProperty("id").GetString());
@@ -206,6 +209,53 @@ public sealed class RsvpMineFunctionsTests
         harness.Memory.BeforeWrite = harness.Memory.Touch;
 
         var httpContext = await harness.PutMineAsync(TestHttp.CookieHeader(created), RsvpHarness.SampleBody(language: "en"), created.Response.Headers.ETag.ToString());
+
+        httpContext.Response.StatusCode.ShouldBe(StatusCodes.Status412PreconditionFailed);
+    }
+
+    [Fact]
+    public async Task PublishesAStrongETagForTheWeakStorageETag()
+    {
+        using var harness = new RsvpHarness();
+        var created = await harness.PostAsync();
+        var stored = harness.Memory.Items.ShouldHaveSingleItem().ETag;
+
+        var etag = (await harness.GetMineAsync(TestHttp.CookieHeader(created))).Response.Headers.ETag.ToString();
+
+        stored.ShouldStartWith("W/");
+        etag.ShouldBe(stored[2..]);
+    }
+
+    [Theory]
+    [InlineData("{0}")]
+    [InlineData("W/{0}")]
+    [InlineData("\"other\", {0}")]
+    [InlineData(" \"other\" ,W/{0} ")]
+    public async Task PutAcceptsTheVersionInAnIfMatchListAndIgnoresAWeakPrefix(string ifMatchFormat)
+    {
+        using var harness = new RsvpHarness();
+        var created = await harness.PostAsync();
+        var version = TestHttp.ReadJson(created).GetProperty("version").GetString().ShouldNotBeNull();
+
+        var httpContext = await harness.PutMineAsync(
+            TestHttp.CookieHeader(created), RsvpHarness.SampleBody(language: "en"), string.Format(CultureInfo.InvariantCulture, ifMatchFormat, version));
+
+        httpContext.Response.StatusCode.ShouldBe(StatusCodes.Status200OK);
+        var body = TestHttp.ReadJson(httpContext);
+        body.GetProperty("version").GetString().ShouldBe(httpContext.Response.Headers.ETag.ToString());
+        body.GetProperty("version").GetString().ShouldNotBe(version);
+    }
+
+    [Theory]
+    [InlineData("\"other\"")]
+    [InlineData("\"other\", W/\"another\"")]
+    [InlineData("v1")]
+    public async Task PutRejectsAnIfMatchWithoutTheCurrentVersion(string ifMatch)
+    {
+        using var harness = new RsvpHarness();
+        var created = await harness.PostAsync();
+
+        var httpContext = await harness.PutMineAsync(TestHttp.CookieHeader(created), RsvpHarness.SampleBody(language: "en"), ifMatch);
 
         httpContext.Response.StatusCode.ShouldBe(StatusCodes.Status412PreconditionFailed);
     }

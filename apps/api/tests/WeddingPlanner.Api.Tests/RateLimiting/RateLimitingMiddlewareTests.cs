@@ -88,6 +88,41 @@ public sealed class RateLimitingMiddlewareTests
         (await InvokeAsync(middleware, "RsvpStatus", "GET", "203.0.113.4")).FunctionRan.ShouldBeTrue("reads are not part of the backstop");
     }
 
+    [Fact]
+    public async Task AWriteRefusedByTheBackstopCostsTheClientNothing()
+    {
+        var middleware = Middleware(new() { ["RateLimiting:WritesPerClient"] = "2", ["RateLimiting:InstanceWritesPerMinute"] = "1" });
+        (await InvokeAsync(middleware, "RsvpCreate", "POST", "203.0.113.1")).FunctionRan.ShouldBeTrue();
+
+        for (var index = 0; index < 5; index++)
+        {
+            var (httpContext, ran) = await InvokeAsync(middleware, "RsvpCreate", "POST", "203.0.113.2");
+            ran.ShouldBeFalse();
+            httpContext.Response.StatusCode.ShouldBe(StatusCodes.Status429TooManyRequests);
+        }
+
+        _time.Advance(TimeSpan.FromMinutes(1));
+        (await InvokeAsync(middleware, "RsvpCreate", "POST", "203.0.113.2")).FunctionRan.ShouldBeTrue();
+        _time.Advance(TimeSpan.FromMinutes(1));
+        (await InvokeAsync(middleware, "RsvpCreate", "POST", "203.0.113.2")).FunctionRan.ShouldBeTrue("the refused writes did not use up the client's two permits");
+        _time.Advance(TimeSpan.FromMinutes(1));
+        (await InvokeAsync(middleware, "RsvpCreate", "POST", "203.0.113.2")).FunctionRan.ShouldBeFalse("now the client limit applies");
+    }
+
+    [Fact]
+    public async Task AWriteRefusedByTheClientLimitDoesNotUseTheInstanceBudget()
+    {
+        var middleware = Middleware(new() { ["RateLimiting:WritesPerClient"] = "1", ["RateLimiting:InstanceWritesPerMinute"] = "2" });
+        (await InvokeAsync(middleware, "RsvpCreate", "POST", "203.0.113.1")).FunctionRan.ShouldBeTrue();
+
+        for (var index = 0; index < 5; index++)
+        {
+            (await InvokeAsync(middleware, "RsvpCreate", "POST", "203.0.113.1")).FunctionRan.ShouldBeFalse();
+        }
+
+        (await InvokeAsync(middleware, "RsvpCreate", "POST", "203.0.113.2")).FunctionRan.ShouldBeTrue();
+    }
+
     [Theory]
     [InlineData("Health", "GET")]
     [InlineData("HealthProbe", "GET")]

@@ -52,6 +52,32 @@ public static class RsvpHttp
         ProblemCodes.ValidationFailed,
         extensions: new Dictionary<string, object?> { ["errors"] = errors });
 
+    /// <summary>
+    /// The entity tag the API publishes for a stored reply (header <c>ETag</c> and body <c>version</c>): the storage
+    /// ETag as a strong tag. Table Storage returns a weak tag (<c>W/"datetime'...'"</c>) that changes on every write,
+    /// but RFC 9110 compares <c>If-Match</c> strongly, so an intermediary that evaluates it would never match a weak
+    /// tag.
+    /// </summary>
+    public static string PublicETag(string storageETag)
+    {
+        ArgumentNullException.ThrowIfNull(storageETag);
+        return storageETag.StartsWith("W/", StringComparison.Ordinal) ? storageETag[2..] : storageETag;
+    }
+
+    /// <summary>
+    /// Whether an <c>If-Match</c> value matches the stored reply: <c>*</c>, or any entry of the comma-separated list
+    /// that equals <see cref="PublicETag"/>. A <c>W/</c> prefix on an entry is ignored, because proxies that compress
+    /// responses may weaken the tag the client received.
+    /// </summary>
+    public static bool IfMatchMatches(string ifMatch, string storageETag)
+    {
+        ArgumentNullException.ThrowIfNull(ifMatch);
+        var current = PublicETag(storageETag);
+        return ifMatch.Trim() == "*" || ifMatch
+            .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Any(entry => string.Equals(PublicETag(entry), current, StringComparison.Ordinal));
+    }
+
     /// <summary>The <c>If-Match</c> value, or <see langword="null"/> when absent or implausibly long.</summary>
     public static string? ReadIfMatch(HttpRequest request)
     {

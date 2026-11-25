@@ -97,6 +97,59 @@ public sealed class TextSanitizerTests
         TextSanitizer.SingleLine("Anna" + C(codePoint)).ShouldBe("Anna" + C(codePoint));
     }
 
+    [Theory]
+    [InlineData(0x00AD)]
+    [InlineData(0x180E)]
+    [InlineData(0x200B)]
+    [InlineData(0x2060)]
+    [InlineData(0x2061)]
+    [InlineData(0x2064)]
+    [InlineData(0x206A)]
+    [InlineData(0x3164)]
+    [InlineData(0xFFA0)]
+    [InlineData(0xFFF9)]
+    [InlineData(0x1D173)]
+    [InlineData(0xE0001)]
+    [InlineData(0xE0041)]
+    [InlineData(0xE007F)]
+    public void StripsInvisibleFormatCharactersAndHangulFillers(int codePoint)
+    {
+        TextSanitizer.IsRemovedInvisible(codePoint).ShouldBeTrue();
+        TextSanitizer.SingleLine("Anna" + C(codePoint) + "Ben").ShouldBe("AnnaBen");
+        TextSanitizer.MultiLine("Anna" + C(codePoint) + "\nBen").ShouldBe("Anna\nBen");
+        TextSanitizer.SingleLine(C(codePoint)).ShouldBe(string.Empty);
+    }
+
+    [Theory]
+    [InlineData(0x200C)]
+    [InlineData(0x200D)]
+    [InlineData(0xFE0F)]
+    [InlineData(0x0301)]
+    [InlineData(0x00A0)]
+    [InlineData(0x0041)]
+    public void KeepsJoinersMarksAndLetters(int codePoint)
+    {
+        TextSanitizer.IsRemovedInvisible(codePoint).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void TextWithNothingVisibleBecomesEmpty()
+    {
+        TextSanitizer.SingleLine(C(0x200D)).ShouldBe(string.Empty);
+        TextSanitizer.SingleLine(C(0x200C) + " " + C(0xFE0F) + C(0x115F)).ShouldBe(string.Empty);
+        TextSanitizer.MultiLine(C(0x200D) + "\n" + C(0x034F) + "\n" + C(0xE0100)).ShouldBe(string.Empty);
+        TextSanitizer.SingleLine(C(0x200C) + "a").ShouldBe(C(0x200C) + "a");
+    }
+
+    [Fact]
+    public void ASubdivisionFlagLosesItsHiddenTagCharacters()
+    {
+        var blackFlag = C(0x1F3F4);
+        var tags = C(0xE0067) + C(0xE0062) + C(0xE0073) + C(0xE0063) + C(0xE0074) + C(0xE007F);
+
+        TextSanitizer.SingleLine("Hola " + blackFlag + tags).ShouldBe("Hola " + blackFlag);
+    }
+
     [Fact]
     public void NeverThrowsForAnyCodeUnitOrCodePoint()
     {

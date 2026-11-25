@@ -43,6 +43,34 @@ public sealed class SlidingWindowLimiterTests
     }
 
     [Fact]
+    public void ReleaseGivesBackTheNewestPermit()
+    {
+        var limiter = new SlidingWindowLimiter(2, TimeSpan.FromMinutes(10), _time);
+        limiter.TryAcquire("a", out _).ShouldBeTrue();
+        _time.Advance(TimeSpan.FromMinutes(5));
+        limiter.TryAcquire("a", out _).ShouldBeTrue();
+
+        limiter.Release("a");
+
+        limiter.TryAcquire("a", out _).ShouldBeTrue();
+        limiter.TryAcquire("a", out var retryAfter).ShouldBeFalse();
+        retryAfter.ShouldBe(TimeSpan.FromMinutes(5), "the oldest permit was kept");
+    }
+
+    [Fact]
+    public void ReleaseForgetsAKeyWithoutPermits()
+    {
+        var limiter = new SlidingWindowLimiter(2, TimeSpan.FromMinutes(10), _time);
+        limiter.TryAcquire("a", out _).ShouldBeTrue();
+        limiter.TryAcquire("b", out _).ShouldBeTrue();
+
+        limiter.Release("b");
+        limiter.Release("unknown");
+
+        limiter.KeyCount.ShouldBe(1);
+    }
+
+    [Fact]
     public void KeysAreIndependent()
     {
         var limiter = new SlidingWindowLimiter(1, TimeSpan.FromMinutes(1), _time);

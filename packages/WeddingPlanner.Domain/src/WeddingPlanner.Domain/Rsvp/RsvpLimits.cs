@@ -19,6 +19,12 @@ public sealed class RsvpLimits
     /// <summary>Longest message to the couple.</summary>
     public const int MaxMessageLength = 1000;
 
+    /// <summary>
+    /// Most dietary tag entries for one person. There are only four tags; the cap keeps a body full of bogus entries
+    /// from producing one validation error per entry.
+    /// </summary>
+    public const int MaxDietaryTagEntries = 10;
+
     /// <summary>Longest language tag (BCP 47 primary language plus one subtag).</summary>
     public const int MaxLanguageLength = 12;
 

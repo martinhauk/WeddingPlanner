@@ -85,13 +85,19 @@ public sealed record RsvpDietaryView(IReadOnlyList<string> Tags, string? Note)
 }
 
 /// <summary>Body of 201 from <c>POST /api/rsvp</c>.</summary>
-public sealed record RsvpCreatedResponse(RsvpView Rsvp);
+/// <param name="Rsvp">The created reply.</param>
+/// <param name="Version">The reply's entity tag (the <c>ETag</c> header value, quotes included) for <c>If-Match</c>.</param>
+public sealed record RsvpCreatedResponse(RsvpView Rsvp, string Version);
 
 /// <summary>Body of <c>GET</c> and <c>PUT /api/rsvp/me</c>.</summary>
 /// <param name="Rsvp">The caller's reply.</param>
+/// <param name="Version">
+/// The reply's entity tag (the <c>ETag</c> header value, quotes included), so the client can send <c>If-Match</c>
+/// even when a proxy drops or changes the header.
+/// </param>
 /// <param name="Open">Whether it can still be changed or deleted (deadline not passed).</param>
 /// <param name="Deadline">The deadline (UTC), omitted when not configured.</param>
-public sealed record RsvpMineResponse(RsvpView Rsvp, bool Open, DateTime? Deadline);
+public sealed record RsvpMineResponse(RsvpView Rsvp, string Version, bool Open, DateTime? Deadline);
 
 /// <summary>Body of <c>GET /api/rsvp/status</c>.</summary>
 /// <param name="Enabled">Whether the RSVP API is configured (storage and deadline).</param>
