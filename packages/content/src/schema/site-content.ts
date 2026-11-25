@@ -128,7 +128,10 @@ const sectionBase = {
   title: localizedTextSchema.optional(),
   /** Label in the navigation; defaults to the heading. */
   nav: localizedTextSchema.optional(),
-  /** `false` hides the section and its navigation entry. Default `true`. */
+  /**
+   * `false` hides the section and its navigation entry, and keeps it out of the published page
+   * (a draft). Default `true`.
+   */
   visible: z.boolean().optional(),
 };
 

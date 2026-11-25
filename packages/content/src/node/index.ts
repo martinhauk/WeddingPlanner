@@ -25,6 +25,8 @@ export { instanceDirFromEnv, SITE_MEDIA_URL_PREFIX } from './paths.ts';
 export {
   checkSiteContent,
   loadSiteContent,
+  publishedMedia,
+  publishedSiteContent,
   SITE_CONTENT_FILE,
   type SiteContentCheck,
   type SiteContentLoad,

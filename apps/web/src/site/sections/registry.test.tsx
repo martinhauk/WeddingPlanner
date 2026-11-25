@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import type { Section } from '@weddingplanner/content';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { build, buildWithoutRsvp, content, sections } from '../test/fixture.ts';
 import { renderSection, SECTION_COMPONENTS } from './registry.tsx';
 import { isShown, navItems, sectionTitle } from './titles.ts';
@@ -27,6 +27,48 @@ describe('section registry', () => {
   it('renders nothing for a hidden section', () => {
     const { container } = render(renderSection(sections.dresscode, ctx));
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it('gives every heading an id that no section id can take', () => {
+    const lookalike: Section = {
+      id: 'story-title',
+      type: 'text',
+      title: { de: 'Zitat' },
+      data: { text: { de: 'Ein Zitat.' } },
+    };
+    const { container } = render(
+      <>
+        {renderSection(sections.story, ctx)}
+        {renderSection(lookalike, ctx)}
+      </>,
+    );
+    const ids = [...container.querySelectorAll('[id]')].map((element) => element.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(screen.getByRole('region', { name: 'Unsere Geschichte' })).toHaveAttribute(
+      'id',
+      'story',
+    );
+    expect(screen.getByRole('region', { name: 'Zitat' })).toHaveAttribute('id', 'story-title');
+  });
+
+  it('renders repeated names and questions without duplicate React keys', () => {
+    const twice = <T,>(list: readonly T[]): T[] => [...list, ...list];
+    const { schedule, locations, weddingParty, faq, contact } = sections;
+    const repeated: Section[] = [
+      { ...schedule, data: { items: twice(schedule.data.items) } },
+      { ...locations, data: { ...locations.data, hotels: twice(locations.data.hotels) } },
+      { ...weddingParty, data: { people: twice(weddingParty.data.people) } },
+      { ...faq, data: { items: twice(faq.data.items) } },
+      { ...contact, data: { people: twice(contact.data.people) } },
+    ];
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      render(<div>{repeated.map((section) => renderSection(section, ctx))}</div>);
+      expect(consoleError).not.toHaveBeenCalled();
+      expect(screen.getAllByText('Pablo Pérez')).toHaveLength(2);
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 
   it('renders the RSVP section only with the rsvp flag', () => {

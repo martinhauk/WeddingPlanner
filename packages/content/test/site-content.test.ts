@@ -3,7 +3,13 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { type Diagnostic, formatDiagnostic } from '../src/node/diagnostics.ts';
 import { DEFAULT_INSTANCE_DIR } from '../src/node/paths.ts';
-import { checkSiteContent, loadSiteContent, mediaReferences } from '../src/node/site-content.ts';
+import {
+  checkSiteContent,
+  loadSiteContent,
+  mediaReferences,
+  publishedMedia,
+  publishedSiteContent,
+} from '../src/node/site-content.ts';
 import { validate } from '../src/node/validate.ts';
 import { SECTION_TYPES, siteContentSchema } from '../src/schema/site-content.ts';
 import { type Edit, sampleWith, set, unset } from './helpers/fixtures.ts';
@@ -212,5 +218,39 @@ describe('checkSiteContent', () => {
       'warning W_I18N_FALLBACK $.place.en',
       'warning W_I18N_FALLBACK $.place.es',
     ]);
+  });
+});
+
+describe('publishedSiteContent and publishedMedia', () => {
+  it('publish the sample as it is, without $schema', async () => {
+    const result = await loadSiteContent(DEFAULT_INSTANCE_DIR);
+    if (result.content === undefined) throw new Error('the sample is invalid');
+    const published = publishedSiteContent(result.content);
+    expect(published).not.toHaveProperty('$schema');
+    expect(published.sections).toEqual(result.content.sections);
+    expect(publishedMedia(published, result.media).map((m) => m.id)).toEqual([
+      'hero.png',
+      'portrait.png',
+    ]);
+  });
+
+  it('leave out hidden sections and the media only they or nothing use', async () => {
+    const party = await sectionIndex('weddingParty');
+    const story = await sectionIndex('story');
+    const result = await loadSiteContent(
+      await sampleWith(
+        content(['sections', party, 'visible'], false),
+        content(['hero', 'image'], 'portrait.png'),
+        content(['sections', story, 'visible'], false),
+      ),
+    );
+    if (result.content === undefined) throw new Error('the edited sample is invalid');
+    const published = publishedSiteContent(result.content);
+    const ids = published.sections.map((s) => s.id);
+    expect(ids).not.toContain(result.content.sections[party]?.id);
+    expect(ids).not.toContain(result.content.sections[story]?.id);
+    expect(ids).toHaveLength(result.content.sections.length - 2);
+    // hero.png is now unused, portrait.png only used by the hero (the party is hidden).
+    expect(publishedMedia(published, result.media).map((m) => m.id)).toEqual(['portrait.png']);
   });
 });

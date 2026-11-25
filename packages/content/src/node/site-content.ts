@@ -86,6 +86,25 @@ export async function loadSiteContent(instanceDir: string): Promise<SiteContentL
   return { ok: !hasErrors(diagnostics), diagnostics, content, media: scanned.media };
 }
 
+/**
+ * The content the page publishes in its public bundle: without `$schema` and without hidden
+ * sections (`visible: false`), so drafts never reach guests. A schedule item that points to a card
+ * of a hidden locations section is then shown without the place.
+ */
+export function publishedSiteContent(content: SiteContent): SiteContent {
+  const { $schema: _, ...published } = content;
+  return { ...published, sections: content.sections.filter((s) => s.visible !== false) };
+}
+
+/**
+ * The media `content` references, in the order of `media`. Pass the published content, so images
+ * that only drafts or nothing at all use are not published.
+ */
+export function publishedMedia(content: SiteContent, media: readonly MediaSource[]): MediaSource[] {
+  const referenced = new Set(mediaReferences(content).map((ref) => ref.id));
+  return media.filter((item) => referenced.has(item.id));
+}
+
 function checkIds(content: SiteContent): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
   const reserved: readonly string[] = RESERVED_SECTION_IDS;

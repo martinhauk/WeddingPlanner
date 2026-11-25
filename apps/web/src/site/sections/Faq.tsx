@@ -8,8 +8,9 @@ export function Faq({ section, ctx }: SectionProps<'faq'>) {
   return (
     <SectionFrame section={section} lang={lang}>
       <div className="faq">
-        {section.data.items.map((item) => (
-          <details key={item.q.de}>
+        {section.data.items.map((item, index) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: static content in a fixed order; questions may repeat
+          <details key={index}>
             <summary>{t(item.q, lang)}</summary>
             <Paragraphs text={t(item.a, lang)} />
           </details>

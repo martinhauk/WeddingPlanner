@@ -12,7 +12,8 @@ export type SectionFrameProps = {
 /** The `<section>` around every section type: anchor id, heading and shared spacing. */
 export function SectionFrame({ section, lang, children }: SectionFrameProps) {
   const title = sectionTitle(section, lang);
-  const headingId = `${section.id}-title`;
+  // Section ids are [a-z0-9-], so the underscore keeps this id from colliding with a section id.
+  const headingId = `${section.id}_title`;
   return (
     <section
       id={section.id}
