@@ -19,8 +19,9 @@ export function Locations({ section, ctx }: SectionProps<'locations'>) {
         <>
           <h3 className="subheading">{t(ui.hotels, lang)}</h3>
           <ul className="hotels">
-            {hotels.map((hotel) => (
-              <li key={hotel.name}>
+            {hotels.map((hotel, index) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: static content in a fixed order; names may repeat
+              <li key={index}>
                 <strong>{hotel.name}</strong>
                 <span className="muted-inline">{hotel.address}</span>
                 {hotel.note !== undefined && <span>{t(hotel.note, lang)}</span>}

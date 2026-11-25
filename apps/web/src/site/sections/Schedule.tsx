@@ -13,10 +13,11 @@ export function Schedule({ section, ctx }: SectionProps<'schedule'>) {
   return (
     <SectionFrame section={section} lang={lang}>
       <ol className="timeline">
-        {section.data.items.map((item) => {
+        {section.data.items.map((item, index) => {
           const where = locationName(item.locationId);
           return (
-            <li key={`${item.time}-${item.title.de}`}>
+            // biome-ignore lint/suspicious/noArrayIndexKey: static content in a fixed order; items may repeat
+            <li key={index}>
               <span className="time">{item.time}</span>
               <span className="what">{t(item.title, lang)}</span>
               {where !== undefined && <span className="where">{where}</span>}

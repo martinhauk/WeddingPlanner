@@ -13,8 +13,9 @@ export function Contact({ section, ctx }: SectionProps<'contact'>) {
         <Paragraphs className="lead" text={t(section.data.intro, lang)} />
       )}
       <div className="cards">
-        {section.data.people.map((person) => (
-          <article className="card" key={person.name}>
+        {section.data.people.map((person, index) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: static content in a fixed order; names may repeat
+          <article className="card" key={index}>
             <h3>{person.name}</h3>
             <p className="contact-links">
               {person.phone !== undefined && (

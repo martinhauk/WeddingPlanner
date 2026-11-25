@@ -9,6 +9,8 @@ import {
   instanceDirFromEnv,
   loadSiteContent,
   MEDIA_TYPES,
+  publishedMedia,
+  publishedSiteContent,
   SITE_CONTENT_FILE,
   SITE_MEDIA_URL_PREFIX,
   type SiteContentLoad,
@@ -48,7 +50,7 @@ function swaConfig(): Plugin {
   };
 }
 
-/** `export const content`: the validated `site-content.json` of the instance. */
+/** `export const content`: the validated `site-content.json` of the instance, without drafts. */
 const CONTENT_MODULE = 'virtual:site-content';
 /** The theme's self-hosted fonts and CSS custom properties. */
 const THEME_MODULE = 'virtual:site-theme.css';
@@ -59,7 +61,8 @@ type LoadedContent = SiteContentLoad & { content: NonNullable<SiteContentLoad['c
  * Reads `$INSTANCE_DIR/site-content.json` (default `samples/instance`, relative to the repository
  * root like the bake) and validates it with the `@weddingplanner/content` schema: invalid content
  * fails `vite build` and shows the error overlay in `vite`. Serves `$INSTANCE_DIR/media/**` under
- * `/media/` (dev middleware) and emits the files to `dist/media/` (build).
+ * `/media/` (dev middleware) and emits the images the published content uses to `dist/media/`
+ * (build). Hidden sections (`visible: false`) and images only they use never reach the bundle.
  *
  * Diagnostics name a code and a JSON path, never content: build logs are public.
  */
@@ -106,7 +109,7 @@ function siteContent(): Plugin {
     },
     async load(id) {
       if (id === `\0${CONTENT_MODULE}`) {
-        const { $schema: _, ...content } = (await load()).content;
+        const content = publishedSiteContent((await load()).content);
         return `export const content = ${JSON.stringify(content)};\n`;
       }
       if (id === `\0${THEME_MODULE}`) {
@@ -144,7 +147,8 @@ function siteContent(): Plugin {
       server.middlewares.use(SITE_MEDIA_URL_PREFIX, serveMedia(mediaDir));
     },
     async generateBundle() {
-      for (const media of (await load()).media) {
+      const { content, media: all } = await load();
+      for (const media of publishedMedia(publishedSiteContent(content), all)) {
         this.emitFile({
           type: 'asset',
           fileName: `${SITE_MEDIA_URL_PREFIX.slice(1)}${media.id}`,

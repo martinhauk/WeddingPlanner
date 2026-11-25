@@ -66,10 +66,12 @@ fails while the committed files are out of date. Never edit them by hand.
   fonts {heading, body}}`, `hero {image?}` and `sections[]`. A section is
   `{id, type, title?, nav?, visible?, data}` with `type` one of `story`, `schedule`, `locations`,
   `weddingParty`, `dresscode`, `music`, `text`, `faq`, `gifts` (text only, no bank details),
-  `contact` and `rsvp`; the page renders them in this order. Every user-visible text is
+  `contact` and `rsvp`; the page renders them in this order. A section with `visible: false` is a
+  draft: it never reaches the public bundle (`publishedSiteContent`). Every user-visible text is
   `{de, en?, es?}`. Colors are hex values and fonts come from the self-hosted catalogue
   `SITE_FONTS` (each an `@fontsource` dependency of `apps/web`), so content cannot inject CSS.
-  Media are paths inside `media/` (`hero.png`), published under `/media/`. `validate` also checks
+  Media are paths inside `media/` (`hero.png`); the images the published content uses are
+  published under `/media/` (`publishedMedia`). `validate` also checks
   unique section ids, schedule → location references and that referenced media exist.
 - All three are strict (unknown keys are errors) and accept an optional `$schema`.
 

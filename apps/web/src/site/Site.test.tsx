@@ -37,6 +37,33 @@ describe('Site', () => {
     ]);
   });
 
+  it.each(['#%', '#%E0%A4%A'])('renders with a malformed URL fragment (%s)', (hash) => {
+    window.location.hash = hash;
+    try {
+      expect(window.location.hash).toBe(hash);
+      render(<Site content={content} build={build} initialLanguage="de" />);
+      expect(screen.getByRole('heading', { level: 1, name: 'Anna & Ben' })).toBeInTheDocument();
+    } finally {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  });
+
+  it('scrolls to the section of a deep link', () => {
+    const scrolled: string[] = [];
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function scrollIntoView(this: Element) {
+      scrolled.push(this.id);
+    };
+    window.location.hash = '#faq';
+    try {
+      render(<Site content={content} build={build} initialLanguage="de" />);
+      expect(scrolled).toEqual(['faq']);
+    } finally {
+      Element.prototype.scrollIntoView = original;
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  });
+
   it('follows the order of the content, not of the section types', () => {
     render(
       <Site
@@ -86,17 +113,20 @@ describe('Site', () => {
   it('switches the language, falls back to German and remembers the choice', async () => {
     const user = userEvent.setup();
     render(<Site content={content} build={build} initialLanguage="de" />);
-    await user.click(screen.getByRole('button', { name: 'English' }));
+    await user.click(screen.getByRole('button', { name: 'EN English' }));
 
     expect(document.documentElement.lang).toBe('en');
-    expect(screen.getByRole('button', { name: 'English' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'EN English' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
     expect(screen.getByText("We're getting married")).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 2, name: 'Our story' })).toBeInTheDocument();
     // No English text in the fixture: the German one is shown.
     expect(screen.getByText('Eure Anwesenheit ist Geschenk genug.')).toBeInTheDocument();
     expect(localStorage.getItem('wp.lang')).toBe('en');
 
-    await user.click(screen.getByRole('button', { name: 'Español' }));
+    await user.click(screen.getByRole('button', { name: 'ES Español' }));
     expect(screen.getByRole('heading', { level: 1, name: 'Anna y Ben' })).toBeInTheDocument();
   });
 

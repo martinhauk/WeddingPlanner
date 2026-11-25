@@ -27,8 +27,9 @@ export function WeddingParty({ section, ctx }: SectionProps<'weddingParty'>) {
         <Paragraphs className="lead" text={t(section.data.intro, lang)} />
       )}
       <ul className="party">
-        {section.data.people.map((person) => (
-          <li key={person.name}>
+        {section.data.people.map((person, index) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: static content in a fixed order; names may repeat
+          <li key={index}>
             <button
               type="button"
               className="party-person"

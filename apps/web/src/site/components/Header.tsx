@@ -85,10 +85,10 @@ export function Header({ brand, nav, rsvpId, lang, onLangChange }: HeaderProps) 
             key={code}
             lang={code}
             aria-pressed={code === lang}
-            aria-label={LANGUAGE_NAMES[code]}
             onClick={() => onLangChange(code)}
           >
-            {code.toUpperCase()}
+            {/* The name starts with the visible code (WCAG 2.5.3 label in name): "DE Deutsch". */}
+            {code.toUpperCase()} <span className="sr-only">{LANGUAGE_NAMES[code]}</span>
           </button>
         ))}
       </div>
