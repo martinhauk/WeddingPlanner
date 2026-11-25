@@ -47,6 +47,37 @@ function cspDirectives(config: SwaConfig): Map<string, string> {
   );
 }
 
+/** Stands in for the deployed origin; `'self'` matches only URLs on it. */
+const SITE_ORIGIN = 'https://site.example.com';
+
+/**
+ * A small CSP source matcher, enough for the sources this config uses: `'self'`, a bare scheme
+ * (`data:`) and an https origin. A directive that is not set falls back to `default-src`.
+ */
+function cspAllows(config: SwaConfig, directive: string, url: string): boolean {
+  const directives = cspDirectives(config);
+  const sources = (directives.get(directive) ?? directives.get('default-src') ?? '')
+    .split(' ')
+    .filter((source) => source !== '');
+  const target = new URL(url, SITE_ORIGIN);
+  return sources.some((source) => {
+    if (source === "'self'") {
+      return target.origin === SITE_ORIGIN;
+    }
+    if (/^[a-z][a-z0-9+.-]*:$/.test(source)) {
+      return target.protocol === source;
+    }
+    if (/^https:\/\/[^/*]+$/.test(source)) {
+      return target.origin === new URL(source).origin;
+    }
+    return false;
+  });
+}
+
+/** The URL shape of the click-to-load map in the one-pager (neutral coordinates). */
+const OSM_EMBED_URL =
+  'https://www.openstreetmap.org/export/embed.html?bbox=-0.008,-0.004,0.008,0.004&layer=mapnik&marker=0,0';
+
 describe('buildSwaConfig: platform and auth', () => {
   it('runs the API on .NET 10 isolated', () => {
     expect(normal.platform.apiRuntime).toBe('dotnet-isolated:10.0');
@@ -148,30 +179,103 @@ describe('buildSwaConfig: headers', () => {
 
   it('has a strict Content-Security-Policy', () => {
     const csp = cspDirectives(normal);
+    expect([...csp.keys()]).toEqual([
+      'default-src',
+      'img-src',
+      'frame-src',
+      'style-src',
+      'frame-ancestors',
+      'object-src',
+      'base-uri',
+      'form-action',
+    ]);
     expect(csp.get('default-src')).toBe("'self'");
     expect(csp.get('img-src')).toBe("'self' data: https://tile.openstreetmap.org");
+    expect(csp.get('frame-src')).toBe('https://www.openstreetmap.org');
     expect(csp.get('style-src')).toBe("'self' 'unsafe-inline'");
     expect(csp.get('frame-ancestors')).toBe("'none'");
     expect(csp.get('object-src')).toBe("'none'");
     expect(csp.get('base-uri')).toBe("'self'");
     expect(csp.get('form-action')).toBe("'self'");
-    // Scripts, fonts and fetch (the /api/health ping) fall back to default-src 'self'.
-    for (const looser of ['script-src', 'connect-src', 'font-src', 'frame-src']) {
+    // Scripts, fonts, workers and fetch (the /api/health ping) fall back to default-src 'self'.
+    for (const looser of ['script-src', 'connect-src', 'font-src', 'child-src', 'worker-src']) {
       expect(csp.has(looser)).toBe(false);
     }
     expect(normal.globalHeaders['Content-Security-Policy']).not.toMatch(/unsafe-eval|\*/);
+    // The lockdown changes routes only, never the policy.
+    expect(lockdown.globalHeaders['Content-Security-Policy']).toBe(
+      normal.globalHeaders['Content-Security-Policy'],
+    );
   });
 
-  it('caches hashed files forever, calendar files for an hour and never /version.json', () => {
+  it('lets images come from the site itself and data: URIs', () => {
+    for (const image of [
+      '/media/hero.jpg',
+      '/media/gallery/first-dance.webp',
+      '/content/media/0f3a9c.webp',
+      '/assets/flourish-8jht_L4N.svg',
+      'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg"/%3E',
+      'data:image/png;base64,iVBORw0KGgo=',
+    ]) {
+      expect(cspAllows(normal, 'img-src', image), image).toBe(true);
+    }
+    for (const image of ['https://images.example.com/hero.jpg', 'http://site.example.com/x.png']) {
+      expect(cspAllows(normal, 'img-src', image), image).toBe(false);
+    }
+  });
+
+  it('frames only the OpenStreetMap embed, over https', () => {
+    expect(cspAllows(normal, 'frame-src', OSM_EMBED_URL)).toBe(true);
+    for (const frame of [
+      // Neither the site itself nor any other map provider or scheme.
+      '/index.html',
+      '/admin/',
+      'http://www.openstreetmap.org/export/embed.html',
+      'https://openstreetmap.org/export/embed.html',
+      'https://tile.openstreetmap.org/0/0/0.png',
+      'https://www.google.com/maps/embed?pb=x',
+      'data:text/html,<p>x</p>',
+    ]) {
+      expect(cspAllows(normal, 'frame-src', frame), frame).toBe(false);
+    }
+    // Our own pages still may not be framed by anyone.
+    expect(cspDirectives(normal).get('frame-ancestors')).toBe("'none'");
+    expect(normal.globalHeaders['X-Frame-Options']).toBe('DENY');
+  });
+
+  it('allows nothing else from a third party', () => {
+    const thirdParty = 'https://cdn.example.com/x';
+    for (const directive of ['script-src', 'style-src', 'font-src', 'connect-src', 'object-src']) {
+      expect(cspAllows(normal, directive, thirdParty), directive).toBe(false);
+    }
+    expect(cspAllows(normal, 'connect-src', '/api/health')).toBe(true);
+    expect(cspAllows(normal, 'font-src', '/assets/jost-latin-400-normal-8jht_L4N.woff2')).toBe(
+      true,
+    );
+  });
+
+  it('caches hashed files forever, media for a day, calendar files for an hour, never /version.json', () => {
     const cacheControl = (requestPath: string) =>
       firstMatch(normal, requestPath)?.headers?.['Cache-Control'];
     const immutable = 'public, max-age=31536000, immutable';
     expect(cacheControl('/assets/index-8jht_L4N.js')).toBe(immutable);
     expect(cacheControl('/content/media/0f3a9c.webp')).toBe(immutable);
+    // /media/* may keep original file names, so it must never be immutable.
+    for (const media of ['/media/hero.jpg', '/media/gallery/first-dance.webp']) {
+      expect(cacheControl(media), media).toBe('public, max-age=86400');
+    }
     expect(cacheControl('/content/calendar/wedding.ics')).toMatch(/(^|[\s,])max-age=3600\b/);
     expect(cacheControl('/version.json')).toBe('no-store');
     // HTML falls back to the global no-cache.
     expect(cacheControl('/index.html')).toBeUndefined();
+    expect(cacheControl('/')).toBeUndefined();
+  });
+
+  it('marks as immutable only paths whose file names are content-hashed', () => {
+    const immutableRoutes = normal.routes
+      .filter(({ headers }) => headers?.['Cache-Control']?.includes('immutable'))
+      .map(({ route }) => route);
+    expect(immutableRoutes).toEqual(['/assets/*', '/content/media/*']);
   });
 });
 
@@ -179,7 +283,15 @@ describe('buildSwaConfig: fallback and file types', () => {
   it('falls back to the one-pager only for page navigations', () => {
     expect(normal.navigationFallback.rewrite).toBe('/index.html');
     const exclude = normal.navigationFallback.exclude;
-    for (const pattern of ['/assets/*', '/content/*', '/api/*', '/admin/*', '/.auth/*']) {
+    // A missing media file is a 404, not the one-pager.
+    for (const pattern of [
+      '/assets/*',
+      '/content/*',
+      '/media/*',
+      '/api/*',
+      '/admin/*',
+      '/.auth/*',
+    ]) {
       expect(exclude).toContain(pattern);
     }
     const extensions = exclude.find((pattern) => pattern.startsWith('*.{'));
