@@ -136,6 +136,28 @@ public sealed class RsvpMineFunctionsTests
     }
 
     [Fact]
+    public async Task PutStripsTheNoncharacterUFFFE()
+    {
+        using var harness = new RsvpHarness();
+        var created = await harness.PostAsync();
+        var body = new
+        {
+            attending = true,
+            people = new[] { new { name = "Pablo\uFFFE Pérez", dietary = new { tags = new[] { "vegan" }, note = "Sin\uFFFE nueces" } } },
+            message = "Hola\uFFFE",
+            language = "es",
+        };
+
+        var httpContext = await harness.PutMineAsync(TestHttp.CookieHeader(created), body, created.Response.Headers.ETag.ToString());
+
+        httpContext.Response.StatusCode.ShouldBe(StatusCodes.Status200OK);
+        var rsvp = TestHttp.ReadJson(httpContext).GetProperty("rsvp");
+        rsvp.GetProperty("message").GetString().ShouldBe("Hola");
+        rsvp.GetProperty("people")[0].GetProperty("name").GetString().ShouldBe("Pablo Pérez");
+        rsvp.GetProperty("people")[0].GetProperty("dietary").GetProperty("note").GetString().ShouldBe("Sin nueces");
+    }
+
+    [Fact]
     public async Task PutUpdatesTheStateCookie()
     {
         using var harness = new RsvpHarness();

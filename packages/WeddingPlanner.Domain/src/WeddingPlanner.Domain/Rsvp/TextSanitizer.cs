@@ -6,7 +6,8 @@ namespace WeddingPlanner.Domain.Rsvp;
 /// Normalises guest-entered text before it is validated and stored. The output is never rendered as HTML;
 /// sanitising here only removes characters that are invisible or can disguise text:
 /// <list type="bullet">
-///   <item>control characters (C0, DEL, C1) and lone UTF-16 surrogates are removed;</item>
+///   <item>control characters (C0, DEL, C1), lone UTF-16 surrogates and Unicode noncharacters (U+FDD0...U+FDEF and
+///   every code point ending in FFFE or FFFF) are removed;</item>
 ///   <item>bidirectional formatting characters (LRM, RLM, ALM, LRE...RLO, LRI...PDI) and the BOM are removed;</item>
 ///   <item>tabs become spaces; line breaks (CR, LF, CRLF, NEL, LS, PS) become <c>\n</c> in multi-line text and
 ///   spaces otherwise;</item>
@@ -25,6 +26,13 @@ public static class TextSanitizer
     /// <summary>True for the bidirectional formatting characters that can reorder displayed text.</summary>
     public static bool IsBidiControl(char c) => c is '\u061C' or '\u200E' or '\u200F' or (>= '\u202A' and <= '\u202E') or (>= '\u2066' and <= '\u2069');
 
+    /// <summary>
+    /// True for the 66 Unicode noncharacters: U+FDD0...U+FDEF and the last two code points of every plane
+    /// (U+FFFE, U+FFFF, U+1FFFE, U+1FFFF, ..., U+10FFFF). They are never valid in interchanged text, and .NET's
+    /// normalisation rejects some of them.
+    /// </summary>
+    public static bool IsNoncharacter(int codePoint) => codePoint is (>= 0xFDD0 and <= 0xFDEF) || (codePoint & 0xFFFE) == 0xFFFE;
+
     private static string Sanitize(string? value, bool multiLine)
     {
         if (string.IsNullOrEmpty(value))
@@ -41,7 +49,11 @@ public static class TextSanitizer
             {
                 if (index + 1 < value.Length && char.IsLowSurrogate(value[index + 1]))
                 {
-                    builder.Append(c).Append(value[index + 1]);
+                    if (!IsNoncharacter(char.ConvertToUtf32(c, value[index + 1])))
+                    {
+                        builder.Append(c).Append(value[index + 1]);
+                    }
+
                     index++;
                 }
 
@@ -77,7 +89,7 @@ public static class TextSanitizer
                 continue;
             }
 
-            if (char.IsControl(c) || IsBidiControl(c) || c == '\uFEFF')
+            if (char.IsControl(c) || IsBidiControl(c) || c == '\uFEFF' || IsNoncharacter(c))
             {
                 continue;
             }
@@ -85,8 +97,25 @@ public static class TextSanitizer
             builder.Append(!multiLine && char.IsWhiteSpace(c) ? ' ' : c);
         }
 
-        var normalized = builder.ToString().Normalize(NormalizationForm.FormC);
+        var normalized = NormalizeOrKeep(builder.ToString());
         return multiLine ? TrimLines(normalized) : CollapseSpaces(normalized);
+    }
+
+    /// <summary>
+    /// NFC-normalises <paramref name="value"/>. The loop above already drops everything known to make
+    /// <see cref="string.Normalize(NormalizationForm)"/> throw; should the platform still reject a code point,
+    /// the text is kept un-normalised rather than failing the request.
+    /// </summary>
+    private static string NormalizeOrKeep(string value)
+    {
+        try
+        {
+            return value.Normalize(NormalizationForm.FormC);
+        }
+        catch (ArgumentException)
+        {
+            return value;
+        }
     }
 
     private static void AppendLineBreak(StringBuilder builder, bool multiLine) => builder.Append(multiLine ? '\n' : ' ');

@@ -282,6 +282,47 @@ public sealed class RsvpCreateFunctionTests
         problem.GetProperty("maxBytes").GetInt32().ShouldBe(16 * 1024);
     }
 
+    [Theory]
+    [InlineData("name", false)]
+    [InlineData("name", true)]
+    [InlineData("note", false)]
+    [InlineData("note", true)]
+    [InlineData("message", false)]
+    [InlineData("message", true)]
+    public async Task StripsTheNoncharacterUFFFEInsteadOfFailing(string field, bool jsonEscape)
+    {
+        // U+FFFE makes string.Normalize throw. Sent raw (UTF-8 EF BF BE) or as the JSON escape, it is stripped: an
+        // exception here would escape the function and become a 500 in ExceptionHandlingMiddleware.
+        using var harness = new RsvpHarness();
+        var bad = jsonEscape ? "\\uFFFE" : "\uFFFE";
+        var name = field == "name" ? $"Anna{bad}" : "Anna";
+        var note = field == "note" ? $"Ohne{bad} Nüsse" : "Ohne Nüsse";
+        var message = field == "message" ? $"Hallo{bad} Ben" : "Hallo Ben";
+        var rawBody = $$$"""{"attending":true,"people":[{"name":"{{{name}}}","dietary":{"tags":["vegan"],"note":"{{{note}}}"}}],"message":"{{{message}}}","language":"de"}""";
+
+        var httpContext = await harness.PostAsync(rawBody: rawBody);
+
+        httpContext.Response.StatusCode.ShouldBe(StatusCodes.Status201Created);
+        var rsvp = TestHttp.ReadJson(httpContext).GetProperty("rsvp");
+        rsvp.GetProperty("message").GetString().ShouldBe("Hallo Ben");
+        var person = rsvp.GetProperty("people")[0];
+        person.GetProperty("name").GetString().ShouldBe("Anna");
+        person.GetProperty("dietary").GetProperty("note").GetString().ShouldBe("Ohne Nüsse");
+        harness.Logs.Records.ShouldNotContain(record => record.StartsWith("Error", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ANameOfOnlyNoncharactersIsAValidationError()
+    {
+        using var harness = new RsvpHarness();
+        var body = new { attending = true, people = new[] { new { name = "\uFFFE\uFFFF\uFDD0" } }, language = "de" };
+
+        var httpContext = await harness.PostAsync(body);
+
+        ErrorCodes(httpContext).ShouldBe(["people[0].name:required"]);
+        harness.Memory.Calls.ShouldBe(0);
+    }
+
     [Fact]
     public async Task IgnoresUnknownPropertiesAndClientPersonIds()
     {
