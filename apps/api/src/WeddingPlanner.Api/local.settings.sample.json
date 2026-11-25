@@ -5,6 +5,8 @@
     "AzureWebJobsStorage": "UseDevelopmentStorage=true",
     "Storage__ConnectionString": "UseDevelopmentStorage=true",
     "Features__Rsvp": "true",
-    "Features__Admin": "true"
+    "Features__Admin": "true",
+    "Rsvp__Deadline": "2099-05-01 23:59:00+02:00",
+    "Rsvp__TimeZone": "Europe/Berlin"
   }
 }

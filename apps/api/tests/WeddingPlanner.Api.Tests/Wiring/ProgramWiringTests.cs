@@ -73,13 +73,16 @@ public sealed class ProgramWiringTests
     [Fact]
     public async Task AdminAuthorizationAppliesOnlyToAdminFunctions()
     {
-        // Without the admin middleware in the container, only invocations that select it can fail.
+        // Without the admin middleware in the container, only invocations that select it can fail. The exception
+        // handling middleware turns that failure into a 500 before the function runs.
         var app = Compose(new() { ["Features:Rsvp"] = "true", ["Features:Admin"] = "true" });
         app.Services.RemoveAll<AdminAuthorizationMiddleware>();
 
         (await app.InvokeAsync("RsvpCreate")).FunctionRan.ShouldBeTrue();
         (await app.InvokeAsync("Health")).FunctionRan.ShouldBeTrue();
-        await Should.ThrowAsync<InvalidOperationException>(() => app.InvokeAsync("AdminRsvpsList"));
+        var (adminContext, adminRan) = await app.InvokeAsync("AdminRsvpsList");
+        adminRan.ShouldBeFalse();
+        adminContext.Response.StatusCode.ShouldBe(StatusCodes.Status500InternalServerError);
     }
 
     [Fact]
