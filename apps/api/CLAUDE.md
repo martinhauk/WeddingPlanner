@@ -85,6 +85,13 @@ values keep it off (dark). Code default: off.
   the keep-warm target of the web app. `version` is the assembly `InformationalVersion`
   (`<Version>+<SourceRevisionId>`; CI passes `-p:SourceRevisionId=<sha>`).
 - **Lean startup:** registrations are lazy; no I/O or table creation at startup.
+- **Cookies only through `Http/CookieWriter`.** It is the only way to set or clear a cookie: one
+  `static readonly CookieWriter` per cookie (name, path, HttpOnly, SameSite Strict or Lax), then
+  `Set(response, value, maxAge)` or `Clear(response)`. Every cookie gets `Max-Age` only (whole seconds,
+  at most 400 days), never `Expires` or `Domain`, and is always `Secure`; clearing writes `Max-Age=0`
+  with the same path and attributes. The SWA proxy is known to drop cookies with a past `Expires` or a
+  very long lifetime, so never use `Response.Cookies` (`Append`, `Delete`) or write `Set-Cookie`
+  headers yourself: `CookieWriterTests.NoOtherApiCodeWritesCookies` fails if any other source file does.
 - **No personal data in logs:** never log names, messages, dietary data, tokens, cookies or IP
   addresses. Default log level is Warning (worker and host).
 - **Analyzers:** `AnalysisLevel` `latest-recommended` with warnings as errors, so CA rules fail the
@@ -136,6 +143,29 @@ values keep it off (dark). Code default: off.
   (works locally; must be verified on the SWA managed host, which requires the public `/api` prefix),
   or move the admin API to a different segment. The lead agent decides before the first admin
   endpoint (S3-01).
+
+## Platform probe (temporary)
+
+`GET /api/health/probe` (`Features/Health/ProbeFunction`, function `HealthProbe`, never gated) measures
+two undocumented SWA behaviours: which forwarding header carries the client IP (and at which
+`X-Forwarded-For` position), and whether a cookie survives the proxy in both directions. It sets
+`wp_probe=1; Max-Age=60; Path=/api/health; Secure; HttpOnly; SameSite=Strict` and echoes the caller's own
+forwarding headers, the XFF hop count, the connection address, `cookieReceived` and
+`hasClientPrincipal`. No I/O, `Cache-Control: no-store`, values never logged or stored (a capturing-logger
+test enforces this).
+
+- **Switch:** `Diagnostics__ProbeEnabled`, code default `true` until the findings are recorded; `false`
+  (or any malformed value) answers 404 `not_found` problem+json without a cookie.
+- **Run it:** `BASE_URL=https://<host> scripts/smoke/api-probe.sh` (read-only GETs; plain `http` only for
+  localhost). It does the two-step round trip with a cookie jar in a temp dir, exits 1 if the cookie is
+  missing, has the wrong attributes or does not come back, and prints only pass/fail lines, header
+  names, counts and XFF positions, never values or `BASE_URL`. It also reports which headers pass a
+  spoofed client value through.
+- **Local behaviour** (Core Tools 4.17): the Functions host replaces a client-sent `X-Forwarded-For`, and
+  the worker's forwarded-headers handling then consumes it, so the worker sees no XFF, the client's
+  address as the connection address and the host-to-worker hop in `X-Original-For`. The single-address
+  headers (`X-Azure-ClientIP`, `X-Client-IP`, …) pass client values through unchanged locally. What SWA
+  does is measured by S0-12; record only header names and positions, never addresses.
 
 ## Fallbacks (decide with the lead agent, record in an ADR)
 
