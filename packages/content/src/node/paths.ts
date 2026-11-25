@@ -17,3 +17,16 @@ export const VERSION_FILE = path.join('public', 'version.json');
 
 /** Public URL prefix of `MEDIA_OUT_DIR`. */
 export const MEDIA_URL_PREFIX = '/content/media/';
+
+/** URL prefix under which the web app publishes the instance's `media/` folder. */
+export const SITE_MEDIA_URL_PREFIX = '/media/';
+
+/**
+ * The instance directory named by `INSTANCE_DIR`, resolved like the CLI does it: a relative path is
+ * relative to the repository root; empty or unset means the sample instance.
+ */
+export function instanceDirFromEnv(value: string | undefined): string {
+  return value === undefined || value.trim() === ''
+    ? DEFAULT_INSTANCE_DIR
+    : path.resolve(REPO_ROOT, value);
+}

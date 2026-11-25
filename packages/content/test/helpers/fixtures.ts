@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach } from 'vitest';
 import { DEFAULT_INSTANCE_DIR } from '../../src/node/paths.ts';
 
-type JsonFile = 'instance.json' | 'site.json';
+type JsonFile = 'instance.json' | 'site.json' | 'site-content.json';
 type Segment = string | number;
 
 /** A change to the sample instance: set a JSON path to a value, or remove it. */

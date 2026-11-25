@@ -1,8 +1,7 @@
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 import { type Instance, instanceSchema } from '../schema/instance.ts';
 import { collectLocalizedTexts } from '../schema/localizable.ts';
 import { type Site, siteSchema } from '../schema/site.ts';
+import type { SiteContent } from '../schema/site-content.ts';
 import {
   type Diagnostic,
   diagnosticsFromZod,
@@ -11,7 +10,10 @@ import {
   jsonPath,
   warning,
 } from './diagnostics.ts';
+import { findLocalizedTexts } from './localized-texts.ts';
 import { type MediaSource, scanMedia } from './media.ts';
+import { readJson } from './read-json.ts';
+import { checkSiteContent, SITE_CONTENT_FILE } from './site-content.ts';
 
 export const INSTANCE_FILE = 'instance.json';
 export const SITE_FILE = 'site.json';
@@ -29,15 +31,19 @@ export type ValidationResult = {
   readonly instance: Instance | undefined;
   /** Parsed `site.json`, when it matches the schema. */
   readonly site: Site | undefined;
+  /** Parsed `site-content.json`, when it matches the schema. */
+  readonly siteContent: SiteContent | undefined;
   /** Supported, readable images in `media/`, sorted by id. */
   readonly media: MediaSource[];
 };
 
 /**
- * Validates an instance directory: `instance.json`, `site.json` (schema and i18n) and `media/`.
+ * Validates an instance directory: `instance.json`, `site.json` (schema and i18n), `media/` and
+ * `site-content.json` (schema, references, media).
  *
  * Diagnostics carry a code, the file and a JSON path, never values from the files. Missing
- * translations are warnings, or errors with `strict`.
+ * translations in `site.json` are warnings, or errors with `strict`; in `site-content.json` they
+ * are always warnings, because English and Spanish fall back to German there by design.
  */
 export async function validate(
   instanceDir: string,
@@ -74,32 +80,22 @@ export async function validate(
   const scanned = await scanMedia(instanceDir);
   diagnostics.push(...scanned.diagnostics);
 
-  return { ok: !hasErrors(diagnostics), diagnostics, instance, site, media: scanned.media };
-}
+  let siteContent: SiteContent | undefined;
+  const contentJson = await readJson(instanceDir, SITE_CONTENT_FILE, diagnostics);
+  if (contentJson.ok) {
+    const checked = checkSiteContent(contentJson.value, new Set(scanned.media.map((m) => m.id)));
+    diagnostics.push(...checked.diagnostics);
+    siteContent = checked.content;
+  }
 
-async function readJson(
-  dir: string,
-  file: string,
-  diagnostics: Diagnostic[],
-): Promise<{ ok: true; value: unknown } | { ok: false }> {
-  let text: string;
-  try {
-    text = await readFile(path.join(dir, file), 'utf8');
-  } catch (cause) {
-    const code = cause instanceof Error && 'code' in cause ? cause.code : undefined;
-    if (code === 'ENOENT' || code === 'ENOTDIR' || code === 'EISDIR') {
-      diagnostics.push(error('E_FILE_MISSING', file, '$', 'file not found'));
-      return { ok: false };
-    }
-    throw cause;
-  }
-  try {
-    return { ok: true, value: JSON.parse(text.replace(/^﻿/, '')) };
-  } catch {
-    // The parser's message can quote file content, so it is not passed on.
-    diagnostics.push(error('E_JSON', file, '$', 'is not valid JSON'));
-    return { ok: false };
-  }
+  return {
+    ok: !hasErrors(diagnostics),
+    diagnostics,
+    instance,
+    site,
+    siteContent,
+    media: scanned.media,
+  };
 }
 
 /** Semantic checks Zod cannot express: language settings, event range, translations. */
@@ -158,31 +154,4 @@ function checkSite(site: Site, localizedTexts: Set<object>, strict: boolean): Di
     }
   }
   return diagnostics;
-}
-
-type LocalizedText = { path: PropertyKey[]; text: Record<string, string | undefined> };
-
-/** Finds the JSON paths of the `{ <lang>: text }` objects collected while parsing. */
-function findLocalizedTexts(root: unknown, targets: Set<object>): LocalizedText[] {
-  const found: LocalizedText[] = [];
-  const visit = (node: unknown, at: PropertyKey[]): void => {
-    if (typeof node !== 'object' || node === null) {
-      return;
-    }
-    if (targets.has(node)) {
-      found.push({ path: at, text: node as Record<string, string | undefined> });
-      return;
-    }
-    if (Array.isArray(node)) {
-      node.forEach((child, index) => {
-        visit(child, [...at, index]);
-      });
-      return;
-    }
-    for (const [key, child] of Object.entries(node)) {
-      visit(child, [...at, key]);
-    }
-  };
-  visit(root, []);
-  return found;
 }

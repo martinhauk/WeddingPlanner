@@ -127,6 +127,17 @@ describe('bake: environments', () => {
     expect(await readdir(webDir)).toEqual([]);
   });
 
+  it('fails on invalid page content (site-content.json), and writes nothing', async () => {
+    const instanceDir = await sampleWith(set('site-content.json', ['hero', 'image'], 'gone.png'));
+    const webDir = await tempDir('wp-web-');
+    const result = await bake({ instanceDir, webDir, deployEnv: 'e2e' });
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.map((d) => `${d.code} ${d.file} ${d.path}`)).toEqual([
+      'E_MEDIA_MISSING site-content.json $.hero.image',
+    ]);
+    expect(await readdir(webDir)).toEqual([]);
+  });
+
   it('fails for an unknown DEPLOY_ENV', async () => {
     const { webDir, result } = await bakeSample({ deployEnv: 'staging' });
     expect(result.ok).toBe(false);
@@ -154,10 +165,13 @@ describe('bake: environments', () => {
     expect(hashes.size).toBe(1);
   });
 
-  it('changes the contentHash when the site or a media file changes', async () => {
+  it('changes the contentHash when the site, the page content or a media file changes', async () => {
     const base = await bakeSample();
     const text = await bakeSample({
       instanceDir: await sampleWith(set('site.json', ['event', 'title', 'en'], 'Save the date')),
+    });
+    const page = await bakeSample({
+      instanceDir: await sampleWith(set('site-content.json', ['tagline', 'en'], 'Save the date')),
     });
     const mediaDir = await sampleWith();
     await writeFile(
@@ -165,11 +179,13 @@ describe('bake: environments', () => {
       encodePng(2, 2, () => [1, 2, 3]),
     );
     const media = await bakeSample({ instanceDir: mediaDir });
-    if (!base.result.ok || !text.result.ok || !media.result.ok) throw new Error('bake failed');
-    const hashes = [base, text, media].map((b) =>
+    if (!base.result.ok || !text.result.ok || !page.result.ok || !media.result.ok) {
+      throw new Error('bake failed');
+    }
+    const hashes = [base, text, page, media].map((b) =>
       b.result.ok ? b.result.output.version.contentHash : '',
     );
-    expect(new Set(hashes).size).toBe(3);
+    expect(new Set(hashes).size).toBe(4);
   });
 });
 
