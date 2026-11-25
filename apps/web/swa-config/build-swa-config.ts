@@ -155,11 +155,10 @@ export function buildSwaConfig(options: SwaConfigOptions): SwaConfig {
       { route: '/logout', redirect: LOGOUT_URL, statusCode: 302 },
       { route: '/api/admin*', allowedRoles: [ADMIN_ROLE] },
       { route: '/admin*', allowedRoles: [ADMIN_ROLE], rewrite: ADMIN_ENTRY },
-      // Never reached on Azure (the rules above match first). The local SWA CLI emulator (2.x)
-      // turns `/admin*` into the regex `^/admin*$` (a repeated "n"), so it would serve /admin/ and
-      // /admin/index.html anonymously; these rules keep the emulator as strict as Azure.
-      { route: '/api/admin/*', allowedRoles: [ADMIN_ROLE] },
-      { route: '/admin/*', allowedRoles: [ADMIN_ROLE], rewrite: ADMIN_ENTRY },
+      // No extra `/admin/*` / `/api/admin/*` rules: Azure rejects the config when a route is
+      // shadowed by a wildcard ("A route is covered up by a wildcard route"). Note: the local SWA
+      // CLI emulator (2.x) treats `/admin*` as the regex `^/admin*$`, so locally /admin/ is not
+      // role-protected; Azure is.
       // Content-hashed file names: cache forever.
       { route: '/assets/*', headers: { 'Cache-Control': IMMUTABLE } },
       { route: '/content/media/*', headers: { 'Cache-Control': IMMUTABLE } },
