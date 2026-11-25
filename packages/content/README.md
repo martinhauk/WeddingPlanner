@@ -1,18 +1,18 @@
 # @weddingplanner/content
 
-Content model and tooling for WeddingPlanner instances: Zod 4 schemas for `site.json` and
-`instance.json`, the `resolveText` helper, and the `validate` + `bake` CLI that turns an instance
-directory into the web app's generated content.
+Content model and tooling for WeddingPlanner instances: Zod 4 schemas for `instance.json`,
+`site.json` and `site-content.json` (everything the one-pager shows), generated JSON Schemas, the
+`resolveText` helper, the `validate` + `bake` CLI that turns an instance directory into the web
+app's generated files, and the site-content loader the web app's Vite plugin uses.
 
-> Skeleton (S0-02). The full section schemas, JSON Schema emission and coded validator follow in
-> S1-01; responsive media, OG image and calendar files in S1-04.
+> Responsive media, OG image and calendar files follow in S1-04.
 
 ## Entries
 
-| Import                         | Contents                                                     | Use from               |
-| ------------------------------ | ------------------------------------------------------------ | ---------------------- |
-| `@weddingplanner/content`      | types (`Site`, `Instance`, `BuildInfo`, …) and `resolveText` | browser and Node       |
-| `@weddingplanner/content/node` | `validate`, `bake`, `formatDiagnostic`                       | Node only (CLI, tests) |
+| Import                         | Contents                                                            | Use from                     |
+| ------------------------------ | ------------------------------------------------------------------- | ---------------------------- |
+| `@weddingplanner/content`      | types (`SiteContent`, `Section`, `BuildInfo`, …) and `resolveText`  | browser and Node             |
+| `@weddingplanner/content/node` | `validate`, `bake`, `loadSiteContent`, `themeCss`, `jsonSchemas`, … | Node only (CLI, Vite, tests) |
 
 The `.` entry never imports zod or a Node built-in at runtime (`test/entry-purity.test.ts`), so the
 web bundle stays small. Both entries point at TypeScript sources; there is no build step.
@@ -26,19 +26,29 @@ node packages/content/src/cli.ts validate [instanceDir] [--strict]   # pnpm cont
 node packages/content/src/cli.ts bake [--strict] [--web-dir <dir>]   # pnpm content:bake
 ```
 
-- **validate** checks `instance.json`, `site.json` and `media/`, prints diagnostics and exits 1 on
-  errors. Missing translations are warnings; `--strict` makes them errors.
+- **validate** checks `instance.json`, `site.json`, `site-content.json` and `media/`, prints
+  diagnostics and exits 1 on errors. Missing translations in `site.json` are warnings; `--strict`
+  makes them errors. In `site-content.json` English and Spanish are optional by design (they fall
+  back to German), so a missing translation there is always a warning (`W_I18N_FALLBACK`).
 - **bake** validates (strict for `test` and `production`), then writes
   `apps/web/src/content/generated/{site,media,build}.json`, `apps/web/public/content/media/` and
   `apps/web/public/version.json`. It reads `INSTANCE_DIR` (default `samples/instance`), `DEPLOY_ENV`
   (default `e2e`), `GIT_SHA` (default `local`) and `SITE_URL` (default `http://localhost:5173`). A
-  missing `environments.<DEPLOY_ENV>` block fails the bake; it is never defaulted.
+  missing `environments.<DEPLOY_ENV>` block fails the bake; it is never defaulted. The page content
+  itself is not baked: the web app's Vite plugin reads `site-content.json` with `loadSiteContent`.
 - Relative paths (arguments and `INSTANCE_DIR`) resolve against the repository root, so they mean
   the same whether the bake runs from `pnpm content:bake` or from the web app's `build` script.
 
 Diagnostics look like `error E_SLUG instance.json $.slug: must match ^wed[0-9a-z]{3,8}$`: a code, the
 file and a JSON path, **never a value** from the files, because deploy logs are public. Media files
 are referred to by number (`media file #2`, code-point order of their paths), never by name.
+
+## JSON Schemas
+
+`schema/{instance,site,site-content}.schema.json` are generated from the Zod schemas and committed,
+so the `$schema` URLs of instance files resolve and editors offer completion. Run
+`pnpm --filter @weddingplanner/content schema` after a schema change; `test/json-schema.test.ts`
+fails while the committed files are out of date. Never edit them by hand.
 
 ## Instance files
 
@@ -50,7 +60,18 @@ are referred to by number (`media file #2`, code-point order of their paths), ne
   generated file.
 - `site.json` (content): `schemaVersion`, `i18n {languages, defaultLanguage}`, `couple`, `event`.
   Text fields are `Localizable`: a string, or `{ <lang>: text }` with canonical BCP 47 keys.
-- Both are strict (unknown keys are errors) and accept an optional `$schema`.
+- `site-content.json` (the one-pager, [`src/schema/site-content.ts`](src/schema/site-content.ts)):
+  `couple`, `event {start, timeZone}`, `tagline`, `place`, `rsvpDeadline?` (display date only; the
+  API enforces `instance.json`), `theme {colors {bg, paper, ink, muted, accent, accentDark, line},
+  fonts {heading, body}}`, `hero {image?}` and `sections[]`. A section is
+  `{id, type, title?, nav?, visible?, data}` with `type` one of `story`, `schedule`, `locations`,
+  `weddingParty`, `dresscode`, `music`, `text`, `faq`, `gifts` (text only, no bank details),
+  `contact` and `rsvp`; the page renders them in this order. Every user-visible text is
+  `{de, en?, es?}`. Colors are hex values and fonts come from the self-hosted catalogue
+  `SITE_FONTS` (each an `@fontsource` dependency of `apps/web`), so content cannot inject CSS.
+  Media are paths inside `media/` (`hero.png`), published under `/media/`. `validate` also checks
+  unique section ids, schedule → location references and that referenced media exist.
+- All three are strict (unknown keys are errors) and accept an optional `$schema`.
 
 The fictional sample lives in [`samples/instance/`](../../samples/instance). Its placeholder images
 are drawn from code: `pnpm --filter @weddingplanner/content sample-media` regenerates them.

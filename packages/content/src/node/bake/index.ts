@@ -15,6 +15,7 @@ import {
 } from '../../schema/instance.ts';
 import { type MediaManifest, mediaManifestSchema } from '../../schema/media.ts';
 import type { Site } from '../../schema/site.ts';
+import type { SiteContent } from '../../schema/site-content.ts';
 import { type Diagnostic, error, hasErrors } from '../diagnostics.ts';
 import type { MediaSource } from '../media.ts';
 import { GENERATED_DIR, MEDIA_OUT_DIR, MEDIA_URL_PREFIX, VERSION_FILE } from '../paths.ts';
@@ -25,7 +26,7 @@ export const DEFAULT_SITE_URL = 'http://localhost:5173';
 export const DEFAULT_DEPLOY_ENV: EnvironmentName = 'e2e';
 
 export type BakeOptions = {
-  /** Instance directory with `instance.json`, `site.json` and `media/`. */
+  /** Instance directory with `instance.json`, `site.json`, `site-content.json` and `media/`. */
   readonly instanceDir: string;
   /** Web app directory (`apps/web`) the bake writes into. */
   readonly webDir: string;
@@ -61,7 +62,8 @@ export type BakeResult =
   | { readonly ok: false; readonly diagnostics: Diagnostic[] };
 
 /**
- * Minimal bake (S0-02): validates the instance, then writes into the web app
+ * Minimal bake (S0-02): validates the instance (including `site-content.json`, which the web app's
+ * Vite plugin reads itself), then writes into the web app
  *
  * - `src/content/generated/site.json`: the validated site content;
  * - `src/content/generated/media.json`: a single-variant manifest of `media/`;
@@ -102,7 +104,7 @@ export async function bake(options: BakeOptions): Promise<BakeResult> {
   const validation = await validate(options.instanceDir, { strict });
   diagnostics.push(...validation.diagnostics);
 
-  const { instance, site } = validation;
+  const { instance, site, siteContent } = validation;
   const environment =
     instance !== undefined && environmentName !== undefined
       ? instance.environments[environmentName]
@@ -122,6 +124,7 @@ export async function bake(options: BakeOptions): Promise<BakeResult> {
     hasErrors(diagnostics) ||
     instance === undefined ||
     site === undefined ||
+    siteContent === undefined ||
     environment === undefined ||
     siteUrl === undefined
   ) {
@@ -131,6 +134,7 @@ export async function bake(options: BakeOptions): Promise<BakeResult> {
   const output = createOutput({
     instance,
     site,
+    siteContent,
     media: validation.media,
     features: environment.features,
     siteUrl,
@@ -163,6 +167,7 @@ function mediaFileName(media: MediaSource): string {
 function createOutput(input: {
   instance: Instance;
   site: Site;
+  siteContent: SiteContent;
   media: readonly MediaSource[];
   features: BuildInfo['features'];
   siteUrl: string;
@@ -192,7 +197,12 @@ function createOutput(input: {
   }
 
   // Environment-independent: test and production of one deployment have the same hash.
-  const contentHash = createHash('sha256').update('site\n').update(JSON.stringify(site));
+  const { $schema: _, ...siteContent } = input.siteContent;
+  const contentHash = createHash('sha256')
+    .update('site\n')
+    .update(JSON.stringify(site))
+    .update('\nsite-content\n')
+    .update(JSON.stringify(siteContent));
   for (const media of input.media) {
     contentHash.update(`\nmedia ${media.id} ${media.sha256}`);
   }

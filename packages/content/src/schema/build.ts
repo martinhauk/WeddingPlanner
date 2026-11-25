@@ -25,7 +25,7 @@ export const versionInfoSchema = z.strictObject({
   /** Commit SHA of the build (`GIT_SHA`), or `local`. */
   sha: z.string().min(1),
   builtAt: z.iso.datetime(),
-  /** SHA-256 over `site.json` and the source media bytes; independent of the environment. */
+  /** SHA-256 over `site.json`, `site-content.json` and the media bytes; environment-independent. */
   contentHash: z.string().regex(/^[0-9a-f]{64}$/),
   /** `true` when the fictional sample instance was baked (`instance.json` `sample`). */
   isSample: z.boolean(),

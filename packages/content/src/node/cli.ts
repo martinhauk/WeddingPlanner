@@ -9,9 +9,10 @@ export const USAGE = `Usage:
   node packages/content/src/cli.ts validate [instanceDir] [--strict]
   node packages/content/src/cli.ts bake [--strict] [--web-dir <dir>]
 
-validate  checks instance.json, site.json and media/ of an instance directory
-          (default: INSTANCE_DIR, else samples/instance). --strict also fails
-          on missing translations. Exits 1 on errors.
+validate  checks instance.json, site.json, site-content.json and media/ of an
+          instance directory (default: INSTANCE_DIR, else samples/instance).
+          --strict also fails on missing site.json translations. Exits 1 on
+          errors.
 bake      validates, then writes the web app's generated content. Reads
           INSTANCE_DIR (default samples/instance), DEPLOY_ENV (e2e | test |
           production, default e2e), GIT_SHA (default "local") and SITE_URL

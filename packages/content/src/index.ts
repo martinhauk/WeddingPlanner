@@ -12,5 +12,15 @@ export type {
   Features,
   Instance,
 } from './schema/instance.ts';
+export type { LocalizedText, SiteLanguage } from './schema/localizable.ts';
 export type { MediaItem, MediaManifest, MediaVariant } from './schema/media.ts';
 export type { Couple, Localizable, Site, SiteEvent, SiteI18n } from './schema/site.ts';
+export type {
+  ContentImage,
+  Section,
+  SectionOf,
+  SectionType,
+  SiteContent,
+  SiteFontId,
+  SiteTheme,
+} from './schema/site-content.ts';

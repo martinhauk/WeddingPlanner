@@ -28,12 +28,14 @@ describe('validate: the sample instance', () => {
     expect(result.instance?.sample).toBe(true);
     expect(result.site?.i18n).toEqual({ languages: ['de', 'en', 'es'], defaultLanguage: 'de' });
     expect(result.media.map((m) => m.id)).toEqual(['hero.png', 'portrait.png']);
+    expect(result.siteContent?.sections.length).toBeGreaterThan(0);
   });
 
   it('accepts files without $schema', async () => {
     const dir = await sampleWith(
       unset('instance.json', ['$schema']),
       unset('site.json', ['$schema']),
+      unset('site-content.json', ['$schema']),
     );
     expect((await validate(dir)).ok).toBe(true);
   });
@@ -156,6 +158,7 @@ describe('validate: invalid fixtures fail', () => {
     expect(result.diagnostics.map(brief)).toEqual([
       'error E_FILE_MISSING instance.json $',
       'error E_JSON site.json $',
+      'error E_FILE_MISSING site-content.json $',
     ]);
   });
 });
@@ -260,11 +263,12 @@ describe('validate: media', () => {
     ]);
   });
 
-  it('treats a missing media folder as no media', async () => {
+  it('treats a missing media folder as no media (then content may not reference any)', async () => {
     const dir = await sampleWith();
     await rm(path.join(dir, 'media'), { recursive: true });
     const result = await validate(dir);
-    expect(result.ok).toBe(true);
     expect(result.media).toEqual([]);
+    expect(result.diagnostics.map((d) => d.code)).toContain('E_MEDIA_MISSING');
+    expect(result.diagnostics.every((d) => d.file === 'site-content.json')).toBe(true);
   });
 });

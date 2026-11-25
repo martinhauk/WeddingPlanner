@@ -1,0 +1,881 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/martinhauk/WeddingPlanner/main/packages/content/schema/site-content.schema.json",
+  "title": "WeddingPlanner site-content.json",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "couple": {
+      "$ref": "#/$defs/LocalizedText"
+    },
+    "event": {
+      "type": "object",
+      "properties": {
+        "start": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+        },
+        "timeZone": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "start",
+        "timeZone"
+      ],
+      "additionalProperties": false
+    },
+    "tagline": {
+      "$ref": "#/$defs/LocalizedText"
+    },
+    "place": {
+      "$ref": "#/$defs/LocalizedText"
+    },
+    "rsvpDeadline": {
+      "type": "string",
+      "format": "date",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+    },
+    "theme": {
+      "$ref": "#/$defs/Theme"
+    },
+    "hero": {
+      "type": "object",
+      "properties": {
+        "image": {
+          "$ref": "#/$defs/MediaPath"
+        }
+      },
+      "additionalProperties": false
+    },
+    "sections": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "$ref": "#/$defs/StorySection"
+          },
+          {
+            "$ref": "#/$defs/ScheduleSection"
+          },
+          {
+            "$ref": "#/$defs/LocationsSection"
+          },
+          {
+            "$ref": "#/$defs/WeddingPartySection"
+          },
+          {
+            "$ref": "#/$defs/DresscodeSection"
+          },
+          {
+            "$ref": "#/$defs/MusicSection"
+          },
+          {
+            "$ref": "#/$defs/TextSection"
+          },
+          {
+            "$ref": "#/$defs/FaqSection"
+          },
+          {
+            "$ref": "#/$defs/GiftsSection"
+          },
+          {
+            "$ref": "#/$defs/ContactSection"
+          },
+          {
+            "$ref": "#/$defs/RsvpSection"
+          }
+        ]
+      }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "couple",
+    "event",
+    "tagline",
+    "place",
+    "theme",
+    "hero",
+    "sections"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "LocalizedText": {
+      "type": "object",
+      "properties": {
+        "de": {
+          "type": "string",
+          "minLength": 1
+        },
+        "en": {
+          "type": "string"
+        },
+        "es": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "de"
+      ],
+      "additionalProperties": false,
+      "description": "German (de) is required; English (en) and Spanish (es) fall back to German."
+    },
+    "Theme": {
+      "type": "object",
+      "properties": {
+        "colors": {
+          "type": "object",
+          "properties": {
+            "bg": {
+              "type": "string",
+              "pattern": "^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
+            },
+            "paper": {
+              "type": "string",
+              "pattern": "^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
+            },
+            "ink": {
+              "type": "string",
+              "pattern": "^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
+            },
+            "muted": {
+              "type": "string",
+              "pattern": "^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
+            },
+            "accent": {
+              "type": "string",
+              "pattern": "^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
+            },
+            "accentDark": {
+              "type": "string",
+              "pattern": "^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
+            },
+            "line": {
+              "type": "string",
+              "pattern": "^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
+            }
+          },
+          "required": [
+            "bg",
+            "paper",
+            "ink",
+            "muted",
+            "accent",
+            "accentDark",
+            "line"
+          ],
+          "additionalProperties": false
+        },
+        "fonts": {
+          "type": "object",
+          "properties": {
+            "heading": {
+              "type": "string",
+              "enum": [
+                "cormorant-garamond",
+                "eb-garamond",
+                "playfair-display",
+                "jost",
+                "lato",
+                "montserrat"
+              ]
+            },
+            "body": {
+              "type": "string",
+              "enum": [
+                "cormorant-garamond",
+                "eb-garamond",
+                "playfair-display",
+                "jost",
+                "lato",
+                "montserrat"
+              ]
+            }
+          },
+          "required": [
+            "heading",
+            "body"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "colors",
+        "fonts"
+      ],
+      "additionalProperties": false,
+      "description": "Colors and self-hosted fonts."
+    },
+    "MediaPath": {
+      "type": "string",
+      "pattern": "^(?:[A-Za-z0-9_][A-Za-z0-9._-]*\\/)*[A-Za-z0-9_][A-Za-z0-9._-]*\\.(?:png|jpe?g|webp)$",
+      "description": "Path of an image inside the instance's media/ folder, e.g. hero.png."
+    },
+    "StorySection": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "story"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,39}$"
+        },
+        "title": {
+          "$ref": "#/$defs/LocalizedText"
+        },
+        "nav": {
+          "$ref": "#/$defs/LocalizedText"
+        },
+        "visible": {
+          "type": "boolean"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "$ref": "#/$defs/LocalizedText"
+            },
+            "images": {
+              "maxItems": 12,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Image"
+              }
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type",
+        "id",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    "Image": {
+      "type": "object",
+      "properties": {
+        "src": {
+          "$ref": "#/$defs/MediaPath"
+        },
+        "alt": {
+          "$ref": "#/$defs/LocalizedText"
+        }
+      },
+      "required": [
+        "src"
+      ],
+      "additionalProperties": false,
+      "description": "An image; without alt text it is decorative."
+    },
+    "ScheduleSection": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "schedule"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,39}$"
+        },
+        "title": {
+          "$ref": "#/$defs/LocalizedText"
+        },
+        "nav": {
+          "$ref": "#/$defs/LocalizedText"
+        },
+        "visible": {
+          "type": "boolean"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "items": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "time": {
+                    "type": "string",
+                    "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$"
+                  },
+                  "title": {
+                    "$ref": "#/$defs/LocalizedText"
+                  },
+                  "locationId": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9-]{0,39}$"
+                  },
+                  "note": {
+                    "$ref": "#/$defs/LocalizedText"
+                  }
+                },
+                "required": [
+                  "time",
+                  "title"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "items"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type",
+        "id",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    "LocationsSection": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "locations"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,39}$"
+        },
+        "title": {
+          "$ref": "#/$defs/LocalizedText"
+        },
+        "nav": {
+          "$ref": "#/$defs/LocalizedText"
+        },
+        "visible": {
+          "type": "boolean"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "cards": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9-]{0,39}$"
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "kind": {
+                    "$ref": "#/$defs/LocalizedText"
+                  },
+                  "address": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "lat": {
+                    "type": "number",
+                    "minimum": -90,
+                    "maximum": 90
+                  },
+                  "lng": {
+                    "type": "number",
+                    "minimum": -180,
+                    "maximum": 180
+                  },
+                  "note": {
+                    "$ref": "#/$defs/LocalizedText"
+                  }
+                },
+                "required": [
+                  "id",
+                  "name",
+                  "kind",
+                  "address",
+                  "lat",
+                  "lng"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "hotels": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "address": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "note": {
+                    "$ref": "#/$defs/LocalizedText"
+                  }
+                },
+                "required": [
+                  "name",
+                  "address"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "cards"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type",
+        "id",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    "WeddingPartySection": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "weddingParty"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,39}$"
+        },
+        "title": {
+          "$ref": "#/$defs/LocalizedText"
+        },
+        "nav": {
+          "$ref": "#/$defs/LocalizedText"
+        },
+        "visible": {
+          "type": "boolean"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "intro": {
+              "$ref": "#/$defs/LocalizedText"
+            },
+            "people": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "role": {
+                    "$ref": "#/$defs/LocalizedText"
+                  },
+                  "photo": {
+                    "$ref": "#/$defs/MediaPath"
+                  },
+                  "text": {
+                    "$ref": "#/$defs/LocalizedText"
+                  }
+                },
+                "required": [
+                  "name",
+                  "role",
+                  "text"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "people"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type",
+        "id",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    "DresscodeSection": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "dresscode"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,39}$"
+        },
+        "title": {
+          "$ref": "#/$defs/LocalizedText"
+        },
+        "nav": {
+          "$ref": "#/$defs/LocalizedText"
+        },
+        "visible": {
+          "type": "boolean"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "$ref": "#/$defs/LocalizedText"
+            },
+            "images": {
+              "maxItems": 12,
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Image"
+              }
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type",
+        "id",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    "MusicSection": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "music"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,39}$"
+        },
+        "title": {
+          "$ref": "#/$defs/LocalizedText"
+        },
+        "nav": {
+          "$ref": "#/$defs/LocalizedText"
+        },
+        "visible": {
+          "type": "boolean"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "$ref": "#/$defs/LocalizedText"
+            },
+            "link": {
+              "type": "object",
+              "properties": {
+                "url": {
+                  "type": "string",
+                  "format": "uri"
+                },
+                "label": {
+                  "$ref": "#/$defs/LocalizedText"
+                }
+              },
+              "required": [
+                "url"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type",
+        "id",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    "TextSection": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "text"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,39}$"
+        },
+        "title": {
+          "$ref": "#/$defs/LocalizedText"
+        },
+        "nav": {
+          "$ref": "#/$defs/LocalizedText"
+        },
+        "visible": {
+          "type": "boolean"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "$ref": "#/$defs/LocalizedText"
+            },
+            "image": {
+              "$ref": "#/$defs/Image"
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type",
+        "id",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    "FaqSection": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "faq"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,39}$"
+        },
+        "title": {
+          "$ref": "#/$defs/LocalizedText"
+        },
+        "nav": {
+          "$ref": "#/$defs/LocalizedText"
+        },
+        "visible": {
+          "type": "boolean"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "items": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "q": {
+                    "$ref": "#/$defs/LocalizedText"
+                  },
+                  "a": {
+                    "$ref": "#/$defs/LocalizedText"
+                  }
+                },
+                "required": [
+                  "q",
+                  "a"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "items"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type",
+        "id",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    "GiftsSection": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "gifts"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,39}$"
+        },
+        "title": {
+          "$ref": "#/$defs/LocalizedText"
+        },
+        "nav": {
+          "$ref": "#/$defs/LocalizedText"
+        },
+        "visible": {
+          "type": "boolean"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "$ref": "#/$defs/LocalizedText"
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type",
+        "id",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    "ContactSection": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "contact"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,39}$"
+        },
+        "title": {
+          "$ref": "#/$defs/LocalizedText"
+        },
+        "nav": {
+          "$ref": "#/$defs/LocalizedText"
+        },
+        "visible": {
+          "type": "boolean"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "intro": {
+              "$ref": "#/$defs/LocalizedText"
+            },
+            "people": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "phone": {
+                    "type": "string",
+                    "pattern": "^\\+?[0-9][0-9 ()/-]{3,}[0-9]$"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                  },
+                  "whatsapp": {
+                    "type": "string",
+                    "pattern": "^\\+[1-9][0-9 ]{5,}[0-9]$"
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "people"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type",
+        "id",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    "RsvpSection": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "rsvp"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,39}$"
+        },
+        "title": {
+          "$ref": "#/$defs/LocalizedText"
+        },
+        "nav": {
+          "$ref": "#/$defs/LocalizedText"
+        },
+        "visible": {
+          "type": "boolean"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "intro": {
+              "$ref": "#/$defs/LocalizedText"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "type",
+        "id",
+        "data"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

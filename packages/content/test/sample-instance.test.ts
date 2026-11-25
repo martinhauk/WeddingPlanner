@@ -14,6 +14,9 @@ describe('samples/instance (fictional sample)', () => {
   it('declares $schema with the raw GitHub URL of the generated JSON Schemas', async () => {
     expect((await json('instance.json')).$schema).toBe(`${SCHEMA_BASE}instance.schema.json`);
     expect((await json('site.json')).$schema).toBe(`${SCHEMA_BASE}site.schema.json`);
+    expect((await json('site-content.json')).$schema).toBe(
+      `${SCHEMA_BASE}site-content.schema.json`,
+    );
   });
 
   it('is marked as sample, with every flag on in e2e and test and off in production', async () => {
@@ -26,15 +29,25 @@ describe('samples/instance (fictional sample)', () => {
     });
   });
 
-  it('uses only example.com email addresses and far-future dates', async () => {
+  it('uses only example.com email and https addresses and far-future dates', async () => {
     const instance = await json('instance.json');
     const site = await json('site.json');
-    const text = JSON.stringify([instance, site]);
+    const siteContent = await json('site-content.json');
+    const text = JSON.stringify([instance, site, siteContent]);
+    for (const url of text.match(/https?:\/\/[^\s"]+/g) ?? []) {
+      expect(url).toMatch(
+        /^https:\/\/(?:example\.com\/|raw\.githubusercontent\.com\/martinhauk\/)/,
+      );
+    }
     for (const email of text.match(/[^\s"@]+@[^\s"]+/g) ?? []) {
       expect(email).toMatch(/@example\.com$/);
     }
     for (const year of text.match(/\b(?:19|20)\d\d-\d\d-\d\d/g) ?? []) {
       expect(Number(year.slice(0, 4))).toBeGreaterThanOrEqual(2090);
+    }
+    // Years in running text (e.g. an FAQ answer) are far-future, too.
+    for (const year of text.match(/\b(?:19|20)\d\d\b/g) ?? []) {
+      expect(Number(year)).toBeGreaterThanOrEqual(2090);
     }
   });
 
