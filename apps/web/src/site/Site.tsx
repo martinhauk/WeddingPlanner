@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { content as c, LANGS, type L, type Lang, type Location, ui } from './content.ts';
 import './site.css';
 
@@ -14,6 +14,23 @@ function initialLang(): Lang {
 export function Site() {
   const [lang, setLang] = useState<Lang>(initialLang);
   const [menu, setMenu] = useState(false);
+  const headerRef = useRef<HTMLElement>(null);
+  // Close the mobile menu on a tap/click outside the header and on Escape.
+  useEffect(() => {
+    if (!menu) return;
+    const onPointer = (e: PointerEvent) => {
+      if (headerRef.current && !headerRef.current.contains(e.target as Node)) setMenu(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenu(false);
+    };
+    document.addEventListener('pointerdown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [menu]);
   const t = (l: L) => l[lang];
   useEffect(() => {
     document.documentElement.lang = lang;
@@ -24,7 +41,7 @@ export function Site() {
 
   return (
     <>
-      <header className="nav">
+      <header className="nav" ref={headerRef}>
         <a className="brand" href="#top">{c.couple}</a>
         <button type="button" className="burger" aria-expanded={menu} aria-label="Menu" onClick={() => setMenu(!menu)}>
           <span /><span /><span />
