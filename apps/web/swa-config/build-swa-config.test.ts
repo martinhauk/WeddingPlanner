@@ -84,23 +84,15 @@ describe('buildSwaConfig: platform and auth', () => {
     }
   });
 
-  it('repeats the admin rules as `/…/*` for the local emulator, after the Azure rules', () => {
-    const index = (pattern: string) => normal.routes.findIndex(({ route }) => route === pattern);
-    expect(routeFor(normal, '/admin/*')).toEqual({
-      ...routeFor(normal, '/admin*'),
-      route: '/admin/*',
-    });
-    expect(routeFor(normal, '/api/admin/*')).toEqual({
-      route: '/api/admin/*',
-      allowedRoles: ['admin'],
-    });
-    expect(index('/admin/*')).toBeGreaterThan(index('/admin*'));
-    expect(index('/api/admin/*')).toBeGreaterThan(index('/api/admin*'));
+  it('has no admin routes shadowed by a wildcard (Azure rejects such configs)', () => {
+    const routes = normal.routes.map(({ route }) => route);
+    expect(routes).not.toContain('/admin/*');
+    expect(routes).not.toContain('/api/admin/*');
   });
 
   it('requires the role admin for every route that names admin', () => {
     const adminRoutes = normal.routes.filter(({ route }) => route.includes('admin'));
-    expect(adminRoutes).toHaveLength(4);
+    expect(adminRoutes).toHaveLength(2);
     for (const rule of adminRoutes) {
       expect(rule.allowedRoles).toEqual(['admin']);
     }
