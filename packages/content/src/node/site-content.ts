@@ -1,5 +1,5 @@
-import { eventDate } from '../privacy.ts';
 import { inlineProblems } from '../inline-text.ts';
+import { eventDate } from '../privacy.ts';
 import { collectLocalizedTexts, SITE_LANGUAGES } from '../schema/localizable.ts';
 import {
   RESERVED_SECTION_IDS,
