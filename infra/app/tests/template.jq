@@ -112,7 +112,7 @@ def group($name): {group: $name};
     [settings | .name] == ["[format('{0}/{1}', parameters('name'), 'appsettings')]"]),
   check("app settings are exactly the complete set"; settings.properties | keys == ([
     "Storage__ConnectionString", "APPLICATIONINSIGHTS_CONNECTION_STRING", "Features__Rsvp",
-    "Features__Admin", "Rsvp__Deadline", "Rsvp__TimeZone"] | sort)),
+    "Features__Admin", "Rsvp__Deadline", "Rsvp__TimeZone", "HealthProbe__Enabled"] | sort)),
   check("no app setting uses a prefix SWA reserves"; settings.properties | keys
     | map(ascii_upcase) | all(test("^(APPSETTING_|AZUREBLOBSTORAGE_|AZUREFILESSTORAGE_|AZURE_FUNCTION_|CONTAINER_|DIAGNOSTICS_|DOCKER_|FUNCTIONS_|IDENTITY_|MACHINEKEY_|MAINSITE_|MSDEPLOY_|SCMSITE_|SCM_|WEBSITES_|WEBSITE_|WEBSOCKET_|AZUREWEB)") | not)),
   check("no tag name SWA reserves"; .variables.tags | keys | map(ascii_downcase)
@@ -130,6 +130,10 @@ def group($name): {group: $name};
   check("feature flags are the strings true/false"; settings.properties
     | .Features__Rsvp == "[if(parameters('featuresRsvp'), 'true', 'false')]"
       and .Features__Admin == "[if(parameters('featuresAdmin'), 'true', 'false')]"),
+  check("HealthProbe__Enabled is the string true/false of its parameter";
+    settings.properties.HealthProbe__Enabled == "[if(parameters('healthProbeEnabled'), 'true', 'false')]"),
+  check("the probe is switched on for e2e only";
+    arg("app-infra-static-web-app"; "healthProbeEnabled") == "[equals(parameters('environmentName'), 'e2e')]"),
   check("Rsvp__Deadline and Rsvp__TimeZone from the parameters"; settings.properties
     | .Rsvp__Deadline == p("rsvpDeadline") and .Rsvp__TimeZone == p("rsvpTimeZone")),
   check("module receives flags, deadline and time zone from main";

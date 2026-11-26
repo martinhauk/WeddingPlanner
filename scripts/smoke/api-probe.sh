@@ -5,14 +5,18 @@
 #
 #   1. Cookie round trip (checks; any failure exits 1):
 #      - a first GET with an empty cookie jar answers 200 and sets exactly one wp_probe cookie with
-#        Max-Age=60, Path=/api/health, Secure, HttpOnly, SameSite=Strict, no Expires, no Domain and no
-#        other attribute; the API reports that it received no cookie;
+#        Max-Age=60, Path=/api/health, Secure, HttpOnly, SameSite=Strict, no Expires and no other
+#        attribute; a Domain attribute is accepted only when it equals the host of BASE_URL (the
+#        Static Web Apps proxy adds that one, ADR 0011); the API reports that it received no cookie;
 #      - the client stored the cookie, and a second GET with the same jar reports cookieReceived.
 #   2. Client-IP headers (report only): the forwarding headers that reach the API, the
 #      X-Forwarded-For hop count and the XFF position of each single-address header. A third GET then
 #      sends spoofed forwarding headers carrying the documentation address 192.0.2.1 (RFC 5737) and
 #      reports which headers pass a client-supplied value through, so they can never be trusted for
-#      rate limiting.
+#      rate limiting. Finally PROBE_REPEATS further GETs report, per address source, how many
+#      distinct values one caller saw: a source that changes from request to request (a proxy pool)
+#      or is the same for every caller cannot key a client either. Compare with a second network
+#      (for example IPv4 and IPv6) to tell a per-caller value from a shared one.
 #
 # Output: pass/fail lines, header names, counts and positions only. Never header values, IP
 # addresses, hostnames, cookies or BASE_URL. Read-only: GET requests only. The cookie jar lives in a
@@ -24,6 +28,8 @@
 #   BASE_URL       origin of the deployment, required and never printed. https only; plain http is
 #                  accepted for localhost (the local Functions host).
 #   PROBE_TIMEOUT  seconds per request (default 60, enough for a cold start)
+#   PROBE_REPEATS  requests of the stability report (default 5, 0 skips it)
+#   PROBE_CURL_OPTS  extra curl options, for example -4 or -6 to pin the address family
 #
 # Exit codes: 0 every check passed, 1 a check failed, 2 usage error or missing tool.
 #
@@ -41,7 +47,10 @@ CHECKS=0
 FAILURES=0
 TMP_DIR=""
 PROBE_URL=""
+PROBE_HOST=""
 TIMEOUT=""
+REPEATS=""
+CURL_OPTS=()
 
 usage() {
   sed -n '2,/^set -euo pipefail$/p' "$0" | sed -e '/^set -euo/d' -e 's/^# \{0,1\}//'
@@ -98,7 +107,7 @@ probe_get() {
   if ! status=$(curl --silent --max-time "$TIMEOUT" --proto '=https,http' \
     --header 'Accept: application/json' --header 'Cache-Control: no-cache' \
     --output "$body" --dump-header "$headers" --write-out '%{http_code}' \
-    "$@" "$PROBE_URL" 2>/dev/null); then
+    ${CURL_OPTS[@]+"${CURL_OPTS[@]}"} "$@" "$PROBE_URL" 2>/dev/null); then
     status="000"
   fi
   printf '%s' "$status"
@@ -136,7 +145,7 @@ probe_set_cookies() {
 check_cookie_attributes() {
   local header=$1
   local parts part name value index
-  local max_age="" path="" secure=false http_only=false same_site="" expires=false domain=false
+  local max_age="" path="" secure=false http_only=false same_site="" expires=false domain=""
   local unexpected=""
 
   IFS=';' read -r -a parts <<<"$header"
@@ -157,7 +166,7 @@ check_cookie_attributes() {
       httponly) http_only=true ;;
       samesite) same_site=$(lower "$value") ;;
       expires) expires=true ;;
-      domain) domain=true ;;
+      domain) domain=$(lower "${value#.}") ;;
       *)
         if printf '%s' "$name" | grep -Eq '^[a-z][a-z0-9-]{0,31}$'; then
           unexpected="${unexpected} ${name}"
@@ -174,7 +183,14 @@ check_cookie_attributes() {
   check "attribute HttpOnly" [ "$http_only" = true ]
   check "attribute SameSite=Strict" [ "$same_site" = "strict" ]
   check "no Expires attribute" [ "$expires" = false ]
-  check "no Domain attribute" [ "$domain" = false ]
+  # Never print the Domain value: it is the hostname.
+  if [ -z "$domain" ]; then
+    pass "no Domain attribute"
+  elif [ "$domain" = "$PROBE_HOST" ]; then
+    pass "Domain attribute equals the host (added by the platform)"
+  else
+    fail "Domain attribute differs from the host"
+  fi
   if [ -z "$unexpected" ]; then
     pass "no other attributes"
   else
@@ -259,6 +275,38 @@ report_spoofing() {
   ' "$body"
 }
 
+# Sends PROBE_REPEATS further GETs and reports, per address source (single-address headers and the
+# remote address), how many distinct values this one caller saw. Counts only, never a value.
+report_stability() {
+  local body=$1 headers=$2 seen=$3
+  local index=0 status sent=0
+  [ "$REPEATS" -gt 0 ] || return 0
+  : >"$seen"
+  while [ "$index" -lt "$REPEATS" ]; do
+    index=$((index + 1))
+    status=$(probe_get "$body" "$headers")
+    if is_status_200 "$status" && is_json_probe "$body"; then
+      sent=$((sent + 1))
+      jq -r --arg names "$SPOOF_HEADERS" '
+        . as $probe
+        | ($names | split(" ")[] | select(length > 0 and . != "x-forwarded-for" and . != "x-original-for")) as $name
+        | select($probe.forwardingHeaders[$name] != null)
+        | "\($name)\t\($probe.forwardingHeaders[$name] | sub(":[0-9]+$"; ""))",
+          (if $probe.remoteAddress == null then empty else "remote address\t\($probe.remoteAddress)" end)
+      ' "$body" >>"$seen"
+    fi
+  done
+
+  printf '\nAddress sources over %s further requests from this caller (distinct values, never the values):\n' "$sent"
+  if [ "$sent" -eq 0 ]; then
+    printf '  no request answered 200\n'
+    return 0
+  fi
+  sort -u "$seen" | awk -F '\t' '
+    { count[$1]++ }
+    END { for (name in count) printf "  %s: %d distinct\n", name, count[name] }' | sort
+}
+
 main() {
   case "${1:-}" in
     -h | --help)
@@ -280,10 +328,22 @@ main() {
     *) die "BASE_URL must start with https:// (plain http only for localhost)" ;;
   esac
   PROBE_URL="${base_url%/}/api/health/probe"
+  PROBE_HOST=${base_url#*://}
+  PROBE_HOST=${PROBE_HOST%%/*}
+  PROBE_HOST=$(lower "${PROBE_HOST%%:*}")
   TIMEOUT=${PROBE_TIMEOUT:-60}
   case "$TIMEOUT" in
     '' | *[!0-9]*) die "PROBE_TIMEOUT must be a whole number of seconds" ;;
   esac
+  REPEATS=${PROBE_REPEATS:-5}
+  case "$REPEATS" in
+    '' | *[!0-9]*) die "PROBE_REPEATS must be a whole number" ;;
+  esac
+  if [ -n "${PROBE_CURL_OPTS:-}" ]; then
+    # Word splitting is intended: the variable holds separate curl options.
+    # shellcheck disable=SC2206
+    CURL_OPTS=(${PROBE_CURL_OPTS})
+  fi
 
   TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/api-probe.XXXXXX")
   trap cleanup EXIT
@@ -298,7 +358,7 @@ main() {
   if ! is_status_200 "$status" || ! is_json_probe "$TMP_DIR/first.json"; then
     case "$status" in
       000) fail "first request reached the API (request failed or timed out)" ;;
-      404) fail "first response is a probe body (404: is Diagnostics__ProbeEnabled off?)" ;;
+      404) fail "first response is a probe body (404: the probe is off; HealthProbe__Enabled=true switches it on)" ;;
       *) fail "first response is a probe body" ;;
     esac
     printf '\nResult: fail (%s of %s checks failed)\n' "$FAILURES" "$CHECKS"
@@ -329,6 +389,7 @@ main() {
   fi
   report_forwarding_headers "$TMP_DIR/first.json"
   report_spoofing "$TMP_DIR/spoof.json" "$TMP_DIR/spoof.headers"
+  report_stability "$TMP_DIR/repeat.json" "$TMP_DIR/repeat.headers" "$TMP_DIR/seen.tsv"
 
   if [ "$FAILURES" -gt 0 ]; then
     printf '\nResult: fail (%s of %s checks failed)\n' "$FAILURES" "$CHECKS"
