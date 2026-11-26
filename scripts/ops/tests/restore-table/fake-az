@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Test double for the Azure CLI, used by scripts/ops/tests/restore-table/run.sh. No network.
+#
+#   FAKE_AZ_LOGGED_IN   "false" makes `account show` fail (not signed in)
+#   FAKE_AZ_ACCOUNTS    storage account names in the resource group, space separated
+#   FAKE_AZ_LIST_FAIL   "true" makes `storage account list` fail
+# Every call is appended to $FAKE_AZ_LOG as "az <arguments>".
+set -euo pipefail
+printf 'az %s\n' "$*" >>"${FAKE_AZ_LOG:?}"
+
+case "$1 $2" in
+  "account show")
+    [ "${FAKE_AZ_LOGGED_IN:-true}" = true ] || {
+      echo "ERROR: Please run 'az login' to setup account." >&2
+      exit 1
+    }
+    echo 11111111-1111-4111-8111-111111111111
+    ;;
+  "storage account")
+    [ "${FAKE_AZ_LIST_FAIL:-false}" = false ] || {
+      echo "ERROR: AuthorizationFailed" >&2
+      exit 1
+    }
+    query=""
+    while [ $# -gt 0 ]; do
+      if [ "$1" = "--query" ]; then query=$2; fi
+      shift
+    done
+    prefix=$(printf '%s' "$query" | sed -E "s/.*starts_with\(name, '([a-z]+)'\).*/\1/")
+    for name in ${FAKE_AZ_ACCOUNTS:-}; do
+      case "$name" in "$prefix"*) echo "$name" ;; esac
+    done
+    ;;
+  *)
+    echo "fake az: unsupported command: $*" >&2
+    exit 2
+    ;;
+esac

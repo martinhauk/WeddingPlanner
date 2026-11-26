@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Test double for `node tools/table-backup/src/cli.ts`, used by run.sh. Logs every call to
+# $FAKE_NODE_LOG ("node <arguments without the script path>") and prints a short line.
+#   FAKE_NODE_FAIL   a mode that exits 1: dry-run, restore, verify or list
+set -euo pipefail
+shift # the cli.ts path
+printf 'node %s\n' "$*" >>"${FAKE_NODE_LOG:?}"
+mode=$1
+if [ "$1" = restore ]; then
+  case " $* " in *" --dry-run "*) mode=dry-run ;; esac
+fi
+echo "fake table-backup $mode"
+[ "${FAKE_NODE_FAIL:-}" != "$mode" ] || exit 1

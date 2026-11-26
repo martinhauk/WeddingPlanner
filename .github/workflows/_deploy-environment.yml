@@ -5,16 +5,21 @@
 # -> get the instance: `sample` = samples/instance (e2e), `repo` = vars.INSTANCE_REPO fetched with
 # the read-only deploy key into $RUNNER_TEMP/instance, outside the workspace (test, production;
 # production: only commits on the instance repo's main) -> strict content validation -> derive the
-# Bicep parameters from instance.json environments.<env> -> OIDC login -> app infra -> build web
-# (bake + vite, DEPLOY_ENV = the environment) and API -> upload with a deploy token fetched at
-# runtime -> read-only smoke test (version.json SHA and content hash gate, home page, health ping).
+# Bicep parameters from instance.json environments.<env> -> OIDC login -> backup store
+# (infra/app/backup.bicep, additive) -> test/production: table backup BEFORE anything else changes
+# (a failed backup stops the deploy) -> app infra -> build web (bake + vite, DEPLOY_ENV = the
+# environment) and API -> upload with a deploy token fetched at runtime -> read-only smoke test
+# (version.json SHA and content hash gate, home page, health ping) -> e2e: restore drill (export,
+# restore into a temporary table prefix, compare counts and content hashes, delete the copies).
+# Backups go to the environment's own backup storage account, never to pipeline artifacts (this
+# repository is public). Runbook: docs/runbooks/backup-restore.md.
 #
 # Failure policy: a missing or invalid instance FAILS the job. There is no fallback to the sample,
 # and a repo instance that still says `"sample": true` is refused.
 #
 # Hygiene (deploy logs of this public repo are public):
-# - The deploy token, the SWA hostname, the instance repo name and the RSVP deadline and time zone
-#   are masked. The instance repo name is read in one step only (its header shows it once, so the
+# - The deploy token, the SWA hostname, the storage account names and keys, the instance repo name
+#   and the RSVP deadline and time zone are masked. Backups of real content log no row counts. The instance repo name is read in one step only (its header shows it once, so the
 #   name must stay neutral, see docs/runbooks/instance-repo.md); the Azure ids only in the login.
 # - The instance is fetched with quiet plain git (actions/checkout would print the private commit
 #   subject); the web build listing (it names every media file) is dropped for real content.
@@ -267,6 +272,42 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Deploy the backup store (additive; touches neither the app nor the data)
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          az deployment group create --name app-backup --resource-group "$AZURE_RESOURCE_GROUP" \
+            --parameters infra/app/backup.bicepparam -o none
+          account=$(az deployment group show --name app-backup --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.outputs.backupStorageAccountName.value -o tsv)
+          [ -n "$account" ] || { echo "::error::the backup store deployment has no account name"; exit 1; }
+          echo "::add-mask::$account"
+          echo "BACKUP_ACCOUNT=$account" >>"$GITHUB_ENV"
+
+      - name: Back up the tables (before anything changes the environment)
+        if: steps.gate.outputs.run == 'true' && inputs.environment != 'e2e'
+        run: |
+          # The data account is the one storage account named st... in the resource group (naming
+          # contract of infra/app/main.bicep). None yet = first deploy = nothing to back up, which
+          # still writes an empty manifest. Any error fails the step and stops the deploy.
+          accounts=$(az storage account list --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query "[?starts_with(name, 'st')].name" -o tsv)
+          count=$(printf '%s' "$accounts" | grep -c . || true)
+          if [ "$count" -gt 1 ]; then
+            echo "::error::more than one data storage account (st...) in the resource group"
+            exit 1
+          fi
+          from=(--no-source)
+          if [ "$count" -eq 1 ]; then
+            echo "::add-mask::$accounts"
+            from=(--tables-account "$accounts")
+          fi
+          node tools/table-backup/src/cli.ts export --label deploy --quiet "${from[@]}" \
+            --backup-account "$BACKUP_ACCOUNT" --json >"$RUNNER_TEMP/backup-manifest.json"
+          id=$(jq -er '.backupId' "$RUNNER_TEMP/backup-manifest.json")
+          rm -f "$RUNNER_TEMP/backup-manifest.json"
+          echo "### $DEPLOY_ENV pre-deploy backup" >>"$GITHUB_STEP_SUMMARY"
+          echo "- backup id: \`$id\`" >>"$GITHUB_STEP_SUMMARY"
+
       - name: Deploy app infrastructure
         if: steps.gate.outputs.run == 'true'
         run: |
@@ -275,10 +316,13 @@ jobs:
           out=$(az deployment group show --name app-infra --resource-group "$AZURE_RESOURCE_GROUP" \
             --query properties.outputs -o json)
           host=$(jq -r '.swaDefaultHostname.value' <<<"$out")
+          account=$(jq -r '.storageAccountName.value' <<<"$out")
           echo "::add-mask::$host"
+          echo "::add-mask::$account"
           {
             echo "SWA_NAME=$(jq -r '.swaName.value' <<<"$out")"
             echo "SWA_HOST=$host"
+            echo "DATA_ACCOUNT=$account"
           } >>"$GITHUB_ENV"
 
       - name: Set up .NET
@@ -423,3 +467,27 @@ jobs:
             echo "- commit: \`${DEPLOY_SHA:0:7}\`"
             if [ -n "$INSTANCE_SHA" ]; then echo "- instance commit: \`${INSTANCE_SHA:0:7}\`"; fi
           } >>"$GITHUB_STEP_SUMMARY"
+
+      # The OIDC token of the first login may have expired by now; a fresh login costs seconds.
+      - name: Azure login (OIDC, for the restore drill)
+        if: steps.gate.outputs.run == 'true' && inputs.environment == 'e2e'
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Restore drill (export, restore into a temporary prefix, compare, clean up)
+        if: steps.gate.outputs.run == 'true' && inputs.environment == 'e2e'
+        run: |
+          # e2e holds fictional data only. The drill writes temporary tables, which needs table
+          # write access: the deploy identity (Contributor) reads the account key at runtime,
+          # masked, instead of a new role assignment. Backups use Entra ID (the backup account
+          # has no keys). The canary rows cover every property type.
+          key=$(az storage account keys list --account-name "$DATA_ACCOUNT" \
+            --resource-group "$AZURE_RESOURCE_GROUP" --query '[0].value' -o tsv)
+          [ -n "$key" ] || { echo "::error::cannot read the e2e data account key"; exit 1; }
+          echo "::add-mask::$key"
+          TABLES_CONNECTION_STRING="DefaultEndpointsProtocol=https;AccountName=$DATA_ACCOUNT;AccountKey=$key;EndpointSuffix=core.windows.net" \
+            node tools/table-backup/src/cli.ts drill --canary --backup-account "$BACKUP_ACCOUNT"
+          echo "- restore drill: passed" >>"$GITHUB_STEP_SUMMARY"
