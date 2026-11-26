@@ -98,6 +98,19 @@ function codeOf(error: unknown): string {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * 'non-empty' as soon as any page holds a row. The Table service may return an empty page that
+ * still carries a continuation token, so the first page alone does not prove the table is empty.
+ */
+export async function stateOfPages(
+  pages: AsyncIterable<readonly unknown[]>,
+): Promise<'empty' | 'non-empty'> {
+  for await (const page of pages) {
+    if (page.length > 0) return 'non-empty';
+  }
+  return 'empty';
+}
+
 export class TableStore {
   readonly #service: TableServiceClient;
   readonly #client: (table: string) => TableClient;
@@ -137,9 +150,7 @@ export class TableStore {
 
   async state(table: string): Promise<'missing' | 'empty' | 'non-empty'> {
     try {
-      const pages = this.#client(table).listEntities().byPage({ maxPageSize: 1 });
-      const first = await pages.next();
-      return !first.done && first.value.length > 0 ? 'non-empty' : 'empty';
+      return await stateOfPages(this.#client(table).listEntities().byPage({ maxPageSize: 1 }));
     } catch (error) {
       if (statusOf(error) === 404) return 'missing';
       throw error;

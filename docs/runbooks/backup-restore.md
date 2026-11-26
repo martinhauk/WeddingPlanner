@@ -50,13 +50,17 @@ checks all three before it writes anything.
 
 ## Retention and protection
 
-| Protection                                    | Effect                                                                                   |
-| --------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Container immutability policy (WORM), 30 days | No backup blob can be overwritten or deleted for 30 days after it was written, by anyone |
-| Blob versioning, 30-day soft delete           | Deleted blobs and containers stay recoverable for 30 days after the WORM period          |
-| Lifecycle rule, 180 days                      | Backups (and their versions) are deleted 180 days after they were written                |
-| Entra ID only (shared key off)                | No account key or SAS can reach the backups                                              |
-| Delete lock on `rg-<slug>-<env>` (bootstrap)  | The account, container and policy cannot be deleted without removing the lock first      |
+| Protection                                    | Effect                                                                               |
+| --------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Container immutability policy (WORM), 30 days | No one can delete a backup blob or lose its content for 30 days after it was written |
+| Blob versioning, 30-day soft delete           | Deleted blobs and containers stay recoverable for 30 days after the WORM period      |
+| Lifecycle rule, 180 days                      | Backups (and their versions) are deleted 180 days after they were written            |
+| Entra ID only (shared key off)                | No account key or SAS can reach the backups                                          |
+| Delete lock on `rg-<slug>-<env>` (bootstrap)  | The account, container and policy cannot be deleted without removing the lock first  |
+
+Blob versioning is on, so an identity with blob write access could still write a new blob under
+an existing name: that adds a new current version and keeps the original as an earlier one. The
+tool never does that: every write is conditional (`If-None-Match: *`) and fails on an existing name.
 
 The immutability policy is **unlocked**, so you can still shorten or remove it if it gets in your way
 (Portal → backup account → Containers → `table-backups` → Access policy). Locking it is a one-way
@@ -111,6 +115,7 @@ bootstrap change.
    ```
 
    Inspect the copies (Azure Portal → Storage browser, or Azure Storage Explorer), then delete them.
+   They are ordinary tables: every later backup includes them until you do.
 
 3. Restore into the live tables. The restore **refuses tables that still hold rows**, so you never
    mix backup rows into live data by accident. Either empty the affected tables first (export a
@@ -123,7 +128,9 @@ bootstrap change.
    ```
 
    `--apply` asks you to type the environment name (`--yes` skips that for e2e and test only),
-   restores with upserts (safe to re-run) and verifies row counts and content hashes afterwards.
+   restores with upserts and verifies row counts and content hashes afterwards. To retry after a
+   partial restore, re-run with `--force`: the tables that already got rows now fail the guard, and
+   upserting the same backup again converges to the same rows.
 
 The tool can also run directly, e.g. against Azurite:
 `TABLES_CONNECTION_STRING=UseDevelopmentStorage=true BACKUP_CONNECTION_STRING=UseDevelopmentStorage=true

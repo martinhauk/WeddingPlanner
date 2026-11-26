@@ -242,6 +242,29 @@ describe.skipIf(!available)('table-backup against Azurite', () => {
     expect(withoutTimestamps(canary)).toEqual(canaryEntities());
   });
 
+  it('a failed drill reports its own error, not a cleanup error, and still cleans up', async () => {
+    class Failing extends TableStore {
+      override async upsertEntities(table: string, entities: readonly BackupEntity[]) {
+        if (table.startsWith('drill')) throw new Error('restore broke');
+        await super.upsertEntities(table, entities);
+      }
+      override async deleteTable(table: string) {
+        await super.deleteTable(table);
+        throw new Error('cleanup broke');
+      }
+    }
+    const lines: string[] = [];
+    await expect(
+      runDrill(new Failing({ connectionString: CONNECTION }), store, { tablePrefix: prefix }, (l) =>
+        lines.push(l),
+      ),
+    ).rejects.toThrow('restore broke');
+    const targets = lines.flatMap((l) => /-> (drill[0-9a-f]{8}\w+):/.exec(l)?.[1] ?? []);
+    expect(targets.length).toBeGreaterThan(0);
+    expect(lines.filter((l) => l.startsWith('could not delete'))).toHaveLength(targets.length);
+    for (const target of targets) expect(await tables.state(target)).toBe('missing');
+  });
+
   it('an environment without a data account gets an empty backup', async () => {
     const manifest = await exportBackup(
       undefined,

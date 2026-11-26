@@ -19,8 +19,9 @@
 #
 # Hygiene (deploy logs of this public repo are public):
 # - The deploy token, the SWA hostname, the storage account names and keys, the instance repo name
-#   and the RSVP deadline and time zone are masked. Backups of real content log no row counts. The instance repo name is read in one step only (its header shows it once, so the
-#   name must stay neutral, see docs/runbooks/instance-repo.md); the Azure ids only in the login.
+#   and the RSVP deadline and time zone are masked. Backups of real content log no row counts. The
+#   instance repo name is read in one step only (its header shows it once, so the name must stay
+#   neutral, see docs/runbooks/instance-repo.md); the Azure ids only in the login.
 # - The instance is fetched with quiet plain git (actions/checkout would print the private commit
 #   subject); the web build listing (it names every media file) is dropped for real content.
 # - `-o none` on deployments, no environment.url, and the job summary shows only commit SHAs.
@@ -275,6 +276,10 @@ jobs:
       - name: Deploy the backup store (additive; touches neither the app nor the data)
         if: steps.gate.outputs.run == 'true'
         run: |
+          # Get the storage token now, while the OIDC assertion of the login is fresh: the first
+          # creation of the backup account can take long enough for it to expire (AADSTS700024).
+          # The resource matches what the tool's AzureCliCredential asks for, so it hits this cache.
+          az account get-access-token --resource https://storage.azure.com -o none
           az deployment group create --name app-backup --resource-group "$AZURE_RESOURCE_GROUP" \
             --parameters infra/app/backup.bicepparam -o none
           account=$(az deployment group show --name app-backup --resource-group "$AZURE_RESOURCE_GROUP" \
