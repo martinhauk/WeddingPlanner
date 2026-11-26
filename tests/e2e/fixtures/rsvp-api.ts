@@ -20,6 +20,8 @@ export type RsvpView = {
   readonly people: readonly RsvpPerson[];
   readonly message?: string;
   readonly language: string;
+  /** Stored by the API whenever the reply carries dietary data (GDPR Art. 9 consent). */
+  readonly dietaryConsent?: boolean;
 };
 
 /** `GET /api/rsvp/status` without the limits. */
@@ -61,6 +63,7 @@ export const SAMPLE_YES_REPLY: RsvpView = {
   ],
   message: 'Wir freuen uns!',
   language: 'de',
+  dietaryConsent: true,
 };
 
 export type FakeRsvpApi = {
@@ -98,6 +101,7 @@ export function replyFromRequest(body: unknown, id: string): RsvpView {
     readonly people?: readonly RequestPerson[];
     readonly message?: unknown;
     readonly language?: unknown;
+    readonly dietaryConsent?: unknown;
   };
   const people = (request.people ?? []).map((person, index) => {
     const tags = Array.isArray(person.dietary?.tags) ? person.dietary.tags.map(String) : [];
@@ -118,6 +122,7 @@ export function replyFromRequest(body: unknown, id: string): RsvpView {
     people,
     ...(message === '' ? {} : { message }),
     language: typeof request.language === 'string' ? request.language : 'de',
+    ...(request.dietaryConsent === true ? { dietaryConsent: true } : {}),
   };
 }
 
