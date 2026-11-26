@@ -4,7 +4,6 @@
 // (`test/entry-purity.test.ts` enforces it), so the web bundle stays small. Re-export schema types
 // with `export type` only; validation and baking live in `@weddingplanner/content/node`.
 
-export { eventDate, privacyDeleteBy } from './privacy.ts';
 export {
   type InlinePart,
   isAllowedLinkUrl,
@@ -12,6 +11,7 @@ export {
   linkHref,
   parseInline,
 } from './inline-text.ts';
+export { eventDate, privacyDeleteBy } from './privacy.ts';
 export { type LanguageFallback, resolveText } from './resolve-text.ts';
 export type { BuildInfo, VersionInfo } from './schema/build.ts';
 export type {
