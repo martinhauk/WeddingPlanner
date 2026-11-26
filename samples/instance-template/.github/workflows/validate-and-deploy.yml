@@ -1,0 +1,114 @@
+# Copy to .github/workflows/validate-and-deploy.yml of the deployment's PRIVATE instance repo.
+# Setup and background: docs/runbooks/instance-repo.md in the public WeddingPlanner repo.
+#
+# - validate (every pull request and push): checks out this instance and the public app repo at
+#   main (the ref that gets deployed), validates the instance strictly, refuses `"sample": true`,
+#   and runs the full content build (bake + vite) for test and production.
+# - deploy (push to main, or a manual run on main): after validate, starts the app repo's deploy
+#   workflow for test, then production (production waits for the owner's approval), pinned to
+#   this commit of the instance repo.
+#
+# Needs the secret DEPLOY_DISPATCH_TOKEN: a fine-grained personal access token with access to the
+# app repo only and the repository permission "Actions: Read and write". Optional variable
+# APP_REPO (OWNER/NAME of the app repo, for forks).
+name: validate-and-deploy
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-and-deploy-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  APP_REPO: ${{ vars.APP_REPO || 'martinhauk/WeddingPlanner' }}
+
+jobs:
+  validate:
+    name: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the instance
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: instance
+          persist-credentials: false
+
+      - name: Check out the app repo (main)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ env.APP_REPO }}
+          ref: main
+          path: app
+          persist-credentials: false
+
+      - name: Install pnpm (app package.json#packageManager)
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          package_json_file: app/package.json
+
+      - name: Install Node.js (app .nvmrc)
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: app/.nvmrc
+          cache: pnpm
+          cache-dependency-path: app/pnpm-lock.yaml
+
+      - name: Install dependencies (frozen lockfile)
+        working-directory: app
+        run: pnpm install --frozen-lockfile
+
+      - name: Refuse the sample flag
+        run: |
+          jq -e '.sample != true' instance/instance.json >/dev/null || {
+            echo "::error::instance.json says \"sample\": true; remove it, deploys refuse sample content in test and production"
+            exit 1
+          }
+
+      - name: Validate the instance (strict)
+        working-directory: app
+        run: node packages/content/src/cli.ts validate "$GITHUB_WORKSPACE/instance" --strict
+
+      - name: Build the site for test and production (bake + vite)
+        working-directory: app
+        env:
+          INSTANCE_DIR: ${{ github.workspace }}/instance
+          SITE_URL: https://example.com
+          GIT_SHA: ${{ github.sha }}
+        run: |
+          for env in test production; do
+            echo "::group::build for $env"
+            DEPLOY_ENV=$env pnpm --filter @weddingplanner/web build
+            echo "::endgroup::"
+          done
+
+  deploy:
+    name: request deploy
+    needs: validate
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Start the app repo's deploy workflow (test, then production)
+        env:
+          GH_TOKEN: ${{ secrets.DEPLOY_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::secret DEPLOY_DISPATCH_TOKEN is missing (see docs/runbooks/instance-repo.md of the app repo)"
+            exit 1
+          fi
+          gh workflow run deploy.yml --repo "$APP_REPO" --ref main \
+            -f environment=test-and-production -f instance-ref="$GITHUB_SHA"
+          {
+            echo "### deploy requested"
+            echo "- instance commit: \`${GITHUB_SHA:0:7}\`"
+            echo "- environments: test, then production (after approval)"
+          } >>"$GITHUB_STEP_SUMMARY"
