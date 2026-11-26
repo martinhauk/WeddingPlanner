@@ -25,7 +25,7 @@ public sealed class AdminApiIntegrationTests
 
         (await harness.PostAsync()).Response.StatusCode.ShouldBe(StatusCodes.Status201Created);
         harness.Time.Advance(TimeSpan.FromMinutes(1));
-        var declined = new { attending = false, people = new[] { new { name = "=1+1" }, new { name = "Jürgen Müller" } }, language = "de", website = string.Empty };
+        var declined = new { attending = false, people = new[] { new { name = "=Ben+1" }, new { name = "Jürgen Müller" } }, language = "de", website = string.Empty };
         (await harness.PostAsync(declined)).Response.StatusCode.ShouldBe(StatusCodes.Status201Created);
 
         var list = TestHttp.ReadJson(await harness.AdminListAsync());
@@ -42,7 +42,7 @@ public sealed class AdminApiIntegrationTests
         bytes.Take(3).ShouldBe(new byte[] { 0xEF, 0xBB, 0xBF });
         var lines = Encoding.UTF8.GetString(bytes, 3, bytes.Length - 3).Split("\r\n");
         lines.Length.ShouldBe(6, "header, four people, trailing line end");
-        lines.ShouldContain(line => line.Contains("\"nein\";\"1\";\"'=1+1\"", StringComparison.Ordinal), "a formula name is neutralised");
+        lines.ShouldContain(line => line.Contains("\"nein\";\"1\";\"'=Ben+1\"", StringComparison.Ordinal), "a formula name is neutralised");
 
         var accepted = new { attending = true, people = new[] { new { name = "Jürgen Müller", dietary = new { tags = new[] { "vegan" } } } }, language = "de", website = string.Empty };
         var updated = await harness.AdminPutAsync(id, accepted, version);

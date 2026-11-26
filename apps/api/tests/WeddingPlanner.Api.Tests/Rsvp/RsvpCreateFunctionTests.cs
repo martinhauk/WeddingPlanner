@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Http;
 
 using Shouldly;
 
+using WeddingPlanner.Api.Features.Rsvp;
 using WeddingPlanner.Api.Tests.Support;
 
 using Xunit;
@@ -183,14 +184,123 @@ public sealed class RsvpCreateFunctionTests
     }
 
     [Fact]
-    public async Task RejectsAFilledHoneypotWithoutStoringAnything()
+    public async Task RejectsAFilledHoneypotGenericallyWithoutStoringAnything()
     {
         using var harness = new RsvpHarness();
         var body = new { attending = true, people = new[] { new { name = "Anna" } }, language = "de", website = "https://spam.example.com" };
 
         var httpContext = await harness.PostAsync(body);
 
-        ErrorCodes(httpContext).ShouldBe(["website:must_be_empty"]);
+        AssertSubmissionRejected(httpContext);
+        harness.Memory.Calls.ShouldBe(0);
+    }
+
+    [Theory]
+    [InlineData(0L)]
+    [InlineData(-5000L)]
+    [InlineData(2499L)]
+    public async Task RejectsAReplySentFasterThanTheMinimumFillTime(long elapsedMs)
+    {
+        using var harness = new RsvpHarness();
+
+        var httpContext = await harness.PostAsync(SampleBodyWith(elapsedMs: elapsedMs));
+
+        AssertSubmissionRejected(httpContext);
+        harness.Memory.Calls.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task RejectsAReplyWithoutElapsedMs()
+    {
+        using var harness = new RsvpHarness();
+
+        var httpContext = await harness.PostAsync(rawBody: """{"attending":false,"people":[{"name":"Anna"}],"language":"de","website":""}""");
+
+        AssertSubmissionRejected(httpContext);
+    }
+
+    [Fact]
+    public async Task AcceptsAReplyAtTheMinimumFillTime()
+    {
+        using var harness = new RsvpHarness();
+
+        var httpContext = await harness.PostAsync(SampleBodyWith(elapsedMs: RsvpOptions.DefaultMinSubmitMs));
+
+        httpContext.Response.StatusCode.ShouldBe(StatusCodes.Status201Created);
+    }
+
+    [Fact]
+    public async Task HonoursAConfiguredMinimumFillTime()
+    {
+        using var harness = new RsvpHarness(settings: new Dictionary<string, string?> { ["Rsvp:MinSubmitMs"] = "5000" });
+
+        AssertSubmissionRejected(await harness.PostAsync(SampleBodyWith(elapsedMs: 4999)));
+        (await harness.PostAsync(SampleBodyWith(elapsedMs: 5000))).Response.StatusCode.ShouldBe(StatusCodes.Status201Created);
+    }
+
+    [Fact]
+    public async Task AMinimumFillTimeOfZeroTurnsTheCheckOff()
+    {
+        using var harness = new RsvpHarness(settings: new Dictionary<string, string?> { ["Rsvp:MinSubmitMs"] = "0" });
+
+        var httpContext = await harness.PostAsync(rawBody: """{"attending":false,"people":[{"name":"Anna"}],"language":"de"}""");
+
+        httpContext.Response.StatusCode.ShouldBe(StatusCodes.Status201Created);
+    }
+
+    [Fact]
+    public async Task EveryRefusedSubmissionLooksTheSame()
+    {
+        using var harness = new RsvpHarness();
+
+        var honeypot = await harness.PostAsync(SampleBodyWith(website: "x"));
+        var tooFast = await harness.PostAsync(SampleBodyWith(elapsedMs: 100));
+        var both = await harness.PostAsync(SampleBodyWith(elapsedMs: 100, website: "x"));
+
+        var bodies = new[] { honeypot, tooFast, both }.Select(TestHttp.ReadBody).ToList();
+        bodies.Distinct().ShouldHaveSingleItem().ShouldNotContain("website");
+        bodies[0].ShouldNotContain("elapsed", Case.Insensitive);
+        harness.Logs.Records.ShouldBeEmpty("refused submissions are not logged");
+    }
+
+    [Fact]
+    public async Task RefusesASubmissionBeforeValidatingIt()
+    {
+        using var harness = new RsvpHarness();
+        var body = new { attending = true, people = new[] { new { name = "x" } }, language = "de", website = "https://spam.example.com" };
+
+        AssertSubmissionRejected(await harness.PostAsync(body));
+    }
+
+    [Fact]
+    public async Task ReportsTheNameRulesAsFieldErrors()
+    {
+        using var harness = new RsvpHarness();
+        var body = new
+        {
+            attending = false,
+            people = new[]
+            {
+                new { name = "A" },
+                new { name = "1234" },
+                new { name = "anna@example.com" },
+                new { name = "https://example.com" },
+                new { name = "Pablo Pérez" },
+                new { name = "PABLO PEREZ" },
+            },
+            language = "de",
+        };
+
+        var httpContext = await harness.PostAsync(body);
+
+        ErrorCodes(httpContext).ShouldBe(
+        [
+            "people[0].name:too_short",
+            "people[1].name:invalid",
+            "people[2].name:invalid",
+            "people[3].name:invalid",
+            "people[5].name:duplicate",
+        ]);
         harness.Memory.Calls.ShouldBe(0);
     }
 
@@ -226,6 +336,19 @@ public sealed class RsvpCreateFunctionTests
         harness.Time.Advance(TimeSpan.FromMinutes(1));
         (await harness.PostAsync()).Response.StatusCode.ShouldBe(StatusCodes.Status503ServiceUnavailable);
         CapacityWarnings(harness).ShouldBe(2, "an hour later the cap is reported again");
+    }
+
+    [Fact]
+    public async Task TheCapacityWarningCarriesAStableEventNameForAlerts()
+    {
+        using var harness = new RsvpHarness(settings: new Dictionary<string, string?> { ["Rsvp:MaxActiveRsvps"] = "1" });
+        (await harness.PostAsync()).Response.StatusCode.ShouldBe(StatusCodes.Status201Created);
+
+        (await harness.PostAsync()).Response.StatusCode.ShouldBe(StatusCodes.Status503ServiceUnavailable);
+
+        var warning = harness.Logs.Records.ShouldHaveSingleItem();
+        warning.ShouldStartWith($"Warning {typeof(RsvpCreateFunction).FullName} RsvpCapacityReached: RsvpCapacityReached: RSVP capacity of 1 replies reached");
+        warning.ShouldContain("MaxActiveRsvps=1");
     }
 
     [Fact]
@@ -319,7 +442,7 @@ public sealed class RsvpCreateFunctionTests
         var name = field == "name" ? $"Anna{bad}" : "Anna";
         var note = field == "note" ? $"Ohne{bad} Nüsse" : "Ohne Nüsse";
         var message = field == "message" ? $"Hallo{bad} Ben" : "Hallo Ben";
-        var rawBody = $$$"""{"attending":true,"people":[{"name":"{{{name}}}","dietary":{"tags":["vegan"],"note":"{{{note}}}"}}],"message":"{{{message}}}","language":"de","dietaryConsent":true}""";
+        var rawBody = $$$"""{"attending":true,"people":[{"name":"{{{name}}}","dietary":{"tags":["vegan"],"note":"{{{note}}}"}}],"message":"{{{message}}}","language":"de","dietaryConsent":true,"elapsedMs":15000}""";
 
         var httpContext = await harness.PostAsync(rawBody: rawBody);
 
@@ -375,4 +498,23 @@ public sealed class RsvpCreateFunctionTests
 
     private static int CapacityWarnings(RsvpHarness harness) =>
         harness.Logs.Records.Count(record => record.StartsWith("Warning", StringComparison.Ordinal) && record.Contains("RSVP capacity", StringComparison.Ordinal));
+
+    private static void AssertSubmissionRejected(HttpContext httpContext)
+    {
+        httpContext.Response.StatusCode.ShouldBe(StatusCodes.Status400BadRequest);
+        var problem = Problem(httpContext);
+        problem.GetProperty("code").GetString().ShouldBe("submission_rejected");
+        problem.TryGetProperty("errors", out _).ShouldBeFalse("the refusal does not say which check failed");
+        problem.TryGetProperty("detail", out _).ShouldBeFalse();
+        TestHttp.SetCookies(httpContext).ShouldBeEmpty();
+    }
+
+    private static object SampleBodyWith(long elapsedMs = RsvpHarness.HumanElapsedMs, string website = "") => new
+    {
+        attending = false,
+        people = new[] { new { name = "Pablo Pérez" } },
+        language = "es",
+        website,
+        elapsedMs,
+    };
 }

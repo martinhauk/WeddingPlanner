@@ -32,6 +32,26 @@ public sealed class RsvpSettingsTests
         settings.Limits.MaxPeople.ShouldBe(6);
         settings.MaxActiveRsvps.ShouldBe(300);
         settings.CookieLifetime.ShouldBe(TimeSpan.FromDays(365));
+        settings.MinSubmitTime.ShouldBe(TimeSpan.FromMilliseconds(2500));
+    }
+
+    [Theory]
+    [InlineData("-1")]
+    [InlineData("60001")]
+    [InlineData("3s")]
+    [InlineData("")]
+    public void KeepsTheDefaultMinimumFillTimeForAnInvalidSetting(string value)
+    {
+        Resolve(new() { ["Rsvp:MinSubmitMs"] = value }).MinSubmitTime.ShouldBe(TimeSpan.FromMilliseconds(RsvpOptions.DefaultMinSubmitMs));
+    }
+
+    [Theory]
+    [InlineData("0", 0)]
+    [InlineData("4000", 4000)]
+    [InlineData("60000", 60000)]
+    public void ReadsTheMinimumFillTime(string value, int expectedMs)
+    {
+        Resolve(new() { ["Rsvp:MinSubmitMs"] = value }).MinSubmitTime.ShouldBe(TimeSpan.FromMilliseconds(expectedMs));
     }
 
     [Fact]

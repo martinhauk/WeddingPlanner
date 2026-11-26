@@ -94,6 +94,11 @@ public sealed class RsvpMineFunctions(IRsvpRepository repository, RsvpSettings s
             return bodyProblem;
         }
 
+        if (RsvpSubmissionGuard.RejectsUpdate(input))
+        {
+            return RsvpSubmissionGuard.Rejected();
+        }
+
         var validation = RsvpValidator.Validate(input.ToDraft(), settings.Limits);
         if (validation.Answer is not { } answer)
         {
