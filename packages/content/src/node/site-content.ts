@@ -1,3 +1,4 @@
+import { eventDate } from '../privacy.ts';
 import { collectLocalizedTexts, SITE_LANGUAGES } from '../schema/localizable.ts';
 import {
   RESERVED_SECTION_IDS,
@@ -43,6 +44,7 @@ export function checkSiteContent(value: unknown, mediaIds: ReadonlySet<string>):
     ...checkIds(content),
     ...checkLocationReferences(content),
     ...checkMedia(content, mediaIds),
+    ...checkPrivacy(content),
   ];
   for (const { path, text } of findLocalizedTexts(content, texts)) {
     for (const language of SITE_LANGUAGES) {
@@ -159,6 +161,47 @@ function checkLocationReferences(content: SiteContent): Diagnostic[] {
       }
     });
   });
+  return diagnostics;
+}
+
+/**
+ * The privacy notice needs the controllers and a contact address before guests can reply; without
+ * them the page shows only the generic text (a warning, so a draft still builds). Data must not be
+ * deleted before the wedding.
+ */
+function checkPrivacy(content: SiteContent): Diagnostic[] {
+  const { privacy } = content;
+  if (privacy === undefined) {
+    return [
+      warning(
+        'W_PRIVACY_MISSING',
+        SITE_CONTENT_FILE,
+        jsonPath(['privacy']),
+        'no privacy notice details: add the controllers and a contact email before RSVP goes live',
+      ),
+    ];
+  }
+  const diagnostics: Diagnostic[] = [];
+  if (privacy.email === undefined) {
+    diagnostics.push(
+      warning(
+        'W_PRIVACY_EMAIL',
+        SITE_CONTENT_FILE,
+        jsonPath(['privacy', 'email']),
+        'no contact email for privacy requests: add one before RSVP goes live',
+      ),
+    );
+  }
+  if (privacy.deleteBy !== undefined && privacy.deleteBy <= eventDate(content.event)) {
+    diagnostics.push(
+      error(
+        'E_PRIVACY_DELETE_BY',
+        SITE_CONTENT_FILE,
+        jsonPath(['privacy', 'deleteBy']),
+        'must be after the wedding',
+      ),
+    );
+  }
   return diagnostics;
 }
 

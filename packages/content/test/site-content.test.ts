@@ -176,6 +176,43 @@ describe('site-content.json: semantic checks', () => {
     expect(strict.ok).toBe(true);
   });
 
+  it('warns (never fails) without privacy details or a privacy contact email', async () => {
+    expect(await diagnosticsFor(unset('site-content.json', ['privacy']))).toEqual([
+      'warning W_PRIVACY_MISSING $.privacy',
+    ]);
+    expect(await diagnosticsFor(unset('site-content.json', ['privacy', 'email']))).toEqual([
+      'warning W_PRIVACY_EMAIL $.privacy.email',
+    ]);
+    const strict = await validate(await sampleWith(unset('site-content.json', ['privacy'])), {
+      strict: true,
+    });
+    expect(strict.ok).toBe(true);
+  });
+
+  it('rejects a privacy deletion date on or before the wedding', async () => {
+    // The sample wedding is on 2099-06-20.
+    expect(await diagnosticsFor(content(['privacy', 'deleteBy'], '2099-06-20'))).toEqual([
+      'error E_PRIVACY_DELETE_BY $.privacy.deleteBy',
+    ]);
+    expect(await diagnosticsFor(content(['privacy', 'deleteBy'], '2099-06-21'))).toEqual([]);
+  });
+
+  it('checks the privacy fields: controllers, email, date, no unknown keys', async () => {
+    expect(
+      await diagnosticsFor(
+        content(['privacy', 'controllers'], []),
+        content(['privacy', 'email'], 'not-an-address'),
+        content(['privacy', 'deleteBy'], '30.09.2099'),
+        content(['privacy', 'phone'], '+49 151 00000000'),
+      ),
+    ).toEqual([
+      'error E_SCHEMA $.privacy.controllers',
+      'error E_EMAIL $.privacy.email',
+      'error E_DATE $.privacy.deleteBy',
+      'error E_UNKNOWN_KEY $.privacy.phone',
+    ]);
+  });
+
   it('reports a missing file', async () => {
     const dir = await sampleWith();
     await rm(path.join(dir, 'site-content.json'));
@@ -211,6 +248,7 @@ describe('checkSiteContent', () => {
     expect(siteContentSchema.safeParse(minimal).success).toBe(true);
     const { diagnostics } = checkSiteContent(minimal, new Set());
     expect(diagnostics.map(brief)).toEqual([
+      'warning W_PRIVACY_MISSING $.privacy',
       'warning W_I18N_FALLBACK $.couple.en',
       'warning W_I18N_FALLBACK $.couple.es',
       'warning W_I18N_FALLBACK $.tagline.en',

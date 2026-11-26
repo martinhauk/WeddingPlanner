@@ -16,6 +16,11 @@ export const buildInfoSchema = z.strictObject({
   rsvpDeadline: z.iso.datetime(),
   /** IANA zone in which the deadline is shown. */
   rsvpTimeZone: z.string(),
+  /**
+   * Azure regions (`instance.json` `swaLocation`, `dataLocation`): where the site and API run and
+   * where guest data is stored. The privacy notice names them.
+   */
+  regions: z.strictObject({ app: z.string().min(1), data: z.string().min(1) }),
 });
 
 export type BuildInfo = z.infer<typeof buildInfoSchema>;

@@ -177,12 +177,54 @@ const partyMember = z.strictObject({
   text: localizedTextSchema,
 });
 
+const emailSchema = z.email({ error: coded('E_EMAIL', 'must be an email address') });
+
+const isoDateSchema = z.iso.date({
+  error: coded('E_DATE', 'must be an ISO date, e.g. 2099-05-01'),
+});
+
 const contactPerson = z.strictObject({
   name: nonEmptyStringSchema,
   phone: phoneSchema.optional(),
-  email: z.email({ error: coded('E_EMAIL', 'must be an email address') }).optional(),
+  email: emailSchema.optional(),
   /** Number for a WhatsApp chat link (wa.me), international format. */
   whatsapp: whatsappSchema.optional(),
+});
+
+/**
+ * The privacy notice (`/datenschutz`, alias `/privacy`). The page brings the generic text in every
+ * site language: what is stored and why, the legal bases, the processors, cookies, how long data is
+ * kept and the guests' rights. The instance adds who is responsible and how to reach them.
+ */
+export const privacySchema = z.strictObject({
+  /** The people responsible for the guests' data (GDPR controllers), usually the couple. */
+  controllers: z
+    .array(
+      z.strictObject({
+        name: nonEmptyStringSchema,
+        /** Optional postal address; a line break separates lines. */
+        address: nonEmptyStringSchema.optional(),
+      }),
+    )
+    .min(1)
+    .max(4),
+  /** Where guests send privacy requests (access, erasure, withdrawing consent). */
+  email: emailSchema.optional(),
+  /**
+   * The day on which all guest data is deleted (ISO date, after the wedding). Default: the last day
+   * of the third month after the wedding.
+   */
+  deleteBy: isoDateSchema.optional(),
+  /** Extra paragraphs after the built-in text, e.g. about photos taken at the wedding. */
+  extra: z
+    .array(z.strictObject({ title: localizedTextSchema.optional(), text: localizedTextSchema }))
+    .max(10)
+    .optional(),
+  /**
+   * Imprint (Impressum) text. A private, non-commercial site needs none (the page says so); set it
+   * to publish one anyway.
+   */
+  imprint: localizedTextSchema.optional(),
 });
 
 function section<const T extends string, D extends z.ZodType>(type: T, data: D) {
@@ -268,17 +310,18 @@ export const siteContentSchema = z.strictObject({
    * RSVP deadline as shown to guests (ISO date). Display only: the API enforces `instance.json`
    * `rsvp.deadline`, which the page shows when this is absent.
    */
-  rsvpDeadline: z.iso
-    .date({ error: coded('E_DATE', 'must be an ISO date, e.g. 2099-05-01') })
-    .optional(),
+  rsvpDeadline: isoDateSchema.optional(),
   theme: themeSchema,
   hero: z.strictObject({ image: mediaPathSchema.optional() }),
   /** Rendered in this order; the navigation lists the visible ones. */
   sections: z.array(sectionSchema).min(1),
+  /** Controllers, contact and retention of the privacy notice; required before RSVP goes live. */
+  privacy: privacySchema.optional(),
 });
 
 export type SiteContent = z.infer<typeof siteContentSchema>;
 export type SiteTheme = z.infer<typeof themeSchema>;
+export type SitePrivacy = z.infer<typeof privacySchema>;
 export type ContentImage = z.infer<typeof imageSchema>;
 export type Section = z.infer<typeof sectionSchema>;
 export type SectionType = Section['type'];

@@ -73,6 +73,12 @@ fails while the committed files are out of date. Never edit them by hand.
   Media are paths inside `media/` (`hero.png`); the images the published content uses are
   published under `/media/` (`publishedMedia`). `validate` also checks
   unique section ids, schedule → location references and that referenced media exist.
+  `privacy?` feeds the privacy notice (`/datenschutz`): `controllers[] {name, address?}`, `email?`
+  (contact for privacy requests), `deleteBy?` (ISO date after the wedding; default
+  `privacyDeleteBy`: the last day of the third month after it), `extra[]? {title?, text}` and
+  `imprint?`. A missing `privacy` block or email is a warning (`W_PRIVACY_MISSING`,
+  `W_PRIVACY_EMAIL`): fill both before RSVP goes live. The built-in notice text lives in the web
+  app (`apps/web/src/site/privacy/`).
 - All three are strict (unknown keys are errors) and accept an optional `$schema`.
 
 The fictional sample lives in [`samples/instance/`](../../samples/instance). Its placeholder images

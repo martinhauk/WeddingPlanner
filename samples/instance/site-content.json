@@ -295,5 +295,22 @@
         }
       }
     }
-  ]
+  ],
+  "privacy": {
+    "controllers": [
+      { "name": "Anna", "address": "Beispielweg 1\n99999 Musterstadt" },
+      { "name": "Ben", "address": "Beispielweg 1\n99999 Musterstadt" }
+    ],
+    "email": "anna@example.com",
+    "extra": [
+      {
+        "title": { "de": "Fotos", "en": "Photos", "es": "Fotos" },
+        "text": {
+          "de": "Auf der Feier wird fotografiert. Wenn ihr nicht auf Fotos sein möchtet, sagt es uns oder dem Fotografen einfach.",
+          "en": "Photos will be taken at the party. If you'd rather not be in them, just tell us or the photographer.",
+          "es": "En la fiesta se harán fotos. Si preferís no salir en ellas, decídnoslo a nosotros o al fotógrafo."
+        }
+      }
+    ]
+  }
 }
