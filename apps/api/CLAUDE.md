@@ -22,6 +22,7 @@ Run from the repo root.
 | `dotnet format WeddingPlanner.slnx` / `… --verify-no-changes`                                     | Apply / check formatting and code style (CI gate)                           |
 | `dotnet publish apps/api/src/WeddingPlanner.Api -c Release -o dist/api -p:SourceRevisionId=<sha>` | Deployable output (`host.json`, `functions.metadata`, `worker.config.json`) |
 | `pnpm storage:up` / `pnpm storage:down`                                                           | Start (waits until healthy) / stop Azurite via `docker-compose.yml`         |
+| `pnpm dev:api`                                                                                    | Run the API locally on http://localhost:7071 (`pnpm dev`: the whole stack)  |
 
 Tests run on **Microsoft.Testing.Platform** (`global.json` → `test.runner`; xUnit v3 with Shouldly).
 `--filter` takes the VSTest filter syntax; the xUnit-native `--filter-not-trait "Category=Integration"`
@@ -29,14 +30,19 @@ works too. For coverage, VSTest data collectors such as `coverlet.collector` do 
 MTP extension instead (`Microsoft.Testing.Extensions.CodeCoverage` with `dotnet test --coverage`, or
 `coverlet.MTP`), pinned in `Directory.Packages.props` by the task that adds it.
 
-Running the API locally until S0-11 wires `pnpm dev:api`: copy
-`src/WeddingPlanner.Api/local.settings.sample.json` to `local.settings.json` (gitignored), then run
-`func start` in `src/WeddingPlanner.Api/` (Azure Functions Core Tools v4) and open
-`http://localhost:7071/api/health`. The sample switches every feature on and points storage at Azurite.
-Keep `Rsvp__Deadline` there in the space form (`2099-05-01 23:59:00+02:00`): Core Tools rewrites
-`T`-separated date strings from `local.settings.json` into culture-formatted dates before the worker sees
-them (verified with Core Tools 4.17), which leaves the RSVP API `not_configured`. Add
+**Running the API locally:** `pnpm dev` runs Azurite, the Functions host and the web app with its
+`/api` proxy; `pnpm dev:api` runs only the host. It copies
+`src/WeddingPlanner.Api/local.settings.sample.json` to `local.settings.json` (gitignored) when that
+file is missing, then runs `func start --port 7071` in `src/WeddingPlanner.Api/` (Azure Functions Core
+Tools v4, which builds the project first); open `http://localhost:7071/api/health`. The sample
+switches every feature on and points storage at Azurite; it holds no secrets, so keep it that way.
+Delete `local.settings.json` to pick up a changed sample. Keep `Rsvp__Deadline` there in the space
+form (`2099-05-01 23:59:00+02:00`): Core Tools rewrites `T`-separated date strings from
+`local.settings.json` into culture-formatted dates before the worker sees them (verified with Core
+Tools 4.17), which leaves the RSVP API `not_configured`. Add
 `"Storage__TablePrefix": "<letters and digits>"` to keep a local run's tables apart in a shared Azurite.
+`pnpm dev:swa` puts the SWA CLI emulator in front, which forwards `x-ms-client-principal` after its
+mock sign-in. Details: [`docs/local-development.md`](../../docs/local-development.md).
 
 ## Layout and ownership
 
@@ -182,10 +188,10 @@ duplicate members rejected) and need no MVC services, so middleware can write th
   (default `UseDevelopmentStorage=true`), refuse non-loopback endpoints, use a random table prefix per
   run (`Azurite.NewTablePrefix()`) and delete their tables. Without Azurite they fail within seconds
   with "Azurite is not reachable. Start it with `pnpm storage:up` …".
-- Parallel worktrees share one Azurite on the fixed ports. Because the data directory is bound from the
-  checkout that started it, running `pnpm storage:up` from a **second** worktree recreates the
-  container with that worktree's `.azurite/` (a short restart). If Azurite is already healthy, just
-  run the tests. (S0-11 may switch to a named volume.)
+- Parallel worktrees share one Azurite on the fixed ports. `pnpm storage:up` passes `--no-recreate`,
+  so from a second worktree it reuses the running container as it is (the data stays in the
+  `.azurite/` of the checkout that created it). After a change to `docker-compose.yml`, run
+  `pnpm storage:down` and `pnpm storage:up` to recreate it.
 
 ## Known platform constraints
 

@@ -31,7 +31,8 @@ tools/                    developer tools (e.g. content import into a local inst
 samples/instance/         the complete fictional sample instance (Anna & Ben)
 infra/                    Bicep: bootstrap/ (owner-run, subscription scope), app/ (CI-run, RG scope)
 scripts/                  owner-run scripts: bootstrap, github/, ops/, instance/
-docs/                     architecture.md, conventions/, adr/, runbooks/
+docs/                     architecture.md, local-development.md, api.md, conventions/, adr/,
+                          runbooks/
 .github/                  workflows, PR and issue templates, CODEOWNERS
 ```
 
@@ -52,11 +53,13 @@ Tools v4, and a Docker engine (Docker Desktop or OrbStack).
 | `pnpm typecheck`                                        | `tsc --noEmit` in every workspace package                                             |
 | `pnpm test`                                             | Unit tests (Vitest) in every package except `@weddingplanner/e2e`                     |
 | `pnpm build`                                            | Build every package that has a `build` script                                         |
-| `pnpm dev`                                              | Local stack (web + API); `pnpm dev:web` / `pnpm dev:api` start one side               |
-| `pnpm storage:up` / `pnpm storage:down`                 | Start / stop Azurite via `docker compose` (`--wait` until healthy)                    |
+| `pnpm dev`                                              | Local stack: Azurite, Functions host (:7071), Vite (:5173, proxies `/api`)            |
+| `pnpm dev:swa`                                          | The same plus the SWA CLI emulator on :4280 (edge routes, mock admin sign-in)         |
+| `pnpm dev:web` / `pnpm dev:api`                         | Only Vite (after the bake) / only the Functions host                                  |
+| `pnpm storage:up` / `pnpm storage:down`                 | Start (waits until healthy, reuses a running one) / stop Azurite via `docker compose` |
 | `pnpm e2e`                                              | Playwright suite (`@weddingplanner/e2e`)                                              |
 | `pnpm smoke`                                            | Read-only smoke suite against `BASE_URL`                                              |
-| `pnpm content:validate <instanceDir> [--strict]`        | Validate an instance (`instance.json`, `site.json`, media)                            |
+| `pnpm content:validate <instanceDir> [--strict]`        | Validate an instance (`instance.json`, `site.json`, `site-content.json`, media)       |
 | `pnpm content:bake`                                     | Bake `INSTANCE_DIR` (default `samples/instance`) for `DEPLOY_ENV` into the web app    |
 | `dotnet build WeddingPlanner.slnx -c Release`           | Build the API and Domain (warnings are errors)                                        |
 | `dotnet test WeddingPlanner.slnx`                       | xUnit tests; integration tests need `pnpm storage:up`                                 |
@@ -70,12 +73,17 @@ shellcheck.
 **Script contracts.** The root scripts delegate to workspace packages, so packages must provide:
 
 - every TS package: `typecheck` (`tsc --noEmit`), plus `test` and `build` where applicable;
-- `@weddingplanner/web`: `dev`; `@weddingplanner/api` (a thin `apps/api/package.json`, or S0-11
-  changes the `dev:api` line): `dev`;
+- `@weddingplanner/web`: `dev`; there is no `@weddingplanner/api` package: `dev:api` copies
+  `local.settings.sample.json` to `local.settings.json` when missing and runs
+  `func start --port 7071` in `apps/api/src/WeddingPlanner.Api/`;
 - `@weddingplanner/e2e`: `test` (excluded from `pnpm test`), `smoke`, `test:pr`, `screenshots:index`;
 - `@weddingplanner/content`: the CLI `packages/content/src/cli.ts` with the subcommands `validate`
   and `bake` (run by plain `node` from the repo root);
-- `docker-compose.yml` at the repo root with the Azurite service and a healthcheck.
+- `docker-compose.yml` at the repo root with the Azurite service and a healthcheck;
+- `swa-cli.config.json` at the repo root (configuration `weddingplanner`) for `pnpm dev:swa`.
+
+Local stack details (ports, proxy, mock admin sign-in, troubleshooting):
+[`docs/local-development.md`](docs/local-development.md).
 
 ## Workflow: issue → branch → PR → merge
 
@@ -153,7 +161,8 @@ Full text: [`docs/conventions/repo-hygiene.md`](docs/conventions/repo-hygiene.md
   accepts them on `test`. See [`docs/conventions/feature-flags.md`](docs/conventions/feature-flags.md).
 - Every app setting has a code default; a missing setting may only disable the feature that needs it.
 - No dependency without a reason (state it in the PR). Versions are pinned exactly.
-- The home page calls no API except the `GET /api/health` keep-warm ping.
+- On page load the home page calls no API except the `GET /api/health` keep-warm ping; the RSVP
+  section calls the RSVP API only once it nears the viewport or a button is pressed.
 - pnpm comes from Homebrew or npm, not corepack. Docker may be OrbStack: use the active docker
   context and never hard-code `/var/run/docker.sock`.
 
