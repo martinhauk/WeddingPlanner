@@ -55,8 +55,9 @@ instance, with the API mocked from contract fixtures.
   with mocked auth and data. CI publishes them as the `screenshots-<sha>` artifact with an
   `index.html` contact sheet. Visual diffing is informational, not blocking.
 - **Guards:** a network guard fails any request outside the app (OpenStreetMap tiles are mocked);
-  axe fails on serious or critical accessibility findings; the home page may call no API except
-  `GET /api/health`.
+  axe fails on serious or critical accessibility findings; on page load the home page may call no
+  API except `GET /api/health`, and `/api/rsvp*` only once the RSVP section nears the viewport or a
+  button is pressed.
 - **Smoke tests** (`pnpm smoke`) run against deployed environments and are strictly **read-only**:
   no POST, PUT or DELETE, no screenshots, videos or traces, no hostnames in the output.
 - **Write-path tests** (`*.e2e-env.spec.ts`) run only against the `e2e` environment, which has its

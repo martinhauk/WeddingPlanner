@@ -20,7 +20,7 @@ never real content or personal data ([repo hygiene](conventions/repo-hygiene.md)
 | Frontend        | Vite + React + TypeScript, pnpm workspaces, Node 24 LTS (`.nvmrc`), pnpm pinned via `packageManager` and installed with Homebrew or npm (not corepack).                                                                                                                                                                                 |
 | Lint and format | **Biome v2** (one `biome.json`) + `tsc --noEmit`; .NET: `.editorconfig` + analyzers (warnings as errors) + `dotnet format --verify-no-changes`. No ESLint or Prettier. CI is the gate; no mandatory git hooks. [ADR 0007](adr/0007-biome-for-lint-and-format.md)                                                                        |
 | Content         | One **private instance repo per deployment** (`instance.json`, `site-content.json`, `media/`) is the single source of truth, **baked into the static build at deploy time**. No runtime content API, no public blob. [ADR 0003](adr/0003-private-instance-repo-baked-at-build.md)                                                       |
-| Content schema  | Zod sources in `packages/content` (one file per section type plus the instance config) → inferred TS types and generated, committed JSON Schemas (`site.schema.json`, `instance.schema.json`) that instance files reference via `$schema`. `schemaVersion` field; breaking changes need a bump and a migration note.                    |
+| Content schema  | Zod sources in `packages/content/src/schema` (`site-content.ts`, `instance.ts`, legacy `site.ts`) → TS types and committed JSON Schemas (`site-content.schema.json`, `instance.schema.json`, `site.schema.json`) that instance files reference via `$schema`. `schemaVersion` field; breaking changes need a bump and a migration note. |
 | Naming          | npm scope `@weddingplanner/*`. Deployment slugs are neutral: `^wed[0-9a-z]{3,8}$` (random suffix, never names), used in Azure resource names and public logs.                                                                                                                                                                           |
 | Environments    | Build once per `main` commit, promote the same artifact: **e2e** (automatic, sample content) → **test** (automatic, real content) → **production** (owner approval for every deploy). Separate resource group, SWA, storage and federated credential each. No SWA PR previews. [ADR 0004](adr/0004-environments-e2e-test-production.md) |
 | Feature flags   | Per-environment `features` in `instance.json`, applied to the UI (`build.json`: a note instead of the feature) and the API (`Features__*` app settings → 404 when off). Guest-visible features ship dark. [ADR 0005](adr/0005-feature-flags-per-environment.md)                                                                         |
@@ -160,8 +160,10 @@ Everything the one-pager shows (`packages/content/src/schema/site-content.ts`, J
 6. The smoke tests check that `sha` and `contentHash` match and that `isSample` is false on `test` and
    `production`.
 
-**Adding a language:** add it to `i18n.languages`, run `pnpm content:validate`, which lists every
-missing translation, and fill in the texts.
+**Adding a language** is a code change: the languages are fixed to de, en and es in
+`apps/web/src/site/i18n.ts` (`LANGS`), every UI string in `apps/web/src/site/ui.ts`, and the
+`LocalizedText` schema in `packages/content/src/schema/localizable.ts`. Add it there, then run
+`pnpm content:validate`, which lists every missing translation, and fill in the texts.
 
 ## 6. Configuration and feature flags
 
@@ -232,7 +234,8 @@ from them.
 
 ## 10. Keep-warm
 
-The static site is never cold, but the managed API can be. While a visitor is present, the web app's
+The static site is never cold, but the managed API can be. While a visitor is present and the RSVP
+feature is on (`build.features.rsvp`; with RSVP off the page calls no API at all), the web app's
 `useApiKeepWarm` hook pings `GET /api/health` (no I/O) **sequentially**: the first ping after the page
 is idle; the next one only after the previous request finished (never two in flight, 30 s timeout).
 Interval about 4 minutes (tuned from measurements), error backoff ×2 up to 15 minutes, paused while
@@ -277,7 +280,7 @@ repository and the project board; the owner runs them, never CI.
 | Meter                               | Normal month                  | Under attack                                                                                | Guardrail                                                                                                                                                     |
 | ----------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | SWA Free static traffic             | €0                            | **€0**; above 100 GB/month (per subscription) the site is not served until the month resets | images ≤300 KB, BytesSent alert, never upgrade to Standard during an attack                                                                                   |
-| Managed function executions         | about €0 (keep-warm included) | billed at consumption rates beyond the free grant, including requests answered 429          | home page calls only the keep-warm ping; FunctionHits alert (5-minute grain); `lockdown.sh` makes the edge reject anonymous `/api/*` before any function runs |
+| Managed function executions         | about €0 (keep-warm included) | billed at consumption rates beyond the free grant, including requests answered 429          | page load calls only the keep-warm ping; FunctionHits alert (5-minute grain); `lockdown.sh` makes the edge reject anonymous `/api/*` before any function runs |
 | Table transactions and storage      | cents                         | cents                                                                                       | rate limiter before any I/O, cap on active RSVPs, payloads ≤16 KB                                                                                             |
 | Log Analytics / App Insights        | €0                            | about €0                                                                                    | daily cap 0.1 GB, Warning log level, sampling                                                                                                                 |
 | Budget, anomaly alert, action group | €0                            | €0                                                                                          | budget alerts (actual and forecast) are a slow backstop; budgets never stop spending                                                                          |
