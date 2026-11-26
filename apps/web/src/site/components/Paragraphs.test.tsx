@@ -1,0 +1,38 @@
+import { render, screen } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
+import { Paragraphs } from './Paragraphs.tsx';
+
+describe('Paragraphs', () => {
+  it('splits paragraphs at blank lines and renders inline links', () => {
+    const { container } = render(
+      <Paragraphs
+        text={
+          'Videos:\n[Salsa](https://example.com/salsa)\n\nWrite to [Anna](mailto:anna@example.com) or [call](tel:+49 151 000)'
+        }
+      />,
+    );
+    expect(container.querySelectorAll('p')).toHaveLength(2);
+    const salsa = screen.getByRole('link', { name: 'Salsa' });
+    expect(salsa).toHaveAttribute('href', 'https://example.com/salsa');
+    expect(salsa).toHaveAttribute('target', '_blank');
+    expect(salsa).toHaveAttribute('rel', 'noreferrer');
+    const mail = screen.getByRole('link', { name: 'Anna' });
+    expect(mail).toHaveAttribute('href', 'mailto:anna@example.com');
+    expect(mail).not.toHaveAttribute('target');
+    expect(screen.getByRole('link', { name: 'call' })).toHaveAttribute('href', 'tel:+49151000');
+    expect(container.querySelector('p')).toHaveTextContent('Videos: Salsa', {
+      normalizeWhitespace: true,
+    });
+  });
+
+  it('never renders markup or other link schemes from content', () => {
+    const { container } = render(
+      <Paragraphs text={'<b>bold</b> [x](javascript:alert(1)) [y](http://example.com)'} />,
+    );
+    expect(screen.queryByRole('link')).toBeNull();
+    expect(container.querySelector('b')).toBeNull();
+    expect(container).toHaveTextContent(
+      '<b>bold</b> [x](javascript:alert(1)) [y](http://example.com)',
+    );
+  });
+});

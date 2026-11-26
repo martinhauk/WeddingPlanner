@@ -1,8 +1,8 @@
 import type { SiteContent } from '@weddingplanner/content';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useApiKeepWarm } from './api/keep-warm.ts';
 import { Header } from './components/Header.tsx';
-import { Hero } from './components/Hero.tsx';
+import { Hero, heroImages } from './components/Hero.tsx';
 import { formatDate } from './format.ts';
 import { initialLang, type Lang, rememberLang, t } from './i18n.ts';
 import { PrivacyPage } from './privacy/PrivacyPage.tsx';
@@ -57,45 +57,51 @@ export function Site({ content, build, initialLanguage }: SiteProps) {
   useApiKeepWarm(build.features.rsvp && !privacyPage);
 
   const ctx: SectionContext = { lang, content, build };
+  const nav = useMemo(() => navItems(content, lang), [content, lang]);
   // The hero button and the highlighted nav entry only while replies can be sent.
   const rsvpId = build.features.rsvp
     ? content.sections.find((section) => section.type === 'rsvp' && isShown(section))?.id
     : undefined;
 
+  // The header spans the full width; the page itself is a column when the theme sets a frame.
   return (
     <>
       <Header
         brand={couple}
         brandHref={privacyPage ? '/' : '#top'}
-        nav={privacyPage ? [] : navItems(content, lang)}
+        nav={privacyPage ? [] : nav}
         rsvpId={privacyPage ? undefined : rsvpId}
         lang={lang}
         onLangChange={setLang}
+        overHero={!privacyPage && heroImages(content).length > 0}
       />
-      <main id="top">
-        {privacyPage ? (
-          <PrivacyPage content={content} regions={build.regions} lang={lang} />
-        ) : (
-          <>
-            <Hero content={content} lang={lang} rsvpId={rsvpId} />
-            {content.sections.map((section) => renderSection(section, ctx))}
-          </>
-        )}
-      </main>
-      <footer>
-        <p className="footer-line">
-          {couple} · {formatDate(content.event.start, lang, content.event.timeZone, 'long')}
-        </p>
-        <p className="footer-links">
-          <a href={PRIVACY_PATH}>{t(ui.privacy, lang)}</a>
-          {content.privacy?.imprint !== undefined && (
+      <div className="site">
+        <main id="top">
+          {privacyPage ? (
+            <PrivacyPage content={content} regions={build.regions} lang={lang} />
+          ) : (
             <>
-              {' · '}
-              <a href={`${PRIVACY_PATH}#${IMPRINT_ID}`}>{t(privacyText.imprintTitle, lang)}</a>
+              <Hero content={content} lang={lang} rsvpId={rsvpId} />
+              {content.sections.map((section) => renderSection(section, ctx))}
             </>
           )}
-        </p>
-      </footer>
+        </main>
+        <footer>
+          <p className="footer-names">{couple}</p>
+          <p className="footer-date">
+            {formatDate(content.event.start, lang, content.event.timeZone, 'long')}
+          </p>
+          <p className="footer-links">
+            <a href={PRIVACY_PATH}>{t(ui.privacy, lang)}</a>
+            {content.privacy?.imprint !== undefined && (
+              <>
+                {' · '}
+                <a href={`${PRIVACY_PATH}#${IMPRINT_ID}`}>{t(privacyText.imprintTitle, lang)}</a>
+              </>
+            )}
+          </p>
+        </footer>
+      </div>
     </>
   );
 }

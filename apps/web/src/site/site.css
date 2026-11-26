@@ -1,19 +1,33 @@
 /*
  * One-pager styles, mobile first. Colors and fonts are custom properties: these defaults apply until
- * the instance theme (virtual:site-theme.css, imported after this file) overrides them.
+ * the instance theme (virtual:site-theme.css, imported after this file) overrides them. The theme
+ * also derives --on-accent, --accent-hover, --hero-ink, --hero-scrim, --error and color-scheme from
+ * its colors, so a dark theme needs no extra rules here: never hard-code a text or background color.
  */
 :root {
   --bg: #faf7f2;
   --paper: #fffdf9;
   --ink: #2f2b27;
   --muted: #6f675f;
-  --accent: #7d8e70;
+  --accent: #66785a;
   --accent-dark: #5b6a51;
   --line: #e7e0d6;
+  --on-accent: #fff;
+  --accent-hover: #586751;
+  --hero-ink: #faf7f2;
+  --hero-scrim: #2f2b27;
   --error: #a3372a;
+  --frame: var(--bg);
+  --frame-width: none;
   --font-heading: Georgia, serif;
   --font-body: system-ui, sans-serif;
-  --header-height: 3.5rem;
+  --body-weight: 300;
+  --body-size: 1.05rem;
+  --header-height: 4rem;
+  --gutter: clamp(1.25rem, 5vw, 2.5rem);
+  --section-space: clamp(4.5rem, 11vw, 7.5rem);
+  --radius: 0.375rem;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
 
   color-scheme: light;
 }
@@ -23,26 +37,47 @@
 }
 
 html {
+  /* Overscroll areas: the page color, not the frame. */
+  background: var(--bg);
   scroll-behavior: smooth;
-  scroll-padding-top: calc(var(--header-height) + 1rem);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  html {
-    scroll-behavior: auto;
-  }
+  scroll-padding-top: calc(var(--header-height) + 0.5rem);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
   margin: 0;
-  background: var(--bg);
+  background: var(--frame);
   color: var(--ink);
-  font: 300 1.05rem / 1.7 var(--font-body);
+  font: var(--body-weight) var(--body-size) / 1.7 var(--font-body);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* The hero spans the full width also when the page is a framed column. */
+  overflow-x: clip;
+}
+
+/* The page; a centered column on --frame when the theme sets a frame color. */
+.site {
+  max-width: var(--frame-width);
+  min-height: 100vh;
+  margin-inline: auto;
+  background: var(--bg);
 }
 
 a {
   color: var(--accent-dark);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.22em;
+  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+  transition: text-decoration-color 0.2s;
+}
+
+a:hover {
+  text-decoration-color: currentColor;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
 :focus-visible {
@@ -69,60 +104,96 @@ h3 {
   font-family: var(--font-heading);
   font-weight: 400;
   line-height: 1.15;
+  letter-spacing: 0.01em;
   margin: 0 0 0.6em;
+  text-wrap: balance;
 }
 
 h2 {
-  font-size: clamp(2rem, 6vw, 2.8rem);
+  font-size: clamp(2.1rem, 6.5vw, 3.1rem);
   text-align: center;
+  margin-bottom: clamp(2rem, 5vw, 2.75rem);
 }
 
+/* Ornament under section headings: a line, a dot, a line. */
 h2::after {
   content: "";
   display: block;
-  width: 3rem;
-  height: 1px;
-  background: var(--accent);
-  margin: 0.6em auto 0;
+  width: 6.5rem;
+  height: 7px;
+  margin: 0.55em auto 0;
+  background:
+    radial-gradient(circle, var(--accent) 0 2.5px, transparent 3px) center / 7px 7px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) left center / 2.6rem 1px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) right center / 2.6rem 1px no-repeat;
 }
 
 h3 {
-  font-size: 1.5rem;
+  font-size: 1.55rem;
 }
 
 img {
   max-width: 100%;
 }
 
+p {
+  text-wrap: pretty;
+}
+
 /* Header and navigation */
 
 .nav {
+  --nav-ink: var(--ink);
+
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: 20;
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  min-height: var(--header-height);
-  padding: 0.5rem 1rem;
-  background: color-mix(in srgb, var(--bg) 92%, transparent);
-  backdrop-filter: blur(8px);
-  border-bottom: 1px solid var(--line);
+  gap: 0.5rem 1rem;
+  height: var(--header-height);
+  padding: 0 var(--gutter);
+  color: var(--nav-ink);
+  background: color-mix(in srgb, var(--bg) 97%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  transition:
+    background-color 0.35s,
+    border-color 0.35s;
+}
+
+/* Lies on the hero photo at the top of the page; solid once the page scrolls. */
+.nav.over-hero {
+  --nav-ink: var(--hero-ink);
+
+  background: linear-gradient(color-mix(in srgb, var(--hero-scrim) 50%, transparent), transparent);
+  background-origin: border-box;
+  border-bottom-color: transparent;
+}
+
+.nav.over-hero :focus-visible {
+  outline-color: var(--hero-ink);
 }
 
 .brand {
-  font: 400 1.4rem var(--font-heading);
-  color: var(--ink);
-  text-decoration: none;
+  flex: 0 1 auto;
+  min-width: 0;
   margin-right: auto;
+  overflow: hidden;
+  font: 400 clamp(1.2rem, 4.5vw, 1.5rem) / 1.2 var(--font-heading);
+  color: var(--nav-ink);
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .burger {
   order: 3;
   display: grid;
-  gap: 4px;
+  flex: none;
+  gap: 5px;
   min-width: 2.75rem;
   min-height: 2.75rem;
+  margin-right: -0.5rem;
   place-content: center;
   background: none;
   border: 0;
@@ -132,15 +203,37 @@ img {
 .burger span {
   display: block;
   width: 22px;
-  height: 1.5px;
-  background: var(--ink);
+  height: 1px;
+  background: var(--nav-ink);
+  transition:
+    transform 0.3s var(--ease),
+    opacity 0.2s;
+}
+
+.burger[aria-expanded="true"] span:nth-child(1) {
+  transform: translateY(6px) rotate(45deg);
+}
+
+.burger[aria-expanded="true"] span:nth-child(2) {
+  opacity: 0;
+}
+
+.burger[aria-expanded="true"] span:nth-child(3) {
+  transform: translateY(-6px) rotate(-45deg);
 }
 
 .nav nav {
   display: none;
 }
 
-.nav nav.open {
+.nav nav a {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+/* Menu (the navigation does not fit into one line) */
+
+.nav.collapsed nav.open {
   display: flex;
   flex-direction: column;
   position: absolute;
@@ -149,67 +242,111 @@ img {
   right: 0;
   max-height: calc(100svh - var(--header-height));
   overflow-y: auto;
+  padding: 0.75rem var(--gutter) 1.75rem;
   background: var(--paper);
   border-bottom: 1px solid var(--line);
-  padding: 0.5rem 1rem 1rem;
+  box-shadow: 0 1.5rem 2rem -1.5rem rgb(0 0 0 / 30%);
 }
 
-.nav nav a {
-  color: var(--ink);
-  text-decoration: none;
-  padding: 0.6rem 0;
-  letter-spacing: 0.04em;
-  font-size: 0.95rem;
+.nav.collapsed nav a {
+  padding: 0.55rem 0;
+  font: 400 1.35rem / 1.3 var(--font-heading);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
 }
 
-.nav nav a:hover,
-.nav nav a.nav-rsvp {
+.nav.collapsed nav a:last-child {
+  border-bottom: 0;
+}
+
+.nav.collapsed nav a:hover,
+.nav.collapsed nav a[aria-current],
+.nav.collapsed nav a.nav-rsvp {
   color: var(--accent-dark);
 }
 
-.nav nav a.nav-rsvp {
+/* Inline navigation (it fits; measured by the header) */
+
+.nav.inline .burger {
+  display: none;
+}
+
+.nav.inline nav {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  align-items: center;
+  gap: 1.4rem;
+  white-space: nowrap;
+}
+
+/* An auto margin instead of justify-content: overflow then grows to the right, where it is measured. */
+.nav.inline nav > :first-child {
+  margin-left: auto;
+}
+
+.nav.inline nav a {
+  position: relative;
+  padding: 0.35rem 0;
+  color: var(--nav-ink);
+  font-size: 0.78rem;
   font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.nav.inline nav a::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0);
+  transition: transform 0.35s var(--ease);
+}
+
+.nav.inline nav a:hover::after,
+.nav.inline nav a[aria-current]::after {
+  transform: scaleX(1);
+}
+
+.nav.inline nav a.nav-rsvp {
+  padding: 0.45rem 1.1rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+}
+
+.nav.inline nav a.nav-rsvp::after {
+  content: none;
 }
 
 .langs {
   display: flex;
-  gap: 0.1rem;
+  flex: none;
 }
 
 .langs button {
-  min-width: 2.25rem;
+  min-width: 2.1rem;
   min-height: 2.75rem;
+  padding: 0 0.2rem;
   background: none;
   border: 0;
   border-bottom: 1px solid transparent;
-  font: 400 0.8rem var(--font-body);
-  letter-spacing: 0.08em;
-  color: var(--muted);
+  font: 500 0.75rem var(--font-body);
+  letter-spacing: 0.14em;
+  color: color-mix(in srgb, var(--nav-ink) 62%, transparent);
   cursor: pointer;
+  transition: color 0.2s;
+}
+
+.langs button:hover,
+.langs button[aria-pressed="true"] {
+  color: var(--nav-ink);
 }
 
 .langs button[aria-pressed="true"] {
-  color: var(--ink);
   border-bottom-color: var(--accent);
-}
-
-@media (min-width: 1200px) {
-  .burger {
-    display: none;
-  }
-
-  .nav nav,
-  .nav nav.open {
-    display: flex;
-    position: static;
-    flex-direction: row;
-    gap: 1.2rem;
-    padding: 0;
-    background: none;
-    border: 0;
-    max-height: none;
-    overflow: visible;
-  }
 }
 
 /* Hero */
@@ -220,139 +357,246 @@ img {
   min-height: calc(100svh - var(--header-height));
   display: grid;
   place-items: center;
+  padding: 4rem var(--gutter);
   text-align: center;
-  padding: 3rem 1.25rem;
-  background: radial-gradient(ellipse at top, var(--paper) 0%, var(--bg) 60%);
+  background: radial-gradient(ellipse at top, var(--paper) 0%, var(--bg) 65%);
   overflow: hidden;
 }
 
-.hero-image {
+/*
+ * With photos the hero runs under the transparent header and across the full width. The text sits
+ * in the lower part, on a scrim that deepens towards the bottom, so the photos stay bright above it
+ * and the text stays readable on any photo (and in a dark theme the hero fades into the page).
+ */
+.hero.has-image {
+  min-height: 100svh;
+  margin-top: calc(-1 * var(--header-height));
+  margin-inline: calc(50% - 50vw);
+  padding-top: calc(var(--header-height) + 3rem);
+  padding-bottom: clamp(3rem, 8svh, 5rem);
+  align-items: end;
+  color: var(--hero-ink);
+  background: var(--hero-scrim);
+}
+
+.hero-media {
   position: absolute;
   inset: 0;
   z-index: -2;
+  display: grid;
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
+  gap: 2px;
+}
+
+.hero-media img {
+  display: block;
   width: 100%;
+  min-width: 0;
   height: 100%;
   object-fit: cover;
 }
 
+/* Scrim: a little at the top (header), then deepening from the middle to the bottom. */
 .hero.has-image::before {
   content: "";
   position: absolute;
   inset: 0;
   z-index: -1;
-  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  background: linear-gradient(
+    color-mix(in srgb, var(--hero-scrim) 45%, transparent) 0%,
+    color-mix(in srgb, var(--hero-scrim) 8%, transparent) 20%,
+    color-mix(in srgb, var(--hero-scrim) 12%, transparent) 35%,
+    color-mix(in srgb, var(--hero-scrim) 62%, transparent) 55%,
+    color-mix(in srgb, var(--hero-scrim) 84%, transparent) 75%,
+    var(--hero-scrim) 100%
+  );
+}
+
+/* Portrait screens: the text takes up more of the height, so the scrim deepens earlier. */
+@media (max-aspect-ratio: 4 / 5) {
+  .hero.has-image::before {
+    background: linear-gradient(
+      color-mix(in srgb, var(--hero-scrim) 45%, transparent) 0%,
+      color-mix(in srgb, var(--hero-scrim) 8%, transparent) 15%,
+      color-mix(in srgb, var(--hero-scrim) 14%, transparent) 26%,
+      color-mix(in srgb, var(--hero-scrim) 66%, transparent) 46%,
+      color-mix(in srgb, var(--hero-scrim) 86%, transparent) 66%,
+      var(--hero-scrim) 100%
+    );
+  }
 }
 
 .hero-inner {
-  max-width: 40rem;
+  max-width: min(100%, 64rem);
+}
+
+.hero.has-image .hero-inner {
+  text-shadow: 0 1px 1.25rem color-mix(in srgb, var(--hero-scrim) 70%, transparent);
+}
+
+.hero.has-image :focus-visible {
+  outline-color: var(--hero-ink);
 }
 
 .eyebrow {
-  text-transform: uppercase;
-  letter-spacing: 0.25em;
-  font-size: 0.8rem;
-  color: var(--accent-dark);
   margin: 0 0 1rem;
+  color: var(--accent-dark);
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+}
+
+.hero .eyebrow {
+  font-size: clamp(0.78rem, 1.4vw, 0.95rem);
+}
+
+.hero.has-image .eyebrow {
+  color: inherit;
 }
 
 .hero h1 {
-  font-size: clamp(3.2rem, 14vw, 6.5rem);
+  margin: 0 0 0.35em;
+  font-size: clamp(3.4rem, 15vw, 7.5rem);
   font-style: italic;
+  line-height: 1.02;
 }
 
 .hero-date {
-  font: 400 1.5rem var(--font-heading);
   margin: 0;
+  font: 400 clamp(1.4rem, 4.5vw, 1.75rem) / 1.3 var(--font-heading);
+  letter-spacing: 0.02em;
 }
 
 .hero-place {
+  margin: 0.25rem 0 clamp(1.5rem, 4svh, 2.25rem);
   color: var(--muted);
-  margin: 0.2rem 0 2rem;
+}
+
+.hero.has-image .hero-place {
+  color: color-mix(in srgb, var(--hero-ink) 85%, transparent);
 }
 
 .countdown {
   display: flex;
   justify-content: center;
-  gap: 1.2rem;
-  margin-bottom: 2.2rem;
+  margin-bottom: clamp(1.75rem, 4.5svh, 2.5rem);
 }
 
 .countdown div {
   display: grid;
-  min-width: 3.5rem;
+  min-width: 4.25rem;
+  padding: 0 0.6rem;
+}
+
+.countdown div + div {
+  border-left: 1px solid color-mix(in srgb, currentColor 22%, transparent);
 }
 
 .countdown strong {
-  font: 400 2.2rem var(--font-heading);
+  font: 400 clamp(2rem, 7vw, 2.6rem) / 1.15 var(--font-heading);
 }
 
 .countdown span {
-  font-size: 0.7rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
-  letter-spacing: 0.15em;
   color: var(--muted);
+}
+
+.hero.has-image .countdown span {
+  color: color-mix(in srgb, var(--hero-ink) 78%, transparent);
 }
 
 /* Buttons and links */
 
 .btn {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.9rem;
+  padding: 0.75rem 2rem;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   border: 1px solid var(--accent);
-  padding: 0.8rem 1.8rem;
   border-radius: 999px;
+  font: 500 0.8rem / 1.2 var(--font-body);
+  letter-spacing: 0.16em;
   text-decoration: none;
-  font: 400 0.95rem var(--font-body);
-  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-shadow: none;
   cursor: pointer;
-  transition: background 0.2s;
+  transition:
+    background-color 0.25s,
+    border-color 0.25s,
+    color 0.25s;
 }
 
 .btn:hover {
-  background: var(--accent-dark);
-  border-color: var(--accent-dark);
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 .btn.ghost {
   background: transparent;
   color: var(--accent-dark);
+  border-color: color-mix(in srgb, var(--accent-dark) 55%, transparent);
 }
 
 .btn.ghost:hover {
   background: var(--accent);
-  color: #fff;
+  border-color: var(--accent);
+  color: var(--on-accent);
 }
 
 .btn.small {
-  padding: 0.5rem 1.1rem;
-  font-size: 0.85rem;
+  min-height: 2.5rem;
+  padding: 0.5rem 1.2rem;
+  font-size: 0.72rem;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
 }
 
 .link {
+  justify-self: start;
+  padding: 0.4rem 0;
   background: none;
   border: 0;
   color: var(--accent-dark);
-  cursor: pointer;
   font: 400 0.9rem var(--font-body);
-  justify-self: start;
-  padding: 0.4rem 0;
+  cursor: pointer;
 }
 
 /* Sections */
 
 .section {
-  max-width: 52rem;
+  position: relative;
+  max-width: 54rem;
   margin: 0 auto;
-  padding: 4.5rem 1.25rem;
-  border-top: 1px solid var(--line);
+  padding: var(--section-space) var(--gutter);
+}
+
+/* A hairline that fades out at both ends between two sections. */
+.section + .section::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: min(22rem, 60%);
+  height: 1px;
+  transform: translateX(-50%);
+  background: linear-gradient(90deg, transparent, var(--line), transparent);
 }
 
 .lead {
-  font: 400 1.35rem / 1.6 var(--font-heading);
-  text-align: center;
   max-width: 38rem;
-  margin: 0 auto 1rem;
+  margin: 0 auto 1.1rem;
+  font: 400 clamp(1.25rem, 3.6vw, 1.45rem) / 1.6 var(--font-heading);
+  text-align: center;
   white-space: pre-line;
 }
 
@@ -362,96 +606,247 @@ img {
 }
 
 .actions {
+  margin-top: 2.25rem;
   text-align: center;
-  margin-top: 2rem;
 }
 
 .subheading {
-  text-align: center;
   margin-top: 1rem;
+  text-align: center;
 }
+
+/* Images: rounded, a hairline frame on single images, a staggered row of three on wide screens. */
 
 .gallery {
   display: grid;
-  gap: 1rem;
-  margin: 2rem auto 0;
-  max-width: 40rem;
+  grid-template-columns: repeat(2, 1fr);
+  gap: clamp(0.6rem, 2vw, 1.25rem);
+  max-width: 48rem;
+  margin: clamp(2.5rem, 6vw, 3.5rem) auto 0;
 }
 
 .gallery figure {
   margin: 0;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: var(--line);
 }
 
 .gallery img {
   display: block;
   width: 100%;
+  height: 100%;
   aspect-ratio: 4 / 5;
   object-fit: cover;
-  border-radius: 0.5rem;
+  transition: transform 1.2s var(--ease);
+}
+
+.gallery-1 {
+  grid-template-columns: 1fr;
+  max-width: 34rem;
+  padding: 0.6rem;
+}
+
+.gallery-1 figure {
+  outline: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  outline-offset: 0.55rem;
 }
 
 .gallery-1 img {
   aspect-ratio: auto;
-  max-height: 32rem;
+  max-height: 36rem;
 }
 
-@media (min-width: 640px) {
-  .gallery-2 {
-    grid-template-columns: repeat(2, 1fr);
-  }
+.gallery-3 figure:first-child {
+  grid-column: 1 / -1;
+}
 
+.gallery-3 :where(figure:first-child) img {
+  aspect-ratio: 3 / 2;
+}
+
+@media (min-width: 700px) {
   .gallery-3 {
     grid-template-columns: repeat(3, 1fr);
+    align-items: start;
+  }
+
+  .gallery-3 figure:first-child {
+    grid-column: auto;
+  }
+
+  .gallery-3 :where(figure:first-child) img {
+    aspect-ratio: 4 / 5;
+  }
+
+  .gallery-3 figure:nth-child(3n + 2) {
+    margin-top: 2.5rem;
   }
 }
 
-.timeline {
-  list-style: none;
-  padding: 0;
-  max-width: 30rem;
+/* Text beside an image */
+
+.split {
+  display: grid;
+  gap: 2.5rem;
+  align-items: center;
+}
+
+.split .gallery {
   margin: 0 auto;
 }
 
+@media (min-width: 860px) {
+  .split {
+    grid-template-columns: 1.15fr 0.85fr;
+    gap: 3.5rem;
+  }
+
+  .split .lead {
+    margin-left: 0;
+    text-align: left;
+  }
+}
+
+/* Story */
+
+.story-items {
+  max-width: 40rem;
+  margin: clamp(3.5rem, 9vw, 5rem) auto 0;
+  text-align: center;
+}
+
+.story-item + .story-item::before {
+  content: "";
+  display: block;
+  width: 5px;
+  height: 5px;
+  margin: clamp(2.25rem, 6vw, 3rem) auto;
+  background: var(--accent);
+  transform: rotate(45deg);
+}
+
+.story-item h3 {
+  margin-bottom: 0.7rem;
+  color: var(--accent-dark);
+  font-size: clamp(1.45rem, 4.5vw, 1.8rem);
+  font-style: italic;
+}
+
+.story-item p {
+  margin: 0 0 0.9rem;
+  white-space: pre-line;
+}
+
+.story-item p:last-child {
+  margin-bottom: 0;
+}
+
+/* Schedule: a vertical line with a ring per item */
+
+.timeline {
+  list-style: none;
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: 0;
+}
+
 .timeline li {
+  position: relative;
   display: grid;
-  grid-template-columns: 4.5rem 1fr;
-  padding: 1rem 0;
-  border-bottom: 1px solid var(--line);
+  gap: 0.15rem;
+  margin-left: 0.45rem;
+  padding: 0 0 2.4rem 2.1rem;
+  border-left: 1px solid var(--line);
+}
+
+.timeline li:last-child {
+  padding-bottom: 0;
+  border-left-color: transparent;
+}
+
+.timeline li::before {
+  content: "";
+  position: absolute;
+  top: 0.3rem;
+  left: calc(-0.35rem - 0.5px);
+  width: 0.7rem;
+  height: 0.7rem;
+  border: 1px solid var(--accent);
+  border-radius: 50%;
+  background: var(--bg);
 }
 
 .timeline .time {
-  font: 600 1.3rem var(--font-heading);
   color: var(--accent-dark);
-  grid-row: span 3;
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0.2em;
 }
 
 .timeline .what {
-  font: 400 1.3rem var(--font-heading);
+  font: 400 1.6rem / 1.25 var(--font-heading);
 }
 
-.timeline .where,
-.timeline .note {
+.timeline .where {
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: 0.92em;
 }
+
+.timeline .note {
+  margin-top: 0.3rem;
+  white-space: pre-line;
+}
+
+/* Cards: venues and contacts */
 
 .cards {
   display: grid;
-  gap: 1.2rem;
-  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
-  margin: 1.5rem 0 2rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+  gap: 1.5rem;
+  margin: 0 0 2rem;
 }
 
 .card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  padding: clamp(1.75rem, 5vw, 2.25rem) clamp(1.25rem, 4vw, 2rem);
   background: var(--paper);
   border: 1px solid var(--line);
-  border-radius: 0.5rem;
-  padding: 1.5rem;
+  border-radius: var(--radius);
   text-align: center;
+}
+
+.card h3 {
+  margin-bottom: 0.25rem;
 }
 
 .card p {
   margin: 0.2rem 0;
+}
+
+.card .address {
+  color: var(--muted);
+}
+
+.card .card-note {
+  margin-top: 0.6rem;
+  font-size: 0.95em;
+}
+
+.card-links {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0.6rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.95em;
+}
+
+.card > .btn {
+  margin-top: 0.5rem;
 }
 
 .contact-links {
@@ -463,16 +858,16 @@ img {
 }
 
 .hotels {
-  list-style: none;
-  padding: 0;
   max-width: 34rem;
   margin: 0 auto;
+  padding: 0;
+  list-style: none;
 }
 
 .hotels li {
   display: grid;
   gap: 0.1rem;
-  padding: 0.8rem 0;
+  padding: 0.9rem 0;
   border-bottom: 1px solid var(--line);
 }
 
@@ -493,27 +888,27 @@ img {
 /* Map (OpenStreetMap tiles, loaded on click) */
 
 .map {
-  margin: 1rem 0;
+  margin: 1.25rem 0 0.75rem;
 }
 
 .map-load,
 .map-tiles {
   width: 100%;
   aspect-ratio: 4 / 3;
-  border-radius: 0.4rem;
   overflow: hidden;
+  border-radius: var(--radius);
   background: var(--line);
 }
 
 .map-load {
-  border: 0;
-  cursor: pointer;
-  font: 400 1rem var(--font-body);
-  color: var(--accent-dark);
   display: grid;
   place-content: center;
   gap: 0.3rem;
   padding: 1rem;
+  border: 0;
+  color: var(--accent-dark);
+  font: 400 1rem var(--font-body);
+  cursor: pointer;
 }
 
 .map-load small {
@@ -537,7 +932,7 @@ img {
   width: 1.1rem;
   height: 1.1rem;
   margin: -1.1rem 0 0 -0.55rem;
-  background: var(--accent-dark);
+  background: var(--accent);
   border: 2px solid #fff;
   border-radius: 50% 50% 50% 0;
   transform: rotate(-45deg);
@@ -545,31 +940,44 @@ img {
 }
 
 .map-credit {
-  font-size: 0.75rem;
-  color: var(--muted);
   margin-top: 0.3rem;
+  color: var(--muted);
+  font-size: 0.75rem;
 }
 
-/* Wedding party */
+/* Maps and directions line up at the bottom of cards side by side. */
+.card .map {
+  align-self: stretch;
+  margin-top: auto;
+  padding-top: 1.25rem;
+}
 
+/* Wedding party: arched portraits in a hairline frame */
+
+/* Two portraits side by side even on a 360 px phone; centered rows on wider screens. */
 .party {
-  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2.25rem 1.25rem;
+  margin: 2.5rem 0 0;
   padding: 0;
-  margin: 2rem 0 0;
-  display: grid;
-  gap: 1.2rem;
-  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  list-style: none;
+}
+
+.party li {
+  width: clamp(8.5rem, 40vw, 13rem);
 }
 
 .party-person {
   display: grid;
   justify-items: center;
-  gap: 0.2rem;
+  gap: 0.15rem;
   width: 100%;
   padding: 0.5rem;
   background: none;
   border: 0;
-  border-radius: 0.5rem;
+  border-radius: var(--radius);
   color: var(--ink);
   font: inherit;
   cursor: pointer;
@@ -578,62 +986,61 @@ img {
 .party-person img,
 .party-initial {
   width: 100%;
-  max-width: 11rem;
   aspect-ratio: 4 / 5;
+  margin-bottom: 1rem;
   object-fit: cover;
-  border-radius: 0.5rem;
-  margin-bottom: 0.5rem;
-  transition: transform 0.2s;
+  border-radius: 999px 999px var(--radius) var(--radius);
+  outline: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 5px;
+  transition: transform 0.6s var(--ease);
 }
 
 .party-initial {
   display: grid;
   place-content: center;
   background: var(--line);
-  font: italic 400 3rem var(--font-heading);
   color: var(--accent-dark);
-}
-
-.party-person:hover img,
-.party-person:hover .party-initial {
-  transform: scale(1.02);
+  font: italic 400 3rem var(--font-heading);
 }
 
 .party-name {
-  font: 400 1.3rem var(--font-heading);
+  font: 400 1.4rem / 1.25 var(--font-heading);
 }
 
 .party-role {
   color: var(--muted);
-  font-size: 0.85rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
 }
 
 .person-dialog {
   width: min(32rem, calc(100% - 2rem));
   max-height: calc(100svh - 2rem);
   padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 0.75rem;
   background: var(--paper);
   color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
 }
 
 .person-dialog::backdrop {
-  background: rgb(0 0 0 / 45%);
+  background: rgb(0 0 0 / 55%);
+  backdrop-filter: blur(2px);
 }
 
 .person-dialog-body {
   position: relative;
-  padding: 2rem 1.5rem 1.5rem;
+  padding: 2.25rem 1.5rem 1.75rem;
   text-align: center;
 }
 
 .person-photo {
   width: 9rem;
   aspect-ratio: 4 / 5;
+  margin-bottom: 1.25rem;
   object-fit: cover;
-  border-radius: 0.5rem;
-  margin-bottom: 1rem;
+  border-radius: 999px 999px var(--radius) var(--radius);
 }
 
 .dialog-close {
@@ -645,29 +1052,58 @@ img {
   background: none;
   border: 0;
   border-radius: 50%;
+  color: var(--muted);
   font-size: 1.6rem;
   line-height: 1;
-  color: var(--muted);
   cursor: pointer;
 }
 
 /* FAQ */
 
-.faq details {
-  border-bottom: 1px solid var(--line);
-  padding: 1rem 0;
-  max-width: 38rem;
+.faq {
+  max-width: 40rem;
   margin: 0 auto;
 }
 
+.faq details {
+  border-bottom: 1px solid var(--line);
+}
+
+.faq details:first-child {
+  border-top: 1px solid var(--line);
+}
+
 .faq summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.1rem 0;
+  font: 400 1.3rem / 1.35 var(--font-heading);
+  list-style: none;
   cursor: pointer;
-  font: 400 1.25rem var(--font-heading);
+}
+
+.faq summary::-webkit-details-marker {
+  display: none;
+}
+
+.faq summary::after {
+  content: "+";
+  flex: none;
+  color: var(--accent-dark);
+  font: 300 1.6rem / 1 var(--font-body);
+  transition: transform 0.3s var(--ease);
+}
+
+.faq details[open] summary::after {
+  transform: rotate(45deg);
 }
 
 .faq details p {
-  margin: 0.6rem 0 0;
+  margin: 0 0 1rem;
   color: var(--muted);
+  white-space: pre-line;
 }
 
 /* RSVP */
@@ -677,43 +1113,43 @@ img {
 }
 
 .section-rsvp form {
+  display: grid;
+  gap: 1rem;
   max-width: 28rem;
   margin: 2rem auto 0;
   text-align: left;
-  display: grid;
-  gap: 1rem;
 }
 
 .section-rsvp fieldset {
-  border: 1px solid var(--line);
-  border-radius: 0.5rem;
-  padding: 1rem;
   display: grid;
   gap: 0.6rem;
-  background: var(--paper);
   margin: 0;
+  padding: 1rem;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
 }
 
 .section-rsvp legend {
   padding: 0 0.3rem;
-  font: 400 1.15rem var(--font-heading);
+  font: 400 1.2rem var(--font-heading);
 }
 
 .section-rsvp fieldset.diet {
-  border-style: dashed;
   background: transparent;
+  border-style: dashed;
 }
 
 .section-rsvp fieldset.diet legend {
-  font: 400 0.9rem var(--font-body);
   color: var(--muted);
+  font: var(--body-weight) 0.9rem var(--font-body);
 }
 
 .section-rsvp label {
   display: grid;
   gap: 0.3rem;
-  font-size: 0.9rem;
   color: var(--muted);
+  font-size: 0.9rem;
 }
 
 .section-rsvp label.check {
@@ -726,25 +1162,44 @@ img {
 
 .section-rsvp input:not([type="checkbox"], [type="radio"]),
 .section-rsvp textarea {
-  font: 300 1rem var(--font-body);
   padding: 0.7rem 0.8rem;
-  border: 1px solid var(--line);
-  border-radius: 0.4rem;
   background: var(--paper);
   color: var(--ink);
+  border: 1px solid color-mix(in srgb, var(--ink) 24%, transparent);
+  border-radius: var(--radius);
+  font: var(--body-weight) 1rem var(--font-body);
 }
 
-.section-rsvp input[type="checkbox"] {
+.section-rsvp input:not([type="checkbox"], [type="radio"]):focus-visible,
+.section-rsvp textarea:focus-visible {
+  border-color: var(--accent-dark);
+  outline-offset: 0;
+}
+
+.section-rsvp ::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+/* Autofill keeps the theme's colors, also in a dark theme. */
+.section-rsvp input:-webkit-autofill {
+  -webkit-text-fill-color: var(--ink);
+  box-shadow: 0 0 0 100px var(--paper) inset;
+}
+
+.section-rsvp input[type="checkbox"],
+.section-rsvp input[type="radio"] {
   width: 1.2rem;
   height: 1.2rem;
+  margin: 0;
   accent-color: var(--accent-dark);
 }
 
 .row {
   display: flex;
-  gap: 0.8rem;
-  justify-content: space-between;
   flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.8rem;
 }
 
 .row.center {
@@ -766,32 +1221,25 @@ img {
   gap: 0.4rem 1.4rem;
 }
 
-.section-rsvp input[type="radio"] {
-  width: 1.2rem;
-  height: 1.2rem;
-  margin: 0;
-  accent-color: var(--accent-dark);
-}
-
 .section-rsvp [aria-invalid="true"] {
   border-color: var(--error);
 }
 
 .field-error {
+  margin-top: -0.3rem;
   color: var(--error);
   font-size: 0.9rem;
-  margin-top: -0.3rem;
 }
 
 .rsvp-alert {
-  border-left: 3px solid var(--error);
+  max-width: 28rem;
+  margin: 1rem auto;
+  padding: 0.7rem 1rem;
   background: var(--paper);
   color: var(--ink);
+  border-left: 3px solid var(--error);
+  border-radius: 0 var(--radius) var(--radius) 0;
   text-align: left;
-  padding: 0.7rem 1rem;
-  margin: 1rem auto;
-  max-width: 28rem;
-  border-radius: 0 0.4rem 0.4rem 0;
 }
 
 .rsvp-alert-text {
@@ -809,9 +1257,9 @@ img {
 }
 
 .rsvp-note {
-  font: 400 1.2rem / 1.6 var(--font-heading);
   max-width: 32rem;
   margin: 1.5rem auto 0.5rem;
+  font: 400 1.25rem / 1.6 var(--font-heading);
 }
 
 .rsvp-note:focus {
@@ -819,25 +1267,25 @@ img {
 }
 
 .rsvp-notice {
-  margin: 1rem auto 0;
   max-width: 32rem;
+  margin: 1rem auto 0;
 }
 
 .rsvp-summary {
   max-width: 28rem;
   margin: 1rem auto 1.5rem;
-  text-align: left;
+  padding: 1rem 1.2rem;
   background: var(--paper);
   border: 1px solid var(--line);
-  border-radius: 0.5rem;
-  padding: 1rem 1.2rem;
+  border-radius: var(--radius);
+  text-align: left;
 }
 
 .rsvp-summary dt {
+  color: var(--muted);
   font-size: 0.8rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--muted);
 }
 
 .rsvp-summary dd {
@@ -849,11 +1297,11 @@ img {
 }
 
 .rsvp-summary ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
   display: grid;
   gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .rsvp-name {
@@ -862,8 +1310,8 @@ img {
 
 .rsvp-diet {
   display: block;
-  font-size: 0.9rem;
   color: var(--muted);
+  font-size: 0.9rem;
 }
 
 .rsvp-message {
@@ -872,11 +1320,6 @@ img {
 
 .rsvp-confirm-text {
   margin: 0;
-}
-
-.btn:disabled {
-  opacity: 0.6;
-  cursor: progress;
 }
 
 /* Honeypot: kept out of sight and out of the tab order. */
@@ -963,11 +1406,112 @@ img {
 }
 
 footer {
-  text-align: center;
-  padding: 3rem 1rem;
+  position: relative;
+  padding: clamp(4rem, 10vw, 6rem) var(--gutter) 3.5rem;
   color: var(--muted);
-  font: italic 400 1.1rem var(--font-heading);
-  border-top: 1px solid var(--line);
+  text-align: center;
+}
+
+footer::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: min(22rem, 60%);
+  height: 1px;
+  transform: translateX(-50%);
+  background: linear-gradient(90deg, transparent, var(--line), transparent);
+}
+
+.footer-names {
+  margin: 0 0 0.5rem;
+  color: var(--ink);
+  font: italic 400 clamp(2rem, 7vw, 2.8rem) / 1.1 var(--font-heading);
+}
+
+.footer-date {
+  margin: 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+/* Hover (after the image rules it modifies) */
+
+.gallery :where(figure:hover) img {
+  transform: scale(1.03);
+}
+
+.party-person:hover img,
+.party-person:hover .party-initial {
+  transform: translateY(-3px);
+}
+
+/* Motion: the hero rises in on load; content fades in as it scrolls into view. */
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(0.9rem);
+  }
+}
+
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(1.5rem);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hero-inner > * {
+    animation: rise 1.1s var(--ease) both;
+  }
+
+  .hero-inner > :nth-child(2) {
+    animation-delay: 0.12s;
+  }
+
+  .hero-inner > :nth-child(3) {
+    animation-delay: 0.24s;
+  }
+
+  .hero-inner > :nth-child(4) {
+    animation-delay: 0.32s;
+  }
+
+  .hero-inner > :nth-child(n + 5) {
+    animation-delay: 0.42s;
+  }
+
+  /* Scroll-driven, so content is never hidden where it is unsupported or already in view. */
+  @supports (animation-timeline: view()) {
+    .section h2,
+    .lead,
+    .gallery figure,
+    .story-item,
+    .timeline li,
+    .card,
+    .party li,
+    .faq details,
+    .footer-names {
+      animation: reveal linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 80%;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .gallery img,
+  .party-person img,
+  .party-initial {
+    transition: none;
+  }
 }
 
 .footer-line {

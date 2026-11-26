@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { LANGS, type Lang, t } from '../i18n.ts';
 import type { NavItem } from '../sections/titles.ts';
 import { ui } from '../ui.ts';
+import { useActiveSection, useNavFit, useScrolled } from '../use-scroll.ts';
 
 const LANGUAGE_NAMES: Readonly<Record<Lang, string>> = {
   de: 'Deutsch',
@@ -18,9 +19,14 @@ export type HeaderProps = {
   readonly rsvpId: string | undefined;
   readonly lang: Lang;
   readonly onLangChange: (lang: Lang) => void;
+  /** The hero has a photo: at the top of the page the header lies transparent on top of it. */
+  readonly overHero?: boolean;
 };
 
-/** Sticky header: names, section navigation (a menu on small screens) and the language switch. */
+/**
+ * Sticky header: names, section navigation and the language switch. The navigation is inline when
+ * it fits and a menu otherwise; the entry of the section in view is marked as the current one.
+ */
 export function Header({
   brand,
   brandHref = '#top',
@@ -28,9 +34,24 @@ export function Header({
   rsvpId,
   lang,
   onLangChange,
+  overHero = false,
 }: HeaderProps) {
   const [open, setOpen] = useState(false);
   const header = useRef<HTMLElement>(null);
+  const navRef = useRef<HTMLElement>(null);
+  const ids = useMemo(() => nav.map((item) => item.id), [nav]);
+  const active = useActiveSection(ids);
+  const scrolled = useScrolled();
+  const fit = useNavFit(header, navRef, `${lang} ${ids.join(' ')}`);
+  const inline = fit !== 'overflows';
+  const transparent = overHero && !scrolled && !open;
+
+  // A menu left open when the window grows wide enough for the inline navigation closes.
+  useEffect(() => {
+    if (fit === 'fits') {
+      setOpen(false);
+    }
+  }, [fit]);
 
   // The open menu closes on Escape and on a tap or click outside the header.
   useEffect(() => {
@@ -56,7 +77,12 @@ export function Header({
   }, [open]);
 
   return (
-    <header className="nav" ref={header}>
+    <header
+      className={['nav', inline ? 'inline' : 'collapsed', transparent ? 'over-hero' : '']
+        .join(' ')
+        .trim()}
+      ref={header}
+    >
       <a className="brand" href={brandHref}>
         {brand}
       </a>
@@ -74,12 +100,18 @@ export function Header({
           <span />
         </button>
       )}
-      <nav id="site-nav" className={open ? 'open' : undefined} aria-label={t(ui.navigation, lang)}>
+      <nav
+        id="site-nav"
+        ref={navRef}
+        className={open ? 'open' : undefined}
+        aria-label={t(ui.navigation, lang)}
+      >
         {nav.map((item) => (
           <a
             key={item.id}
             href={`#${item.id}`}
             className={item.id === rsvpId ? 'nav-rsvp' : undefined}
+            aria-current={item.id === active ? 'location' : undefined}
             onClick={() => setOpen(false)}
           >
             {item.label}

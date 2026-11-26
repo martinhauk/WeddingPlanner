@@ -39,6 +39,50 @@ describe('Locations', () => {
     );
   });
 
+  it('shows the note with its inline links, further links, the website and the phone number', () => {
+    const [card] = sections.locations.data.cards;
+    const section = {
+      ...sections.locations,
+      data: {
+        cards: [
+          {
+            ...(card as (typeof sections.locations.data.cards)[number]),
+            note: { de: 'Parkt nur dort. Fragen? [Schreibt uns](mailto:anna@example.com).' },
+            links: [
+              {
+                label: { de: 'Parkplatz am Friedhof' },
+                url: 'https://example.com/parking-cemetery',
+              },
+              { label: { de: 'Küster anrufen' }, url: 'tel:+49 151 333 333' },
+            ],
+            website: 'https://www.example.com/chapel/',
+            phone: '+49 151 22222222',
+          },
+        ],
+      },
+    };
+    render(<Locations section={section} ctx={ctx} />);
+    expect(screen.getByRole('link', { name: 'Schreibt uns' })).toHaveAttribute(
+      'href',
+      'mailto:anna@example.com',
+    );
+    const parking = screen.getByRole('link', { name: 'Parkplatz am Friedhof' });
+    expect(parking).toHaveAttribute('href', 'https://example.com/parking-cemetery');
+    expect(parking).toHaveAttribute('target', '_blank');
+    expect(screen.getByRole('link', { name: 'Küster anrufen' })).toHaveAttribute(
+      'href',
+      'tel:+49151333333',
+    );
+    expect(screen.getByRole('link', { name: 'example.com/chapel' })).toHaveAttribute(
+      'href',
+      'https://www.example.com/chapel/',
+    );
+    expect(screen.getByRole('link', { name: '+49 151 22222222' })).toHaveAttribute(
+      'href',
+      'tel:+4915122222222',
+    );
+  });
+
   it('lists hotels with website and route links', () => {
     render(<Locations section={sections.locations} ctx={ctx} />);
     expect(screen.getByRole('heading', { name: 'Übernachtung' })).toBeInTheDocument();
