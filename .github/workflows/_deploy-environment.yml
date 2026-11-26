@@ -59,11 +59,14 @@ jobs:
   deploy:
     name: deploy ${{ inputs.environment }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 40: build plus up to 3 uploads with 5 and 10 minute pauses.
+    timeout-minutes: 40
     environment: ${{ inputs.environment }}
+    # Only the newest commit matters: a newer run cancels an older one that is still running or
+    # waiting for approval. SWA uploads are atomic, so a cancelled upload leaves the site unchanged.
     concurrency:
       group: deploy-${{ inputs.environment }}
-      cancel-in-progress: false
+      cancel-in-progress: true
     permissions:
       contents: read
       id-token: write
