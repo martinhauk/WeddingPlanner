@@ -35,11 +35,17 @@
 #      ManagedIdentity, Consumption, CostManagement and AlertsManagement.
 #   3. Deploys infra/bootstrap/main.bicep at subscription scope: rg-<slug>-ENV (CanNotDelete lock)
 #      and rg-<slug>-ENV-ops with identity id-<slug>-ENV (one federated credential, subject
-#      <prefix>:environment:ENV) and action group ag-<slug>-ENV, plus the RBAC.
+#      <prefix>:environment:ENV) and action group ag-<slug>-ENV, plus the RBAC. test/production
+#      also get the nightly backup identity id-<slug>-ENV-backup (subject
+#      <prefix>:environment:backup-ENV) and the custom role "WeddingPlanner Backup Writer".
 #   4. Sets ONLY the environment variables AZURE_CLIENT_ID, AZURE_TENANT_ID,
 #      AZURE_SUBSCRIPTION_ID, AZURE_RESOURCE_GROUP and, for test/production, INSTANCE_REPO.
 #   5. test/production: read-only deploy key deploy-ENV on the instance repo, its private key in
 #      the environment secret INSTANCE_REPO_DEPLOY_KEY. Re-runs keep it unless --rotate-deploy-key.
+#   6. test/production: the GitHub Environment backup-ENV for the nightly backup
+#      (.github/workflows/backup.yml): branch main only, no reviewer (a scheduled run cannot wait
+#      for one), no admin bypass, and the four AZURE_* variables of the backup identity, which can
+#      only read tables and write new backups (docs/runbooks/backup-restore.md).
 #
 # Requires: az (with Bicep), gh, jq, and for test/production git and ssh-keygen. Compatible with
 # the bash 3.2 that ships with macOS. Runbook: docs/runbooks/azure-onboarding.md
@@ -90,6 +96,11 @@ TENANT_ID=""
 OWNER_ID=""
 CLIENT_ID=""
 ACTION_GROUP_LOCATION=""
+BACKUP_ENV=""
+BACKUP_IDENTITY=""
+BACKUP_CREDENTIAL=""
+BACKUP_CLIENT_ID=""
+VAR_ENV=""
 TMP_DIR=""
 CHANGES=0
 WARNINGS=0
@@ -305,6 +316,11 @@ read_instance() {
   ACTION_GROUP="ag-$SLUG-$ENV_NAME"
   CREDENTIAL="github-$ENV_NAME"
   DEPLOYMENT_NAME="bootstrap-$SLUG-$ENV_NAME"
+  if [ "$ENV_NAME" != "e2e" ]; then
+    BACKUP_ENV="backup-$ENV_NAME"
+    BACKUP_IDENTITY="id-$SLUG-$ENV_NAME-backup"
+    BACKUP_CREDENTIAL="github-$BACKUP_ENV"
+  fi
   ok "slug $SLUG, dataLocation $DATA_LOCATION, $(printf '%s' "$EMAILS_JSON" | jq length) alert email(s)"
 }
 
@@ -541,10 +557,11 @@ deploy_core() {
       -o none --only-show-errors 2>"$TMP_DIR/stderr"; then
       break
     fi
-    # A new identity can take a while to replicate in Entra ID; role assignments then fail with
-    # PrincipalNotFound. Retrying the (idempotent) deployment is the documented remedy.
+    # A new identity or custom role can take a while to replicate; role assignments then fail
+    # with PrincipalNotFound or RoleDefinitionDoesNotExist. Retrying the (idempotent) deployment
+    # is the documented remedy.
     if [ "$attempt" -lt "$DEPLOY_ATTEMPTS" ] &&
-      grep -Eqi 'PrincipalNotFound|does not exist in the directory' "$TMP_DIR/stderr"; then
+      grep -Eqi 'PrincipalNotFound|does not exist in the directory|RoleDefinitionDoesNotExist' "$TMP_DIR/stderr"; then
       warn "attempt $attempt: the new identity has not replicated yet; retrying in ${RETRY_SECONDS}s"
       attempt=$((attempt + 1))
       sleep "$RETRY_SECONDS"
@@ -556,6 +573,9 @@ deploy_core() {
   done
   rm -f "$params"
   applied "deployment $DEPLOYMENT_NAME: $APP_RG (delete lock), $OPS_RG, $IDENTITY with federated credential $CREDENTIAL, $ACTION_GROUP, RBAC"
+  if [ -n "$BACKUP_ENV" ]; then
+    applied "backup identity $BACKUP_IDENTITY with federated credential $BACKUP_CREDENTIAL (read tables, write new backups only)"
+  fi
 }
 
 read_outputs() {
@@ -569,28 +589,32 @@ read_outputs() {
   rg=$(printf '%s' "$outputs" | jq -r '.appResourceGroupName.value // ""')
   matches "$CLIENT_ID" "$GUID_REGEX" || die "deployment output identityClientId is missing"
   [ "$rg" = "$APP_RG" ] || die "deployment output appResourceGroupName does not match $APP_RG"
+  if [ -n "$BACKUP_ENV" ]; then
+    BACKUP_CLIENT_ID=$(printf '%s' "$outputs" | jq -r '.backupIdentityClientId.value // ""')
+    matches "$BACKUP_CLIENT_ID" "$GUID_REGEX" || die "deployment output backupIdentityClientId is missing"
+  fi
 }
 
-# Only github-<env> may exist on the identity: remove anything else (for example a pull_request or
-# branch credential added by hand).
+# prune_federated_credentials IDENTITY CREDENTIAL GITHUB_ENV: only CREDENTIAL may exist on the
+# identity; remove anything else (for example a pull_request or branch credential added by hand).
 prune_federated_credentials() {
-  local names name
-  names=$(az identity federated-credential list --identity-name "$IDENTITY" --resource-group "$OPS_RG" \
+  local identity=$1 credential=$2 github_env=$3 names name
+  names=$(az identity federated-credential list --identity-name "$identity" --resource-group "$OPS_RG" \
     --subscription "$SUB_ID" --query '[].name' -o tsv --only-show-errors 2>"$TMP_DIR/stderr") || {
     show_stderr
-    die "cannot list the federated credentials of $IDENTITY"
+    die "cannot list the federated credentials of $identity"
   }
   for name in $names; do
-    [ "$name" != "$CREDENTIAL" ] || continue
-    changed "remove federated credential $name from $IDENTITY (only $CREDENTIAL may exist)"
-    az identity federated-credential delete --name "$name" --identity-name "$IDENTITY" \
+    [ "$name" != "$credential" ] || continue
+    changed "remove federated credential $name from $identity (only $credential may exist)"
+    az identity federated-credential delete --name "$name" --identity-name "$identity" \
       --resource-group "$OPS_RG" --subscription "$SUB_ID" --yes -o none --only-show-errors \
       2>"$TMP_DIR/stderr" || {
       show_stderr
       die "cannot remove federated credential $name"
     }
   done
-  ok "$IDENTITY trusts only the GitHub Environment $ENV_NAME ($CREDENTIAL)"
+  ok "$identity trusts only the GitHub Environment $github_env ($credential)"
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -606,40 +630,91 @@ set_variable() {
       return
     fi
     changed "update $name"
-    api_write PATCH "repos/$REPO/environments/$ENV_NAME/variables/$name" \
+    api_write PATCH "repos/$REPO/environments/$VAR_ENV/variables/$name" \
       "$(jq -n --arg n "$name" --arg v "$value" '{name: $n, value: $v}')"
   else
     changed "create $name"
-    api_write POST "repos/$REPO/environments/$ENV_NAME/variables" \
+    api_write POST "repos/$REPO/environments/$VAR_ENV/variables" \
       "$(jq -n --arg n "$name" --arg v "$value" '{name: $n, value: $v}')"
   fi
 }
 
+# configure_variables GITHUB_ENV CLIENT_ID: the Azure variables of one GitHub Environment (the
+# deploy environment ENV, or backup-ENV with the backup identity).
 configure_variables() {
   local allowed name
-  section "GitHub Environment $ENV_NAME: variables"
-  gh api --paginate "repos/$REPO/environments/$ENV_NAME/variables?per_page=30" \
+  VAR_ENV=$1
+  section "GitHub Environment $VAR_ENV: variables"
+  gh api --paginate "repos/$REPO/environments/$VAR_ENV/variables?per_page=30" \
     --jq '.variables[] | [.name, .value] | @tsv' >"$TMP_DIR/variables.tsv" 2>"$TMP_DIR/stderr" || {
     show_stderr
-    die "cannot list the variables of environment $ENV_NAME"
+    die "cannot list the variables of environment $VAR_ENV"
   }
-  set_variable AZURE_CLIENT_ID "$CLIENT_ID"
+  set_variable AZURE_CLIENT_ID "$2"
   set_variable AZURE_TENANT_ID "$TENANT_ID"
   set_variable AZURE_SUBSCRIPTION_ID "$SUB_ID"
   set_variable AZURE_RESOURCE_GROUP "$APP_RG"
-  allowed=" AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID AZURE_RESOURCE_GROUP API_LOCKDOWN "
-  if [ "$ENV_NAME" != "e2e" ]; then
-    set_variable INSTANCE_REPO "$INSTANCE_REPO"
-    allowed="$allowed INSTANCE_REPO "
+  allowed=" AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID AZURE_RESOURCE_GROUP "
+  if [ "$VAR_ENV" = "$ENV_NAME" ]; then
+    allowed="$allowed API_LOCKDOWN "
+    if [ "$ENV_NAME" != "e2e" ]; then
+      set_variable INSTANCE_REPO "$INSTANCE_REPO"
+      allowed="$allowed INSTANCE_REPO "
+    fi
   fi
   # Everything else comes from instance.json at deploy time; report leftovers, never delete them.
   while IFS=$TAB read -r name _; do
     [ -n "$name" ] || continue
     case "$allowed" in
       *" $name "*) ;;
-      *) warn "unexpected variable $name in environment $ENV_NAME (left unchanged; see the runbook)" ;;
+      *) warn "unexpected variable $name in environment $VAR_ENV (left unchanged; see the runbook)" ;;
     esac
   done <"$TMP_DIR/variables.tsv"
+}
+
+# The GitHub Environment backup-ENV of the nightly backup: deployments from main only, no
+# reviewer (a scheduled run cannot wait for an approval), no wait timer, no admin bypass.
+configure_backup_environment() {
+  local current problems policies has_main id name
+  local body='{"wait_timer":0,"prevent_self_review":false,"reviewers":null,"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true},"can_admins_bypass":false}'
+  section "GitHub Environment $BACKUP_ENV (nightly backup)"
+  if current=$(api_get "repos/$REPO/environments/$BACKUP_ENV"); then
+    problems=$(printf '%s' "$current" | jq -r '[
+        (if .deployment_branch_policy != {protected_branches: false, custom_branch_policies: true}
+         then "deployments not restricted to selected branches" else empty end),
+        (if .can_admins_bypass != false then "admins can bypass protection rules" else empty end),
+        (if [.protection_rules // [] | .[] | select(.type == "required_reviewers" or .type == "wait_timer")] | length > 0
+         then "has a reviewer or wait timer, which a scheduled backup cannot pass" else empty end)
+      ] | join("; ")')
+    if [ -z "$problems" ]; then
+      ok "environment $BACKUP_ENV: protection rules as desired"
+    else
+      changed "update environment $BACKUP_ENV ($problems)"
+      api_write PUT "repos/$REPO/environments/$BACKUP_ENV" "$body"
+    fi
+  else
+    changed "create environment $BACKUP_ENV (branch main only, no reviewer, no admin bypass)"
+    api_write PUT "repos/$REPO/environments/$BACKUP_ENV" "$body"
+  fi
+  # A just-created environment has no branch policies yet.
+  policies=$(api_get "repos/$REPO/environments/$BACKUP_ENV/deployment-branch-policies") ||
+    policies='{"branch_policies":[]}'
+  has_main=$(printf '%s' "$policies" |
+    jq '[.branch_policies[]? | select(.name == "main" and (.type // "branch") == "branch")] | length')
+  if [ "$has_main" = "0" ]; then
+    changed "allow deployments to $BACKUP_ENV from branch main"
+    api_write POST "repos/$REPO/environments/$BACKUP_ENV/deployment-branch-policies" \
+      '{"name":"main","type":"branch"}'
+  else
+    ok "environment $BACKUP_ENV: deployments from branch main allowed"
+  fi
+  while read -r id name <&3; do
+    [ -n "$id" ] || continue
+    changed "remove deployment policy $name from $BACKUP_ENV (only main may use it)"
+    api_write DELETE "repos/$REPO/environments/$BACKUP_ENV/deployment-branch-policies/$id"
+  done 3< <(printf '%s' "$policies" | jq -r '.branch_policies[]?
+    | select(.name != "main" or (.type // "branch") != "branch")
+    | "\(.id) \(.type // "branch"):\(.name)"')
 }
 
 configure_deploy_key() {
@@ -705,6 +780,9 @@ summary() {
   section "Summary"
   printf '  Environment %s of deployment %s is bootstrapped (%d change(s)).\n' "$ENV_NAME" "$SLUG" "$CHANGES"
   printf '  Re-running this script is safe.\n'
+  if [ -n "$BACKUP_ENV" ]; then
+    printf '  Nightly backups run in the GitHub Environment %s (.github/workflows/backup.yml).\n' "$BACKUP_ENV"
+  fi
   if [ "$WARNINGS" -gt 0 ]; then
     printf '  %d warning(s); see above.\n' "$WARNINGS"
   fi
@@ -730,10 +808,15 @@ main() {
   register_providers
   deploy_core
   read_outputs
-  prune_federated_credentials
-  configure_variables
+  prune_federated_credentials "$IDENTITY" "$CREDENTIAL" "$ENV_NAME"
+  if [ -n "$BACKUP_ENV" ]; then
+    prune_federated_credentials "$BACKUP_IDENTITY" "$BACKUP_CREDENTIAL" "$BACKUP_ENV"
+  fi
+  configure_variables "$ENV_NAME" "$CLIENT_ID"
   if [ "$ENV_NAME" != "e2e" ]; then
     configure_deploy_key
+    configure_backup_environment
+    configure_variables "$BACKUP_ENV" "$BACKUP_CLIENT_ID"
   fi
   summary
 }

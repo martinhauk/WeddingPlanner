@@ -15,10 +15,12 @@
 #   registerResult        state a provider gets after `register` (default Registered)
 #   groups                {name: location} of existing resource groups
 #   actionGroups          {"<rg>/<name>": location} of existing action groups
-#   extraCredentials      federated credential names besides github-<env>
+#   extraCredentials      federated credential names besides github-<env> (deploy identity)
+#   extraBackupCredentials  the same for the backup identity (besides github-backup-<env>)
 #   deploymentFailures    number of `deployment sub create` calls that fail first
 #   deploymentError       stderr of such a failure
 #   clientId              identityClientId output
+#   backupClientId        backupIdentityClientId output (test and production)
 set -euo pipefail
 
 state=${FAKE_AZ_STATE:?FAKE_AZ_STATE is not set}
@@ -156,24 +158,38 @@ case "$command" in
   "deployment sub show")
     require_login
     [ -f "$dir/last-params.json" ] || fail "(DeploymentNotFound) Deployment '$f_name' could not be found."
-    jq --arg client "$(jq -r '.clientId' "$state")" '.parameters as $p
+    jq --arg client "$(jq -r '.clientId' "$state")" \
+      --arg backup "$(jq -r '.backupClientId // "66666666-6666-4666-8666-666666666666"' "$state")" \
+      '.parameters as $p
       | "rg-\($p.deploymentSlug.value)-\($p.environmentName.value)" as $rg
+      | ($p.environmentName.value != "e2e") as $backup_enabled
       | {
           appResourceGroupName: {type: "String", value: $rg},
           opsResourceGroupName: {type: "String", value: "\($rg)-ops"},
-          identityClientId: {type: "String", value: $client}
+          identityClientId: {type: "String", value: $client},
+          backupIdentityClientId: {type: "String", value: (if $backup_enabled then $backup else "" end)}
         }' "$dir/last-params.json"
     ;;
   "identity federated-credential list")
     require_login
-    env=${f_identity##*-}
-    jq -r --arg env "$env" '["github-\($env)"] + (.extraCredentials // []) | .[]' "$state"
+    case "$f_identity" in
+      *-backup)
+        env=${f_identity%-backup}
+        env=${env##*-}
+        jq -r --arg env "$env" '["github-backup-\($env)"] + (.extraBackupCredentials // []) | .[]' "$state"
+        ;;
+      *)
+        env=${f_identity##*-}
+        jq -r --arg env "$env" '["github-\($env)"] + (.extraCredentials // []) | .[]' "$state"
+        ;;
+    esac
     ;;
   "identity federated-credential delete")
     require_login
     [ "$f_output" = "none" ] || fail "fake az: delete without -o none"
     # shellcheck disable=SC2016 # $n is a jq variable
-    update --arg n "$f_name" '.extraCredentials = ((.extraCredentials // []) - [$n])'
+    update --arg n "$f_name" '.extraCredentials = ((.extraCredentials // []) - [$n])
+      | .extraBackupCredentials = ((.extraBackupCredentials // []) - [$n])'
     ;;
   *)
     fail "fake az: unsupported command: $command"

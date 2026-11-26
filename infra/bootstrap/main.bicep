@@ -5,11 +5,17 @@
 //   rg-<slug>-<env>-ops   ops resource group the deploy identity has NO rights on:
 //     id-<slug>-<env>     user-assigned deploy identity with one federated credential for the
 //                         GitHub Environment <env> (no pull_request or branch credential)
+//     id-<slug>-<env>-backup  test/production only: nightly backup identity with one federated
+//                         credential for the GitHub Environment backup-<env> (no reviewer, so a
+//                         scheduled workflow can use it; it can only read and append backups)
 //     ag-<slug>-<env>     action group (emails from instance.json) for the app's metric alerts
+//   custom role "WeddingPlanner Backup Writer" (test/production, one per subscription): write new
+//                         blobs only, no read, no delete
 //
 // RBAC (least privilege):
 //   deploy identity: Contributor, Storage Blob Data Contributor and Storage Table Data Reader on
 //                    the app RG; Monitoring Reader on the action group only (to attach alerts)
+//   backup identity: Reader, Storage Table Data Reader and Backup Writer on the app RG
 //   signed-in owner: Storage Blob Data Contributor and Storage Table Data Contributor on the app RG
 //
 // The names are a contract with infra/app (S0-04) and scripts/bootstrap-cost.sh (S0-06). Module
@@ -60,6 +66,10 @@ var appResourceGroupName = 'rg-${deploymentSlug}-${environmentName}'
 var opsResourceGroupName = 'rg-${deploymentSlug}-${environmentName}-ops'
 var identityName = 'id-${deploymentSlug}-${environmentName}'
 var actionGroupName = 'ag-${deploymentSlug}-${environmentName}'
+// The nightly backup (.github/workflows/backup.yml) runs for test and production only.
+var backupEnabled = environmentName != 'e2e'
+var backupEnvironmentName = 'backup-${environmentName}'
+var backupIdentityName = 'id-${deploymentSlug}-${environmentName}-backup'
 
 // Regions that offer regional processing for action groups (Azure Monitor docs, "Global and
 // regional action group processing"). Elsewhere the action group is global.
@@ -110,6 +120,43 @@ module deployIdentity 'modules/deploy-identity.bicep' = {
   }
 }
 
+module backupIdentity 'modules/deploy-identity.bicep' = if (backupEnabled) {
+  name: 'bootstrap-backup-identity'
+  scope: opsResourceGroup
+  params: {
+    identityName: backupIdentityName
+    location: dataLocation
+    tags: tags
+    subject: '${githubSubjectPrefix}:environment:${backupEnvironmentName}'
+    credentialName: 'github-${backupEnvironmentName}'
+  }
+}
+
+// Write-only access to blobs: a backup identity can add backups but never read or delete them.
+// One definition per subscription (stable name), shared by all environments that use it.
+resource backupWriterRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' = if (backupEnabled) {
+  name: guid(subscription().id, 'weddingplanner-backup-writer')
+  properties: {
+    roleName: 'WeddingPlanner Backup Writer ${take(uniqueString(subscription().id), 8)}'
+    description: 'Write new blobs (table backups) without read or delete rights. Managed by scripts/bootstrap.sh.'
+    type: 'CustomRole'
+    permissions: [
+      {
+        actions: []
+        notActions: []
+        dataActions: [
+          'Microsoft.Storage/storageAccounts/blobServices/containers/blobs/write'
+          'Microsoft.Storage/storageAccounts/blobServices/containers/blobs/add/action'
+        ]
+        notDataActions: []
+      }
+    ]
+    assignableScopes: [
+      subscription().id
+    ]
+  }
+}
+
 module actionGroup 'modules/action-group.bicep' = {
   name: 'bootstrap-action-group'
   scope: opsResourceGroup
@@ -130,6 +177,8 @@ module appResourceGroupAccess 'modules/app-rg-access.bicep' = {
     deployPrincipalId: deployIdentity.outputs.principalId
     ownerPrincipalId: ownerPrincipalId
     ownerPrincipalType: ownerPrincipalType
+    backupPrincipalId: backupEnabled ? backupIdentity!.outputs.principalId : ''
+    backupWriterRoleId: backupEnabled ? backupWriterRole.name : ''
   }
 }
 
@@ -138,5 +187,8 @@ output opsResourceGroupName string = opsResourceGroup.name
 output identityName string = identityName
 output identityClientId string = deployIdentity.outputs.clientId
 output federatedCredentialName string = deployIdentity.outputs.credentialName
+output backupEnvironmentName string = backupEnabled ? backupEnvironmentName : ''
+output backupIdentityName string = backupEnabled ? backupIdentityName : ''
+output backupIdentityClientId string = backupEnabled ? backupIdentity!.outputs.clientId : ''
 output actionGroupName string = actionGroup.outputs.name
 output actionGroupLocation string = effectiveActionGroupLocation

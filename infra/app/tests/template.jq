@@ -44,9 +44,9 @@ def group($name): {group: $name};
     .parameters.environmentName.allowedValues == ["e2e", "test", "production"]),
   check("dataLocation: default germanywestcentral";
     .parameters.dataLocation.defaultValue == "germanywestcentral"),
-  check("swaLocation: allowed SWA regions, default westeurope"; .parameters.swaLocation
+  check("swaLocation: allowed SWA regions, default eastus2"; .parameters.swaLocation
     | .allowedValues == ["westeurope", "centralus", "eastus2", "westus2", "eastasia"]
-      and .defaultValue == "westeurope"),
+      and .defaultValue == "eastus2"),
   check("featuresRsvp and featuresAdmin: bool";
     [.parameters.featuresRsvp.type, .parameters.featuresAdmin.type] == ["bool", "bool"]),
   check("rsvpDeadline and rsvpTimeZone: required strings";
@@ -153,10 +153,8 @@ def group($name): {group: $name};
       and (.deleteRetentionPolicy.days | resolve($v)) == 30
       and .containerDeleteRetentionPolicy.enabled == true
       and (.containerDeleteRetentionPolicy.days | resolve($v)) == 30),
-  check("exactly one container: private backups";
-    [inner("app-infra-storage"; "Microsoft.Storage/storageAccounts/blobServices/containers")
-      | {name, access: .properties.publicAccess}]
-    == [{name: "[format('{0}/{1}/{2}', parameters('name'), 'default', 'backups')]", access: "None"}]),
+  check("no blob container in the data account (backups live in their own account)";
+    [inner("app-infra-storage"; "Microsoft.Storage/storageAccounts/blobServices/containers")] == []),
   check("tables Rsvps, Guests, MatchDecisions, Settings";
     template("app-infra-storage").variables.tableNames
       == ["Rsvps", "Guests", "MatchDecisions", "Settings"]
@@ -167,11 +165,7 @@ def group($name): {group: $name};
     template("app-infra-storage").variables as $v
     | [rules | select(.enabled and .definition.filters.prefixMatch == null)
       | .definition.actions.version.delete.daysAfterCreationGreaterThan | resolve($v)] == [90]),
-  check("lifecycle: backups/ deleted after 180 days";
-    template("app-infra-storage").variables as $v
-    | [rules | select(.enabled and (.definition.filters.prefixMatch == ["backups/"]
-        or .definition.filters.prefixMatch == ["[format('{0}/', 'backups')]"]))
-      | .definition.actions.baseBlob.delete.daysAfterModificationGreaterThan | resolve($v)] == [180]),
+  check("lifecycle: exactly one rule, for previous versions"; [rules | .name] == ["delete-previous-versions"]),
 
   group("monitoring"),
   check("module location is dataLocation, cap from logDailyCapGb";

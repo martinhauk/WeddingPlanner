@@ -1,6 +1,7 @@
 // App resource group (rg-<slug>-<env>): CanNotDelete lock plus the role assignments for the deploy
-// identity and the owner. Contributor cannot remove the lock or create role assignments
-// (Microsoft.Authorization write/delete are excluded from Contributor).
+// identity, the backup identity (test, production) and the owner. Contributor cannot remove the
+// lock or create role assignments (Microsoft.Authorization write/delete are excluded from
+// Contributor).
 
 @description('Principal id of the deploy identity (id-<slug>-<env>).')
 param deployPrincipalId string
@@ -16,12 +17,19 @@ param ownerPrincipalId string
 ])
 param ownerPrincipalType string
 
+@description('Principal id of the nightly backup identity (id-<slug>-<env>-backup); empty for e2e.')
+param backupPrincipalId string = ''
+
+@description('Name (GUID) of the custom write-only backup role; empty for e2e.')
+param backupWriterRoleId string = ''
+
 // Built-in role definition ids.
 var roles = {
   contributor: 'b24988ac-6180-42a0-ab88-20f7382dd24c'
   storageBlobDataContributor: 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
   storageTableDataReader: '76199698-9eea-4c19-bc75-cec21354c6b6'
   storageTableDataContributor: '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3'
+  reader: 'acdd72a7-3385-48ef-bd42-f606fba81ae7'
 }
 
 var assignments = [
@@ -57,6 +65,31 @@ var assignments = [
   }
 ]
 
+// The nightly backup identity can only read: the resource group's deployments (to find the
+// account names), the tables, and write new blobs (no read, no delete).
+var backupAssignments = empty(backupPrincipalId)
+  ? []
+  : [
+      {
+        principalId: backupPrincipalId
+        principalType: 'ServicePrincipal'
+        roleId: roles.reader
+        description: 'WeddingPlanner backup identity: find the storage accounts'
+      }
+      {
+        principalId: backupPrincipalId
+        principalType: 'ServicePrincipal'
+        roleId: roles.storageTableDataReader
+        description: 'WeddingPlanner backup identity: read tables (nightly export)'
+      }
+      {
+        principalId: backupPrincipalId
+        principalType: 'ServicePrincipal'
+        roleId: backupWriterRoleId
+        description: 'WeddingPlanner backup identity: write new backup blobs only'
+      }
+    ]
+
 resource deleteLock 'Microsoft.Authorization/locks@2020-05-01' = {
   name: 'do-not-delete'
   properties: {
@@ -66,7 +99,7 @@ resource deleteLock 'Microsoft.Authorization/locks@2020-05-01' = {
 }
 
 resource roleAssignments 'Microsoft.Authorization/roleAssignments@2022-04-01' = [
-  for assignment in assignments: {
+  for assignment in concat(assignments, backupAssignments): {
     name: guid(resourceGroup().id, assignment.principalId, assignment.roleId)
     properties: {
       roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', assignment.roleId)

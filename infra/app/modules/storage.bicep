@@ -1,7 +1,8 @@
-// Storage account for one environment: Table Storage for runtime data and a private `backups`
-// blob container for the nightly table export. All data at rest stays in `location` (the
-// deployment's dataLocation, ADR 0006). There is no `content` container: content is baked into
-// the static build from the private instance repo.
+// Data account for one environment: Table Storage for runtime data. All data at rest stays in
+// `location` (the deployment's dataLocation, ADR 0006). There is no `content` container: content
+// is baked into the static build from the private instance repo. Table backups live in a separate
+// account (backup.bicep, modules/backup-storage.bicep), never here. An empty `backups` container
+// that earlier versions created here is no longer managed and can be ignored.
 
 @description('Storage account name (3-24 lower-case letters and digits, globally unique).')
 @minLength(3)
@@ -27,9 +28,6 @@ var softDeleteDays = 30
 
 @description('Days after which previous blob versions are deleted.')
 var previousVersionRetentionDays = 90
-
-@description('Days after which blobs under backups/ are deleted.')
-var backupRetentionDays = 180
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2026-06-01' = {
   name: name
@@ -72,14 +70,6 @@ resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2026-06-01'
   }
 }
 
-resource backupsContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2026-06-01' = {
-  parent: blobService
-  name: 'backups'
-  properties: {
-    publicAccess: 'None'
-  }
-}
-
 resource tableService 'Microsoft.Storage/storageAccounts/tableServices@2026-06-01' = {
   parent: storageAccount
   name: 'default'
@@ -95,6 +85,10 @@ resource tables 'Microsoft.Storage/storageAccounts/tableServices/tables@2026-06-
 resource lifecyclePolicy 'Microsoft.Storage/storageAccounts/managementPolicies@2026-06-01' = {
   parent: storageAccount
   name: 'default'
+  // The version action relies on versioning, which the blob service enables.
+  dependsOn: [
+    blobService
+  ]
   properties: {
     policy: {
       rules: [
@@ -112,30 +106,6 @@ resource lifecyclePolicy 'Microsoft.Storage/storageAccounts/managementPolicies@2
               version: {
                 delete: {
                   daysAfterCreationGreaterThan: previousVersionRetentionDays
-                }
-              }
-            }
-          }
-        }
-        {
-          name: 'delete-old-backups'
-          enabled: true
-          type: 'Lifecycle'
-          definition: {
-            filters: {
-              blobTypes: [
-                'blockBlob'
-              ]
-              // Referencing the container also orders this policy after the blob service,
-              // whose versioning the version action above relies on.
-              prefixMatch: [
-                '${backupsContainer.name}/'
-              ]
-            }
-            actions: {
-              baseBlob: {
-                delete: {
-                  daysAfterModificationGreaterThan: backupRetentionDays
                 }
               }
             }

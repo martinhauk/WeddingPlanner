@@ -10,11 +10,13 @@ delete lock and the action group. This template creates no role assignments, loc
 | [`main.bicep`](main.bicep)                                               | Names, tags and the four modules; outputs `swaName`, `swaDefaultHostname`, `storageAccountName` |
 | [`main.bicepparam`](main.bicepparam)                                     | Parameters, read only from environment variables                                                |
 | [`modules/static-web-app.bicep`](modules/static-web-app.bicep)           | Static Web App (Free) in `swaLocation` and its complete app settings                            |
-| [`modules/storage.bicep`](modules/storage.bicep)                         | Storage account in `dataLocation`: tables, private `backups` container, soft delete, lifecycle  |
+| [`modules/storage.bicep`](modules/storage.bicep)                         | Data account in `dataLocation`: tables, blob versioning and soft delete                         |
+| [`backup.bicep`](backup.bicep), [`backup.bicepparam`](backup.bicepparam) | Backup store (separate template, deployed before the pre-deploy backup): see below              |
+| [`modules/backup-storage.bicep`](modules/backup-storage.bicep)           | Backup account `bk...`: Entra ID only, container `table-backups` with WORM 30 days, versioning  |
 | [`modules/monitoring.bicep`](modules/monitoring.bicep)                   | Log Analytics (daily cap) and workspace-based Application Insights in `dataLocation`            |
 | [`modules/alerts.bicep`](modules/alerts.bicep)                           | Metric alerts on the Static Web App, notifying the bootstrap action group (if `enableAlerts`)   |
 | [`../bicepconfig.json`](../bicepconfig.json)                             | Linter rules shared with `infra/bootstrap`                                                      |
-| [`tests/run.sh`](tests/run.sh), [`tests/template.jq`](tests/template.jq) | Offline tests: build, lint, build-params and the compiled template's contract                   |
+| [`tests/run.sh`](tests/run.sh), [`tests/*.jq`](tests/template.jq)        | Offline tests: build, lint, build-params and the compiled templates' contracts                  |
 
 ## Regions
 
@@ -55,14 +57,15 @@ Names are derived in `main.bicep` from the slug, the environment and `uniqueStri
 resource group, so every deploy updates the same resources and a name never contains a commit SHA
 or anything personal. Bicep checks at build time that each derived name fits its length limit.
 
-| Resource                      | Name                                                                       |
-| ----------------------------- | -------------------------------------------------------------------------- |
-| Static Web App                | `swa-<slug>-<env>-<hash6>`                                                 |
-| Storage account               | `st<slug><e2e\|test\|prod><hash>`, cut to 24 characters                    |
-| Log Analytics / App Insights  | `log-<slug>-<env>-<hash6>` / `appi-<slug>-<env>-<hash6>`                   |
-| Metric alerts                 | `alert-<slug>-<env>-{function-hits,bytes-sent,function-errors}`            |
-| Action group (from bootstrap) | `ag-<slug>-<env>` in `rg-<slug>-<env>-ops`, referenced with `resourceId()` |
-| Module deployments            | `app-infra-{storage,monitoring,static-web-app,alerts}`                     |
+| Resource                      | Name                                                                         |
+| ----------------------------- | ---------------------------------------------------------------------------- |
+| Static Web App                | `swa-<slug>-<env>-<hash6>`                                                   |
+| Storage account (data)        | `st<slug><e2e\|test\|prod><hash>`, cut to 24 characters                      |
+| Storage account (backups)     | `bk<slug><e2e\|test\|prod><hash>`, cut to 24 characters (`backup.bicep`)     |
+| Log Analytics / App Insights  | `log-<slug>-<env>-<hash6>` / `appi-<slug>-<env>-<hash6>`                     |
+| Metric alerts                 | `alert-<slug>-<env>-{function-hits,bytes-sent,function-errors}`              |
+| Action group (from bootstrap) | `ag-<slug>-<env>` in `rg-<slug>-<env>-ops`, referenced with `resourceId()`   |
+| Module deployments            | `app-infra-{storage,monitoring,static-web-app,alerts}`, `app-backup-storage` |
 
 Every resource is tagged `app=weddingplanner`, `deployment=<slug>`, `environment=<env>` and
 `managedBy=bicep`.
@@ -112,6 +115,21 @@ az deployment group create --name app-infra --resource-group "$AZURE_RESOURCE_GR
   --parameters infra/app/main.bicepparam -o none
 ```
 
+Before that, the deploy job creates or updates the backup store and, for test and production,
+exports every table into it (docs/runbooks/backup-restore.md):
+
+```sh
+az deployment group create --name app-backup --resource-group "$AZURE_RESOURCE_GROUP" \
+  --parameters infra/app/backup.bicepparam -o none
+```
+
+`backup.bicep` is a template of its own so the backup step never changes the app or the data
+account. It reads `DEPLOYMENT_SLUG`, `ENVIRONMENT_NAME` and `DATA_LOCATION`. The backup account
+allows Entra ID only (no shared key), its container `table-backups` has an unlocked container-level
+immutability policy (WORM, 30 days), blob versioning and 30-day soft delete; a lifecycle rule
+deletes backups after 180 days. The resource group's delete lock also protects the policy. The
+data account has no blob container; an empty `backups` container from earlier versions is unused.
+
 The deployment and module names are fixed, so repeated deploys do not grow the deployment history.
 Read the non-secret outputs with `az deployment group show --name app-infra ... --query
 properties.outputs` and mask `swaDefaultHostname` before using it (`::add-mask::`); never print it.
@@ -131,8 +149,8 @@ infra/app/tests/run.sh
 ```
 
 `tests/run.sh` builds and lints everything (no diagnostics allowed), checks `build-params` with
-dummy values, missing and invalid variables, checks the compiled template against the contract in
-`tests/template.jq`, and proves with one fixture per rule that `bicepconfig.json` makes the required
+dummy values, missing and invalid variables, checks the compiled templates against the contracts in
+`tests/template.jq` and `tests/backup.jq`, and proves with one fixture per rule that `bicepconfig.json` makes the required
 linter rules errors.
 
 `use-recent-api-versions` is an error, so an API version older than two years fails the lint once a
