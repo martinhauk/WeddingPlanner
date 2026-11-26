@@ -167,6 +167,7 @@ describe('Rsvp', () => {
       language: 'de',
       website: '',
       dietaryConsent: true,
+      elapsedMs: expect.any(Number),
     });
     expect(api.callsTo(STATUS)).toHaveLength(1);
 
@@ -259,6 +260,7 @@ describe('Rsvp', () => {
       people: [{ name: 'María-José García' }, { name: 'Jürgen Müller' }],
       language: 'en',
       website: '',
+      elapsedMs: expect.any(Number),
     });
   });
 
@@ -327,6 +329,136 @@ describe('Rsvp', () => {
     await screen.findByText('Danke! Wir freuen uns auf euch.');
     expect(api.callsTo(CREATE)[0]?.body).toMatchObject({ website: 'https://example.com' });
   });
+
+  it('sends the time since the form was shown with a new reply', async () => {
+    const user = userEvent.setup();
+    const now = vi.spyOn(performance, 'now').mockReturnValue(1_000);
+    try {
+      const api = mockApi({ [STATUS]: () => json(200, openStatus), [CREATE]: created });
+      renderRsvp();
+      await user.click(screen.getByRole('button', { name: 'Leider nicht' }));
+      now.mockReturnValue(9_500);
+      await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Pablo Pérez');
+      await user.click(screen.getByRole('button', { name: 'Antwort speichern' }));
+
+      await screen.findByText('Schade – danke für eure Rückmeldung.');
+      expect(api.callsTo(CREATE)[0]?.body).toMatchObject({ elapsedMs: 8_500 });
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('shows a refused submission without its reason and lets the guest send again', async () => {
+    const user = userEvent.setup();
+    let attempts = 0;
+    const api = mockApi({
+      [STATUS]: () => json(200, openStatus),
+      [CREATE]: (call) => {
+        attempts += 1;
+        return attempts === 1 ? problem(400, 'submission_rejected') : created(call);
+      },
+    });
+    renderRsvp();
+    await user.click(screen.getByRole('button', { name: 'Ja, wir kommen' }));
+    await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Pablo Pérez');
+    await user.click(screen.getByRole('button', { name: 'Antwort speichern' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Die Antwort konnte nicht gesendet werden. Bitte prüft eure Angaben und versucht es gleich noch einmal.',
+    );
+    expect(screen.getByRole('textbox', { name: 'Name' })).toHaveValue('Pablo Pérez');
+    expect(screen.getByRole('textbox', { name: 'Name' })).toBeValid();
+
+    await user.click(screen.getByRole('button', { name: 'Antwort speichern' }));
+    expect(await screen.findByText('Danke! Wir freuen uns auf euch.')).toBeInTheDocument();
+    expect(api.callsTo(CREATE)).toHaveLength(2);
+  });
+
+  it('finds a name given twice before sending', async () => {
+    const user = userEvent.setup();
+    const api = mockApi({ [STATUS]: () => json(200, openStatus) });
+    renderRsvp();
+    await user.click(screen.getByRole('button', { name: 'Leider nicht' }));
+    await user.click(screen.getByRole('button', { name: '+ Weitere Person' }));
+    const [first, second] = screen.getAllByRole('textbox', { name: 'Name' });
+    await user.type(first as HTMLElement, 'María-José García');
+    await user.type(second as HTMLElement, 'maria jose garcia');
+    await user.click(screen.getByRole('button', { name: 'Antwort speichern' }));
+
+    expect(second).toBeInvalid();
+    expect(second).toHaveAccessibleDescription('Dieser Name steht schon in eurer Antwort.');
+    expect(second).toHaveFocus();
+    expect(first).toBeValid();
+    expect(api.callsTo(CREATE)).toEqual([]);
+  });
+
+  it.each([
+    [
+      'de',
+      'Ja, wir kommen',
+      '+ Begleitung hinzufügen',
+      'Name',
+      'Antwort speichern',
+      [
+        'Bitte gebt den vollständigen Namen ein.',
+        'Bitte gebt nur einen Namen ein, ohne Links oder E-Mail-Adressen.',
+        'Dieser Name steht schon in eurer Antwort.',
+      ],
+    ],
+    [
+      'en',
+      "Yes, we'll be there",
+      '+ Add companion',
+      'Name',
+      'Save reply',
+      [
+        'Please enter the full name.',
+        'Please enter just a name, without links or email addresses.',
+        'This name is already in your reply.',
+      ],
+    ],
+    [
+      'es',
+      'Sí, iremos',
+      '+ Añadir acompañante',
+      'Nombre',
+      'Guardar respuesta',
+      [
+        'Por favor, escribid el nombre completo.',
+        'Por favor, escribid solo un nombre, sin enlaces ni direcciones de correo.',
+        'Este nombre ya está en vuestra respuesta.',
+      ],
+    ],
+  ] as const)(
+    'shows the name findings of the API in %s',
+    async (lang, yes, add, label, save, texts) => {
+      const user = userEvent.setup();
+      mockApi({
+        [STATUS]: () => json(200, openStatus),
+        [CREATE]: () =>
+          problem(400, 'validation_failed', {
+            errors: [
+              { field: 'people[0].name', code: 'too_short' },
+              { field: 'people[1].name', code: 'invalid' },
+              { field: 'people[2].name', code: 'duplicate' },
+            ],
+          }),
+      });
+      renderRsvp({ lang });
+      await user.click(screen.getByRole('button', { name: yes }));
+      await user.click(screen.getByRole('button', { name: add }));
+      await user.click(screen.getByRole('button', { name: add }));
+      const names = screen.getAllByRole('textbox', { name: label });
+      for (const [index, name] of ['Pablo Pérez', 'María-José García', 'Jürgen Müller'].entries()) {
+        await user.type(names[index] as HTMLElement, name);
+      }
+      await user.click(screen.getByRole('button', { name: save }));
+
+      await waitFor(() => expect(names[0]).toHaveAccessibleDescription(texts[0]));
+      expect(names[1]).toHaveAccessibleDescription(texts[1]);
+      expect(names[2]).toHaveAccessibleDescription(texts[2]);
+    },
+  );
 
   it.each([
     [

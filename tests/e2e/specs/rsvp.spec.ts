@@ -60,6 +60,7 @@ test.describe('RSVP', () => {
           message: 'Wir freuen uns sehr!',
           language: 'de',
           website: '',
+          elapsedMs: expect.any(Number),
           dietaryConsent: true,
         },
       },
@@ -98,6 +99,7 @@ test.describe('RSVP', () => {
         people: [{ name: 'Pablo Pérez' }, { name: 'María-José García' }],
         language: 'de',
         website: '',
+        elapsedMs: expect.any(Number),
       },
     ]);
   });

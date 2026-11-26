@@ -76,10 +76,21 @@ export type RsvpRequest = {
   readonly website: string;
   /** Explicit consent for the dietary data; the API requires `true` when there is any. */
   readonly dietaryConsent?: boolean;
+  /**
+   * `POST` only: milliseconds since the form was shown. The API refuses a reply sent faster than
+   * its minimum fill time.
+   */
+  readonly elapsedMs?: number;
 };
 
 /** One validation finding: `field` is a path such as `people[1].name`, `code` e.g. `required`. */
 export type FieldError = { readonly field: string; readonly code: string };
+
+/**
+ * Problem code of a write the API refused as automated (honeypot or minimum fill time). It does not
+ * say which check failed; the client reports it as a finding without a field.
+ */
+export const SUBMISSION_REJECTED = 'submission_rejected';
 
 export type ApiFailureKind =
   | 'validation'
@@ -231,9 +242,11 @@ export function failureOf(response: Response, problem: unknown): ApiFailure {
   switch (status) {
     case 400: {
       const errors =
-        isRecord(problem) && Array.isArray(problem.errors)
-          ? problem.errors.filter(isFieldError)
-          : [];
+        code === SUBMISSION_REJECTED
+          ? [{ field: '', code }]
+          : isRecord(problem) && Array.isArray(problem.errors)
+            ? problem.errors.filter(isFieldError)
+            : [];
       return { kind: 'validation', status, errors };
     }
     case 403:

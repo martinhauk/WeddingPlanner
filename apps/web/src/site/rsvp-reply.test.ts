@@ -3,6 +3,8 @@ import {
   DEFAULT_LIMITS,
   formLimits,
   hasDietData,
+  nameKey,
+  nameRuleCode,
   type Reply,
   replyFromView,
   toRequest,
@@ -44,6 +46,18 @@ describe('toRequest', () => {
     expect(
       toRequest({ ...reply, people: [{ name: 'Anna', diet: ['vegan'], dietNote: '' }] }, 'de', ''),
     ).toHaveProperty('dietaryConsent', true);
+  });
+
+  it('sends the fill time as whole milliseconds when given', () => {
+    const reply: Reply = {
+      attending: false,
+      people: [{ name: 'Ben', diet: [], dietNote: '' }],
+      message: '',
+      dietConsent: false,
+    };
+    expect(toRequest(reply, 'de', '')).not.toHaveProperty('elapsedMs');
+    expect(toRequest(reply, 'de', '', 4321.6)).toHaveProperty('elapsedMs', 4322);
+    expect(toRequest(reply, 'de', '', -3)).toHaveProperty('elapsedMs', 0);
   });
 
   it('drops dietary data for a no and keeps the message', () => {
@@ -142,10 +156,35 @@ describe('validateReply', () => {
     expect(validateReply({ ...reply, attending: false }, DEFAULT_LIMITS)).toEqual([]);
   });
 
+  it('applies the name rules and finds a name twice in one reply', () => {
+    const reply: Reply = {
+      attending: false,
+      people: [
+        { ...person, name: 'A' },
+        { ...person, name: 'example.com' },
+        { ...person, name: 'Pablo Pérez' },
+        { ...person, name: ' pablo perez ' },
+        { ...person, name: 'a' },
+      ],
+      message: '',
+      dietConsent: false,
+    };
+    expect(validateReply(reply, DEFAULT_LIMITS)).toEqual([
+      { field: 'people[0].name', code: 'too_short' },
+      { field: 'people[1].name', code: 'invalid' },
+      { field: 'people[3].name', code: 'duplicate' },
+      { field: 'people[4].name', code: 'too_short' },
+    ]);
+  });
+
   it('ignores dietary notes of a no and limits the number of people', () => {
     const reply: Reply = {
       attending: false,
-      people: Array.from({ length: 3 }, () => ({ ...person, dietNote: 'y'.repeat(500) })),
+      people: ['Anna', 'Ben', 'Pablo'].map((name) => ({
+        ...person,
+        name,
+        dietNote: 'y'.repeat(500),
+      })),
       message: '',
       dietConsent: false,
     };
@@ -153,6 +192,56 @@ describe('validateReply', () => {
     expect(validateReply(reply, { ...DEFAULT_LIMITS, maxPeople: 2 })).toEqual([
       { field: 'people', code: 'too_many' },
     ]);
+  });
+});
+
+describe('nameRuleCode', () => {
+  it.each([
+    'Anna',
+    'Jo',
+    'A.',
+    'Pablo Pérez',
+    'María-José García',
+    "O'Brien",
+    'Dr. med. Anna Müller',
+    'Dr.med. Anna Müller',
+    'J.R.R. Ben',
+    "Anna (Ben's sister)",
+    'Ben & Anna',
+    'Ana M. de la Cruz',
+    '李明',
+    'Ελένη',
+  ])('accepts %s like the API', (name) => {
+    expect(nameRuleCode(name)).toBeNull();
+  });
+
+  it.each(['A', 'é', '李', '😀'])('finds %s too short', (name) => {
+    expect(nameRuleCode(name)).toBe('too_short');
+  });
+
+  it.each([
+    '12',
+    '=1+1',
+    '😀😀',
+    'anna@example.com',
+    'Anna＠example',
+    'https://example.com',
+    'Anna HTTP://EXAMPLE',
+    'Anna www.example',
+    'example.com',
+    'Buy cheap at example.com now',
+    'bit.ly',
+    'mail.example.co.uk',
+  ])('finds %s invalid', (name) => {
+    expect(nameRuleCode(name)).toBe('invalid');
+  });
+});
+
+describe('nameKey', () => {
+  it('ignores case, diacritics and punctuation like the API', () => {
+    expect(nameKey('  María-José   García! ')).toBe('maria jose garcia');
+    expect(nameKey('PABLO PEREZ')).toBe(nameKey('Pablo Pérez'));
+    expect(nameKey('Juergen Mueller')).not.toBe(nameKey('Jürgen Müller'));
   });
 });
 
