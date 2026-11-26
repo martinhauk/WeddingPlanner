@@ -28,6 +28,9 @@ public interface IRsvpRepository
     /// <exception cref="ConcurrencyConflictException">The reply changed since <paramref name="ifMatch"/> was read.</exception>
     Task<bool> DeleteAsync(string id, string ifMatch, CancellationToken cancellationToken);
 
+    /// <summary>Reads every stored reply with its ETag (admin views; the table holds a few hundred replies at most).</summary>
+    Task<IReadOnlyList<StoredRsvp>> ListAsync(CancellationToken cancellationToken);
+
     /// <summary>Counts the stored replies (reads only the keys).</summary>
     Task<int> CountAsync(CancellationToken cancellationToken);
 }

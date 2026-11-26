@@ -1,4 +1,4 @@
-# API: RSVP endpoints
+# API: RSVP and admin endpoints
 
 The public RSVP API of the Functions app (`apps/api`). Everything lives under `/api`, bodies are JSON in
 camelCase (members that are `null` are omitted), timestamps are UTC ISO 8601 with `Z`, and every error
@@ -203,6 +203,37 @@ Table `Rsvps` (plus `Storage__TablePrefix`), partition `rsvp`, row key = reply i
 `Attending`, `People` (JSON `[{id, name, tags, note}]`), `PersonCount`, `AttendingCount` (people coming,
 0 for a no), `Message`, `Language`, `TokenHash`, `CreatedAt`, `UpdatedAt`, `SchemaVersion` (1). No IP
 addresses and no tokens are stored.
+
+## Admin endpoints
+
+Gated by `Features__Admin` (404 `not_found` while off) and, in this order, by the admin guard
+(`Security/AdminAuthorizationMiddleware`): it decodes the base64 JSON of `x-ms-client-principal` (set
+by SWA for signed-in users) and answers 401 `unauthorized` without a valid principal and 403 `forbidden`
+unless the principal has role `admin` and `identityProvider` `aad`. The SWA route rule `/api/admin*`
+requires role `admin` as well. Every admin response is `no-store`; writes pass the same origin and
+content-type checks as RSVP writes (bodies up to 256 KB). Admins may change replies after the deadline.
+
+| Endpoint                       | Function           | Answer                                                                                            |
+| ------------------------------ | ------------------ | ------------------------------------------------------------------------------------------------- |
+| `GET /api/admin/rsvps`         | `AdminRsvpsList`   | 200 `{rsvps, totals}`, latest change first                                                        |
+| `PUT /api/admin/rsvps/{id}`    | `AdminRsvpsUpdate` | 200 `{rsvp}`; body as for `PUT /api/rsvp/me`; `If-Match` required (428 / 412)                     |
+| `DELETE /api/admin/rsvps/{id}` | `AdminRsvpsDelete` | 204; `If-Match` optional (412 when stale)                                                         |
+| `GET /api/admin/export.csv`    | `AdminExportCsv`   | 200 `text/csv; charset=utf-8`, `Content-Disposition: attachment; filename="antworten-<date>.csv"` |
+
+An unknown or malformed `id` answers 404 `not_found`. Each reply in `rsvps` is the reply view above plus
+`version` (its ETag for `If-Match`). `totals`: `replies`, `yes`, `no`, `attendingPeople` (headcount),
+`declinedPeople`, `dietary` (attending people per tag: `vegetarian`, `vegan`, `glutenFree`,
+`lactoseFree`), `dietaryNotes`, `messages`.
+
+**CSV export** (made for German Excel): UTF-8 with BOM, `;` separator, CRLF, one row per person,
+replies oldest first. Columns: `Antwort-ID`, `Zusage` (`ja`/`nein`), `Person` (1 = the guest), `Name`,
+one `x` column per dietary tag, `Hinweis Essen`, `Nachricht` (only on the guest's row), `Sprache`,
+`Erstellt`, `Geändert` (`yyyy-MM-dd HH:mm` in `Rsvp__TimeZone`). Every cell is quoted (`"` doubled), and
+a cell starting with `=`, `+`, `-`, `@`, tab or CR gets a leading `'` against CSV injection.
+
+**Routes:** the Functions host refuses routes that start with `admin`, so the admin routes start with
+the constrained parameter `{adminArea:regex(^admin$)}` (`Features/Admin/AdminRoutes`). The public path
+stays `/api/admin/…` (verified with Core Tools 4.17; to be confirmed on the SWA managed host).
 
 ## Not implemented yet
 

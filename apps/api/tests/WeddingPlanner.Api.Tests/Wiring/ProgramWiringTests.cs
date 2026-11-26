@@ -86,6 +86,24 @@ public sealed class ProgramWiringTests
     }
 
     [Fact]
+    public async Task AdminFunctionsRequireAnAdminPrincipalOnceTheFlagIsOn()
+    {
+        var app = Compose(new() { ["Features:Admin"] = "true" });
+
+        var (anonymous, anonymousRan) = await app.InvokeAsync("AdminRsvpsList");
+        anonymousRan.ShouldBeFalse();
+        anonymous.Response.StatusCode.ShouldBe(StatusCodes.Status401Unauthorized);
+
+        var guest = Security.AdminAuthorizationMiddlewareTests.Encode("aad", ["authenticated"]);
+        var (forbidden, forbiddenRan) = await app.InvokeAsync("AdminExportCsv", new() { [ClientPrincipal.HeaderName] = guest });
+        forbiddenRan.ShouldBeFalse();
+        forbidden.Response.StatusCode.ShouldBe(StatusCodes.Status403Forbidden);
+
+        var admin = Security.AdminAuthorizationMiddlewareTests.Encode("aad", ["authenticated", "admin"]);
+        (await app.InvokeAsync("AdminRsvpsList", new() { [ClientPrincipal.HeaderName] = admin })).FunctionRan.ShouldBeTrue();
+    }
+
+    [Fact]
     public void TelemetryIsOffWithoutAnApplicationInsightsConnectionString()
     {
         var app = Compose([]);
@@ -171,7 +189,7 @@ public sealed class ProgramWiringTests
             return this;
         }
 
-        public async Task<(DefaultHttpContext HttpContext, bool FunctionRan)> InvokeAsync(string functionName)
+        public async Task<(DefaultHttpContext HttpContext, bool FunctionRan)> InvokeAsync(string functionName, Dictionary<string, string>? headers = null)
         {
             var functionRan = false;
             FunctionExecutionDelegate pipeline = _ =>
@@ -186,6 +204,11 @@ public sealed class ProgramWiringTests
 
             using var provider = Services.BuildServiceProvider();
             var httpContext = TestFunctionContext.CreateHttpContext();
+            foreach (var (name, value) in headers ?? [])
+            {
+                httpContext.Request.Headers[name] = value;
+            }
+
             await pipeline(new TestFunctionContext(functionName, provider, httpContext));
             return (httpContext, functionRan);
         }

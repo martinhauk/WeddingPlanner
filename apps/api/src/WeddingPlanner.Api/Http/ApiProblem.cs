@@ -18,6 +18,7 @@ public static class ApiProblem
     private static readonly Dictionary<int, string> _types = new()
     {
         [StatusCodes.Status400BadRequest] = "https://tools.ietf.org/html/rfc9110#section-15.5.1",
+        [StatusCodes.Status401Unauthorized] = "https://tools.ietf.org/html/rfc9110#section-15.5.2",
         [StatusCodes.Status403Forbidden] = "https://tools.ietf.org/html/rfc9110#section-15.5.4",
         [StatusCodes.Status404NotFound] = "https://tools.ietf.org/html/rfc9110#section-15.5.5",
         [StatusCodes.Status409Conflict] = "https://tools.ietf.org/html/rfc9110#section-15.5.10",
@@ -73,6 +74,12 @@ public static class ProblemCodes
 
     /// <summary>400: the body failed validation; <c>errors</c> lists <c>{field, code}</c>.</summary>
     public const string ValidationFailed = "validation_failed";
+
+    /// <summary>401: an admin endpoint was called without a signed-in user (no <c>x-ms-client-principal</c>).</summary>
+    public const string Unauthorized = "unauthorized";
+
+    /// <summary>403: the signed-in user is not an admin (role <c>admin</c> via the <c>aad</c> provider).</summary>
+    public const string Forbidden = "forbidden";
 
     /// <summary>403: a write from another site (<c>Sec-Fetch-Site: cross-site</c>).</summary>
     public const string CrossSiteRequest = "cross_site_request";

@@ -90,6 +90,20 @@ public sealed class TableRsvpRepository(TableStorage storage) : IRsvpRepository
     }
 
     /// <inheritdoc/>
+    public async Task<IReadOnlyList<StoredRsvp>> ListAsync(CancellationToken cancellationToken)
+    {
+        var table = await GetTableAsync(cancellationToken);
+        var replies = new List<StoredRsvp>();
+        var filter = TableClient.CreateQueryFilter($"PartitionKey eq {PartitionKey}");
+        await foreach (var entity in table.QueryAsync<TableEntity>(filter, cancellationToken: cancellationToken))
+        {
+            replies.Add(new StoredRsvp(ToRecord(entity), entity.ETag.ToString()));
+        }
+
+        return replies;
+    }
+
+    /// <inheritdoc/>
     public async Task<int> CountAsync(CancellationToken cancellationToken)
     {
         var table = await GetTableAsync(cancellationToken);
