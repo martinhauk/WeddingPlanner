@@ -11,7 +11,7 @@ file and the notice text in the same commit.
 Terms: the **couple** are the controllers (named in `site-content.json` `privacy.controllers`); the
 **operator** runs the Azure subscription and the deploy (often one of the couple); **Microsoft** is the
 processor (Azure, Art. 28 GDPR). Regions come from `instance.json`: `swaLocation` (site and API,
-default `eastus2`) and `dataLocation` (all data at rest, default `germanywestcentral`).
+default `westus2`) and `dataLocation` (all data at rest, default `germanywestcentral`).
 
 ## Guest replies: table `Rsvps`
 

@@ -44,9 +44,9 @@ def group($name): {group: $name};
     .parameters.environmentName.allowedValues == ["e2e", "test", "production"]),
   check("dataLocation: default germanywestcentral";
     .parameters.dataLocation.defaultValue == "germanywestcentral"),
-  check("swaLocation: allowed SWA regions, default eastus2"; .parameters.swaLocation
+  check("swaLocation: allowed SWA regions, default westus2"; .parameters.swaLocation
     | .allowedValues == ["westeurope", "centralus", "eastus2", "westus2", "eastasia"]
-      and .defaultValue == "eastus2"),
+      and .defaultValue == "westus2"),
   check("featuresRsvp and featuresAdmin: bool";
     [.parameters.featuresRsvp.type, .parameters.featuresAdmin.type] == ["bool", "bool"]),
   check("rsvpDeadline and rsvpTimeZone: required strings";

@@ -42,3 +42,13 @@ content on the global CDN, managed API compute) in **`eastus2`** for now and **n
 access. Data at rest stays in `germanywestcentral`. A follow-up issue tracks re-checking `westeurope`
 from time to time; moving back means recreating the SWA (new default hostname), which is cheap
 before a custom domain exists.
+
+## Update 2026-11-26: Static Web Apps in westus2
+
+In `eastus2`, SWA Free intermittently rejected our managed `dotnet-isolated:10.0` API with "Failed to
+deploy the Azure Functions" (2 of 13 uploads succeeded; Azure/static-web-apps#1820, an Azure-side
+fault: the same package succeeded and failed, and our code never started). `westeurope` still refused
+new SWAs on 2026-11-26. The e2e SWA was recreated in **`westus2`**, and the first 3 deploys there
+succeeded on the first attempt, so `westus2` is the new default and every environment moves there.
+Data at rest stays in `germanywestcentral`. Moving means deleting the SWA (the resource group's delete
+lock is lifted for that step only) and redeploying; the site gets a new default hostname.
