@@ -38,7 +38,7 @@ describe('site-content.json: the sample', () => {
     const result = await loadSiteContent(DEFAULT_INSTANCE_DIR);
     expect(result.diagnostics).toEqual([]);
     expect(result.ok).toBe(true);
-    expect(result.media.map((m) => m.id)).toEqual(['hero.png', 'portrait.png']);
+    expect(result.media.map((m) => m.id)).toEqual(['garden.png', 'hero.png', 'portrait.png']);
   });
 
   it('uses every section type, so every component has sample content', async () => {
@@ -116,6 +116,23 @@ describe('site-content.json: schema errors', () => {
     ]);
   });
 
+  it('allows at most two hero images and only https, mailto: and tel: location links', async () => {
+    const locations = await sectionIndex('locations');
+    const card = ['sections', locations, 'data', 'cards', 0];
+    expect(
+      await diagnosticsFor(
+        content(['hero', 'images'], ['hero.png', 'garden.png', 'portrait.png']),
+        content([...card, 'links', 0, 'url'], 'javascript:alert(1)'),
+        content([...card, 'links', 1, 'url'], 'tel:+49 151 0000000'),
+        content([...card, 'website'], 'http://example.com'),
+      ),
+    ).toEqual([
+      'error E_SCHEMA $.hero.images',
+      `error E_LINK_URL $.sections[${locations}].data.cards[0].links[0].url`,
+      `error E_URL $.sections[${locations}].data.cards[0].website`,
+    ]);
+  });
+
   it('never repeats a value in a diagnostic', async () => {
     const secret = 'Secret Venue 42';
     const result = await loadSiteContent(
@@ -154,12 +171,34 @@ describe('site-content.json: semantic checks', () => {
     const party = await sectionIndex('weddingParty');
     expect(
       await diagnosticsFor(
-        content(['hero', 'image'], 'missing.jpg'),
+        content(['hero', 'images', 1], 'missing.jpg'),
         content(['sections', party, 'data', 'people', 1, 'photo'], 'people/nobody.webp'),
       ),
     ).toEqual([
-      'error E_MEDIA_MISSING $.hero.image',
+      'error E_MEDIA_MISSING $.hero.images[1]',
       `error E_MEDIA_MISSING $.sections[${party}].data.people[1].photo`,
+    ]);
+  });
+
+  it('rejects a hero with both image and images', async () => {
+    expect(await diagnosticsFor(content(['hero', 'image'], 'hero.png'))).toEqual([
+      'error E_HERO_IMAGES $.hero',
+    ]);
+  });
+
+  it('rejects inline links with other schemes and raw HTML, once per kind and text', async () => {
+    const story = await sectionIndex('story');
+    const gifts = await sectionIndex('gifts');
+    expect(
+      await diagnosticsFor(
+        content(['sections', story, 'data', 'text', 'en'], 'See [this](javascript:alert(1)).'),
+        content(['sections', story, 'data', 'text', 'es'], '[a](http://x.com) [b](ftp://x.com)'),
+        content(['sections', gifts, 'data', 'text', 'de'], 'Danke <b>sehr</b> <br/>'),
+        content(['tagline', 'en'], 'We <3 you and [mail us](mailto:anna@example.com)'),
+      ),
+    ).toEqual([
+      `error E_LINK $.sections[${story}].data.text.en`,
+      `error E_HTML $.sections[${gifts}].data.text.de`,
     ]);
   });
 
@@ -267,6 +306,7 @@ describe('publishedSiteContent and publishedMedia', () => {
     expect(published).not.toHaveProperty('$schema');
     expect(published.sections).toEqual(result.content.sections);
     expect(publishedMedia(published, result.media).map((m) => m.id)).toEqual([
+      'garden.png',
       'hero.png',
       'portrait.png',
     ]);
@@ -278,7 +318,7 @@ describe('publishedSiteContent and publishedMedia', () => {
     const result = await loadSiteContent(
       await sampleWith(
         content(['sections', party, 'visible'], false),
-        content(['hero', 'image'], 'portrait.png'),
+        content(['hero', 'images'], ['portrait.png']),
         content(['sections', story, 'visible'], false),
       ),
     );
@@ -288,7 +328,11 @@ describe('publishedSiteContent and publishedMedia', () => {
     expect(ids).not.toContain(result.content.sections[party]?.id);
     expect(ids).not.toContain(result.content.sections[story]?.id);
     expect(ids).toHaveLength(result.content.sections.length - 2);
-    // hero.png is now unused, portrait.png only used by the hero (the party is hidden).
-    expect(publishedMedia(published, result.media).map((m) => m.id)).toEqual(['portrait.png']);
+    // hero.png is now unused (only the hidden story had it), portrait.png only used by the hero
+    // (the party is hidden), garden.png by the text section.
+    expect(publishedMedia(published, result.media).map((m) => m.id)).toEqual([
+      'garden.png',
+      'portrait.png',
+    ]);
   });
 });

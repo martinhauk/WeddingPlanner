@@ -69,11 +69,11 @@ describe('bake: the sample instance for e2e', () => {
 
     const generated = path.join(webDir, 'src', 'content', 'generated');
     const manifest = mediaManifestSchema.parse(await readJson(path.join(generated, 'media.json')));
-    expect(Object.keys(manifest.items)).toEqual(['hero.png', 'portrait.png']);
+    expect(Object.keys(manifest.items)).toEqual(['garden.png', 'hero.png', 'portrait.png']);
     expect(manifest.items['hero.png']).toMatchObject({ width: 1600, height: 900 });
 
     const copied = await readdir(path.join(webDir, 'public', 'content', 'media'));
-    expect(copied).toHaveLength(2);
+    expect(copied).toHaveLength(3);
     for (const [id, item] of Object.entries(manifest.items)) {
       expect(item.variants).toHaveLength(1);
       const [variant] = item.variants;
@@ -129,12 +129,14 @@ describe('bake: environments', () => {
   });
 
   it('fails on invalid page content (site-content.json), and writes nothing', async () => {
-    const instanceDir = await sampleWith(set('site-content.json', ['hero', 'image'], 'gone.png'));
+    const instanceDir = await sampleWith(
+      set('site-content.json', ['hero', 'images', 0], 'gone.png'),
+    );
     const webDir = await tempDir('wp-web-');
     const result = await bake({ instanceDir, webDir, deployEnv: 'e2e' });
     expect(result.ok).toBe(false);
     expect(result.diagnostics.map((d) => `${d.code} ${d.file} ${d.path}`)).toEqual([
-      'E_MEDIA_MISSING site-content.json $.hero.image',
+      'E_MEDIA_MISSING site-content.json $.hero.images[0]',
     ]);
     expect(await readdir(webDir)).toEqual([]);
   });
@@ -205,7 +207,7 @@ describe('bake: privacy', () => {
     expect(result.ok).toBe(true);
 
     const files = await readAllText(webDir);
-    expect(files.size).toBe(6);
+    expect(files.size).toBe(7);
     for (const [file, content] of files) {
       for (const forbidden of [
         alert,

@@ -47,11 +47,23 @@ function portrait(): Buffer {
   });
 }
 
+/** 800×1000: vertical sage-to-ivory gradient with a single ring in the upper third. */
+function garden(): Buffer {
+  const width = 800;
+  const height = 1000;
+  return encodePng(width, height, (x, y) => {
+    const base = mix(SAGE, IVORY, y / height);
+    const coverage = ringCoverage(Math.hypot(x - width / 2, y - height * 0.36), 150, 8);
+    return mix(base, GOLD, coverage * 0.8);
+  });
+}
+
 const mediaDir = path.join(DEFAULT_INSTANCE_DIR, 'media');
 await mkdir(mediaDir, { recursive: true });
 for (const [name, png] of [
   ['hero.png', hero()],
   ['portrait.png', portrait()],
+  ['garden.png', garden()],
 ] as const) {
   await writeFile(path.join(mediaDir, name), png);
   process.stdout.write(`${name}: ${png.length} bytes\n`);
