@@ -214,7 +214,9 @@ export default defineConfig({
   // DEV_API_URL points it elsewhere. Auth emulation (/.auth, x-ms-client-principal) needs the SWA
   // CLI on http://localhost:4280 instead (`pnpm dev:swa`).
   server: {
+    // The SWA emulator (`pnpm dev:swa`) talks to 5173 only: fail instead of moving to another port.
     port: 5173,
+    strictPort: true,
     proxy: { '/api': { target: process.env.DEV_API_URL ?? 'http://localhost:7071' } },
   },
   preview: { port: 4173 },
