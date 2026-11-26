@@ -6,7 +6,7 @@ repeats this list as a checklist; tick only what is true, and explain any item t
 ## Scope
 
 - [ ] Every acceptance criterion of the issue is met. Deviations are listed in the PR with reasons.
-- [ ] Only files inside the issue's Key paths changed ([file ownership](../../CLAUDE.md#file-ownership)).
+- [ ] Only the files the work package owns changed ([file ownership](../../CLAUDE.md#file-ownership)).
 
 ## Quality
 

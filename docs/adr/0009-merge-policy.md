@@ -1,6 +1,6 @@
 # ADR 0009: Lead agent squash-merges after green CI and reviewer-agent approval
 
-- **Status:** Accepted
+- **Status:** Superseded by ADR 0010
 - **Date:** 2026-11-24
 - **Deciders:** product owner
 
