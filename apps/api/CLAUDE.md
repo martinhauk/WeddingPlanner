@@ -94,11 +94,22 @@ Worker middleware, outermost first (`Program.ConfigurePipeline`):
    cross-site` → 403 `cross_site_request`; a body that is not `application/json` (UTF-8) → 415 (a body is
    required for POST/PUT/PATCH); `Content-Length` above 16 KB (`Rsvp*`) or 256 KB (`Admin*`) → 413. The
    function's `JsonBody` reader enforces the same limit for bodies without a length.
-5. `AdminAuthorizationMiddleware`, only for `Admin*` functions via `UseWhen` (stub; S3-01).
+5. `AdminAuthorizationMiddleware`, only for `Admin*` functions via `UseWhen`: decodes
+   `x-ms-client-principal` (`Security/ClientPrincipal`, base64 JSON; `userDetails` is never read) and
+   answers 401 `unauthorized` without a valid principal, 403 `forbidden` unless role `admin` and provider
+   `aad`, both `no-store`.
 
 Name every function with its feature prefix (`RsvpCreate`, `AdminGuestsImport`, …). Flags bind
 leniently: only a value that parses as `true` switches a feature on; missing, empty or malformed
 values keep it off (dark). Code default: off.
+
+## Admin API
+
+`GET /api/admin/rsvps` (`AdminRsvpsList`, replies + totals), `PUT`/`DELETE /api/admin/rsvps/{id}`
+(`AdminRsvpsUpdate`, `AdminRsvpsDelete`) in `Features/Admin/Rsvps/`, and `GET /api/admin/export.csv`
+(`AdminExportCsv`, `Features/Admin/Export/RsvpCsv`: UTF-8 BOM, `;`, every cell quoted, formula starts
+prefixed with `'`). Contract: [`docs/api.md`](../../docs/api.md). Test support: `Support/AdminCalls`
+(admin calls on an `RsvpHarness`).
 
 ## RSVP API
 
@@ -180,11 +191,12 @@ duplicate members rejected) and need no MVC services, so middleware can write th
 
 - **Routes starting with `admin` are reserved by the Functions host.** A function with
   `Route = "admin/…"` fails to load ("The specified route conflicts with one or more built in
-  routes"), even with the `api` route prefix (verified with Core Tools 4.17). Options for the admin
-  endpoints (`/api/admin/*`): set `routePrefix` to `""` and give every route an explicit `api/` prefix
-  (works locally; must be verified on the SWA managed host, which requires the public `/api` prefix),
-  or move the admin API to a different segment. The lead agent decides before the first admin
-  endpoint (S3-01).
+  routes"), even with the `api` route prefix (verified with Core Tools 4.17). The admin routes
+  therefore start with a constrained parameter that only matches `admin`:
+  `Features/Admin/AdminRoutes.Prefix` = `{adminArea:regex(^admin$)}`, so the public path stays
+  `/api/admin/…` and `routePrefix` stays `api` (verified locally with Core Tools 4.17; confirm on the
+  first deploy to the SWA managed host). Always build admin routes from `AdminRoutes`;
+  `AdminFunctionCatalogTests` fails on a route that starts with `admin`.
 
 ## Platform probe (temporary)
 

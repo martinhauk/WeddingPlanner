@@ -86,6 +86,12 @@ internal sealed class InMemoryRsvpRepository : IRsvpRepository
         return Task.FromResult(true);
     }
 
+    public Task<IReadOnlyList<StoredRsvp>> ListAsync(CancellationToken cancellationToken)
+    {
+        Calls++;
+        return Task.FromResult<IReadOnlyList<StoredRsvp>>([.. _items.Values]);
+    }
+
     public Task<int> CountAsync(CancellationToken cancellationToken)
     {
         Calls++;
