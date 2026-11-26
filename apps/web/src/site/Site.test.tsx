@@ -173,6 +173,68 @@ describe('Site', () => {
     expect(burger).toHaveAttribute('aria-expanded', 'false');
   });
 
+  it('links the privacy notice in the footer, and the imprint only when there is one', () => {
+    const { unmount } = render(<Site content={content} build={build} initialLanguage="de" />);
+    const footer = screen.getByRole('contentinfo');
+    expect(within(footer).getByRole('link', { name: 'Datenschutz' })).toHaveAttribute(
+      'href',
+      '/datenschutz',
+    );
+    expect(within(footer).queryByRole('link', { name: 'Impressum' })).toBeNull();
+    unmount();
+
+    const withImprint = {
+      ...content,
+      privacy: { controllers: [{ name: 'Anna' }], imprint: { de: 'Anna, Musterstadt' } },
+    };
+    render(<Site content={withImprint} build={build} initialLanguage="en" />);
+    const links = within(screen.getByRole('contentinfo')).getAllByRole('link');
+    expect(links.map((link) => [link.textContent, link.getAttribute('href')])).toEqual([
+      ['Privacy', '/datenschutz'],
+      ['Legal notice', '/datenschutz#impressum'],
+    ]);
+  });
+
+  it.each(['/datenschutz', '/privacy/'])('shows the privacy notice at %s', async (path) => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    window.history.replaceState(null, '', path);
+    try {
+      render(<Site content={content} build={build} initialLanguage="de" />);
+      expect(
+        screen.getByRole('heading', { level: 1, name: 'Datenschutzerklärung' }),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole('heading', { level: 1, name: 'Anna & Ben' })).toBeNull();
+      expect(screen.queryByRole('timer')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Menü' })).toBeNull();
+      expect(screen.getByRole('link', { name: 'Anna & Ben' })).toHaveAttribute('href', '/');
+      expect(document.title).toBe('Datenschutzerklärung · Anna & Ben');
+      expect(
+        within(screen.getByRole('contentinfo')).getByRole('link', { name: 'Datenschutz' }),
+      ).toBeInTheDocument();
+
+      // No form here, so not even the keep-warm ping.
+      await vi.advanceTimersByTimeAsync(KEEP_WARM_IDLE_FALLBACK_MS * 2);
+      expect(api.calls).toEqual([]);
+    } finally {
+      window.history.replaceState(null, '', '/');
+    }
+  });
+
+  it('switches the language of the privacy notice', async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(null, '', '/datenschutz');
+    try {
+      render(<Site content={content} build={build} initialLanguage="de" />);
+      await user.click(screen.getByRole('button', { name: 'ES Español' }));
+      expect(
+        screen.getByRole('heading', { level: 1, name: 'Política de privacidad' }),
+      ).toBeInTheDocument();
+      expect(document.title).toBe('Política de privacidad · Anna y Ben');
+    } finally {
+      window.history.replaceState(null, '', '/');
+    }
+  });
+
   it('closes the mobile menu on a tap outside the header, not inside it', async () => {
     const user = userEvent.setup();
     render(<Site content={content} build={build} initialLanguage="de" />);

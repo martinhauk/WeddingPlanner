@@ -1,7 +1,16 @@
 import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import type { FieldError, RsvpLimits } from '../api/rsvp-client.ts';
+import { fill } from '../fill.tsx';
 import { type Lang, t } from '../i18n.ts';
-import { DIETS, type Diet, emptyPerson, type Reply, type ReplyPerson } from '../rsvp-reply.ts';
+import { PRIVACY_PATH } from '../privacy/route.ts';
+import {
+  DIETS,
+  type Diet,
+  emptyPerson,
+  hasDietData,
+  type Reply,
+  type ReplyPerson,
+} from '../rsvp-reply.ts';
 import { type UiText, ui } from '../ui.ts';
 
 const r = ui.rsvp;
@@ -24,13 +33,20 @@ export type RsvpFormProps = {
 };
 
 /** Fields the form can point at; other findings only show the summary. */
-const FIELD = /^people\[(\d+)\]\.(name|dietary\.note)$|^message$/;
+const FIELD = /^people\[(\d+)\]\.(name|dietary\.note)$|^message$|^dietaryConsent$/;
 
-function errorText(code: string): UiText {
+function errorText(field: string, code: string): UiText {
+  if (field === 'dietaryConsent') {
+    return e.consentRequired;
+  }
   return code === 'required' ? e.nameRequired : code === 'too_long' ? e.tooLong : e.validation;
 }
 
-/** Reply form: up to six people, dietary needs per attending guest, a message to the couple. */
+/**
+ * Reply form: up to six people, dietary needs per attending guest, a message to the couple. Once
+ * dietary data is entered, an explicit consent checkbox appears (allergies can be health data); a
+ * short note links to the privacy notice.
+ */
 export function RsvpForm(props: RsvpFormProps) {
   const { draft, lang, limits, busy, fieldErrors, alert, onChange, onCancel, onSubmit } = props;
   const id = useId();
@@ -66,7 +82,7 @@ export function RsvpForm(props: RsvpFormProps) {
           invalid: { 'aria-invalid': true, 'aria-describedby': fieldId(field) } as const,
           message: (
             <span className="field-error" id={fieldId(field)}>
-              {t(errorText(code), lang)}
+              {t(errorText(field, code), lang)}
             </span>
           ),
         };
@@ -97,6 +113,7 @@ export function RsvpForm(props: RsvpFormProps) {
   };
 
   const message = fieldState('message');
+  const consent = fieldState('dietaryConsent');
 
   return (
     <form ref={form} onSubmit={submit} noValidate aria-busy={busy}>
@@ -195,6 +212,21 @@ export function RsvpForm(props: RsvpFormProps) {
           {t(draft.attending ? r.addCompanion : r.addPerson, lang)}
         </button>
       )}
+      {hasDietData(draft) && (
+        <>
+          <label className="check consent">
+            <input
+              type="checkbox"
+              checked={draft.dietConsent}
+              aria-required="true"
+              {...consent.invalid}
+              onChange={(event) => onChange({ ...draft, dietConsent: event.target.checked })}
+            />
+            {t(r.dietConsent, lang)}
+          </label>
+          {consent.message}
+        </>
+      )}
       <label>
         {t(r.message, lang)}
         <textarea
@@ -219,6 +251,11 @@ export function RsvpForm(props: RsvpFormProps) {
         </p>
       )}
       {alert}
+      <p className="rsvp-privacy">
+        {fill(t(r.privacyNote, lang), {
+          link: <a href={PRIVACY_PATH}>{t(r.privacyLink, lang)}</a>,
+        })}
+      </p>
       <div className="row">
         <button type="button" className="btn ghost" onClick={onCancel}>
           {t(r.back, lang)}

@@ -10,6 +10,9 @@
 
 const BASE = '/api/rsvp';
 
+/** Name of the HttpOnly credential cookie the API sets (scripts never read it). */
+export const RSVP_CREDENTIAL_COOKIE = 'wp_rsvp';
+
 /** Name of the readable state cookie the API sets next to the credential. */
 export const RSVP_STATE_COOKIE = 'wp_rsvp_state';
 
@@ -31,6 +34,8 @@ export type RsvpView = {
   readonly people: readonly RsvpPersonView[];
   readonly message?: string;
   readonly language: string;
+  /** Whether the dietary data was stored with the guest's explicit consent. */
+  readonly dietaryConsent?: boolean;
 };
 
 /** The browser's own reply: `version` goes into `If-Match`; `open` is false after the deadline. */
@@ -69,6 +74,8 @@ export type RsvpRequest = {
   readonly language: string;
   /** Honeypot: hidden in the form, must stay empty. */
   readonly website: string;
+  /** Explicit consent for the dietary data; the API requires `true` when there is any. */
+  readonly dietaryConsent?: boolean;
 };
 
 /** One validation finding: `field` is a path such as `people[1].name`, `code` e.g. `required`. */
@@ -279,6 +286,7 @@ function isRsvpView(value: unknown): value is RsvpView {
     typeof value.attending === 'boolean' &&
     typeof value.language === 'string' &&
     (value.message === undefined || typeof value.message === 'string') &&
+    (value.dietaryConsent === undefined || typeof value.dietaryConsent === 'boolean') &&
     Array.isArray(value.people) &&
     value.people.length > 0 &&
     value.people.every(isPersonView)

@@ -49,6 +49,8 @@ export const ui = {
   whatsapp: { de: 'WhatsApp', en: 'WhatsApp', es: 'WhatsApp' },
   close: { de: 'Schließen', en: 'Close', es: 'Cerrar' },
   musicLink: { de: 'Playlist öffnen', en: 'Open playlist', es: 'Abrir la lista' },
+  /** Footer link to the privacy notice. */
+  privacy: { de: 'Datenschutz', en: 'Privacy', es: 'Privacidad' },
   rsvp: {
     deadline: { de: 'Bitte antwortet bis', en: 'Please reply by', es: 'Responded antes del' },
     yes: { de: 'Ja, wir kommen', en: "Yes, we'll be there", es: 'Sí, iremos' },
@@ -163,12 +165,33 @@ export const ui = {
       en: 'You can also let us know directly',
       es: 'También podéis avisarnos directamente',
     },
+    dietConsent: {
+      de: 'Ich bin einverstanden, dass ihr die Angaben zu Ernährung, Allergien und Unverträglichkeiten – auch für die Personen, für die ich antworte und die damit einverstanden sind – speichert und nur für die Planung des Essens verwendet. Ich kann das jederzeit widerrufen.',
+      en: "I agree that you store the details about diet, allergies and intolerances – also for the people I'm replying for, with their agreement – and use them only to plan the food. I can withdraw this at any time.",
+      es: 'Acepto que guardéis los datos sobre alimentación, alergias e intolerancias – también de las personas por las que respondo, con su permiso – y que los uséis solo para planificar la comida. Puedo retirar este consentimiento en cualquier momento.',
+    },
+    /** `{link}` becomes the link to the privacy notice (`privacyLink`). */
+    privacyNote: {
+      de: 'Eure Angaben verwenden wir nur für die Organisation unserer Hochzeit. Mehr dazu in der {link}.',
+      en: 'We only use your details to organise our wedding. More in our {link}.',
+      es: 'Solo usamos vuestros datos para organizar nuestra boda. Más información en nuestra {link}.',
+    },
+    privacyLink: {
+      de: 'Datenschutzerklärung',
+      en: 'privacy notice',
+      es: 'política de privacidad',
+    },
   },
   rsvpError: {
     nameRequired: {
       de: 'Bitte gebt einen Namen ein.',
       en: 'Please enter a name.',
       es: 'Por favor, escribid un nombre.',
+    },
+    consentRequired: {
+      de: 'Bitte willigt ein oder entfernt die Angaben zur Ernährung.',
+      en: 'Please give your consent or remove the dietary details.',
+      es: 'Por favor, dad vuestro consentimiento o quitad los datos de alimentación.',
     },
     tooLong: {
       de: 'Dieser Text ist zu lang.',

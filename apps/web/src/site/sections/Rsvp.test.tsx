@@ -141,6 +141,17 @@ describe('Rsvp', () => {
       'Nüsse',
     );
     await user.type(screen.getByRole('textbox', { name: 'Nachricht an uns (optional)' }), 'Hurra!');
+
+    // Dietary data needs the explicit consent (health data): without it nothing is sent.
+    await user.click(screen.getByRole('button', { name: 'Antwort speichern' }));
+    const consent = screen.getByRole('checkbox', { name: /^Ich bin einverstanden/ });
+    expect(consent).toHaveFocus();
+    expect(consent).toHaveAttribute('aria-invalid', 'true');
+    expect(
+      screen.getByText('Bitte willigt ein oder entfernt die Angaben zur Ernährung.'),
+    ).toBeInTheDocument();
+    expect(api.callsTo(CREATE)).toHaveLength(0);
+    await user.click(consent);
     await user.click(screen.getByRole('button', { name: 'Antwort speichern' }));
 
     expect(await screen.findByText('Danke! Wir freuen uns auf euch.')).toHaveFocus();
@@ -155,6 +166,7 @@ describe('Rsvp', () => {
       message: 'Hurra!',
       language: 'de',
       website: '',
+      dietaryConsent: true,
     });
     expect(api.callsTo(STATUS)).toHaveLength(1);
 
@@ -165,6 +177,63 @@ describe('Rsvp', () => {
     expect(screen.getByText('Hurra!')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Antwort ändern' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Antwort zurückziehen' })).toBeInTheDocument();
+  });
+
+  it('asks for the dietary consent only while dietary data is entered', async () => {
+    const user = userEvent.setup();
+    const api = mockApi({ [STATUS]: () => json(200, openStatus), [CREATE]: created });
+    renderRsvp({ lang: 'en' });
+    await user.click(screen.getByRole('button', { name: "Yes, we'll be there" }));
+    const consentName = /^I agree that you store the details about diet/;
+    expect(screen.queryByRole('checkbox', { name: consentName })).toBeNull();
+
+    await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Pablo Pérez');
+    const vegan = screen.getByRole('checkbox', { name: 'Vegan' });
+    await user.click(vegan);
+    expect(screen.getByRole('checkbox', { name: consentName })).not.toBeChecked();
+    await user.click(vegan);
+    expect(screen.queryByRole('checkbox', { name: consentName })).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Save reply' }));
+    expect(await screen.findByText("Thank you! We can't wait to see you.")).toBeInTheDocument();
+    expect(api.callsTo(CREATE)[0]?.body).not.toHaveProperty('dietaryConsent');
+  });
+
+  it('links the privacy notice from the form', async () => {
+    const user = userEvent.setup();
+    mockApi({ [STATUS]: () => json(200, openStatus) });
+    renderRsvp();
+    await user.click(screen.getByRole('button', { name: 'Leider nicht' }));
+    expect(
+      screen.getByText(/Eure Angaben verwenden wir nur für die Organisation unserer Hochzeit/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Datenschutzerklärung' })).toHaveAttribute(
+      'href',
+      '/datenschutz',
+    );
+  });
+
+  it('shows the API finding on the consent checkbox', async () => {
+    const user = userEvent.setup();
+    mockApi({
+      [STATUS]: () => json(200, openStatus),
+      [CREATE]: () =>
+        problem(400, 'validation_failed', {
+          errors: [{ field: 'dietaryConsent', code: 'required' }],
+        }),
+    });
+    renderRsvp();
+    await user.click(screen.getByRole('button', { name: 'Ja, wir kommen' }));
+    await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Anna');
+    await user.click(screen.getByRole('checkbox', { name: 'Vegan' }));
+    await user.click(screen.getByRole('checkbox', { name: /^Ich bin einverstanden/ }));
+    await user.click(screen.getByRole('button', { name: 'Antwort speichern' }));
+
+    const consent = await screen.findByRole('checkbox', { name: /^Ich bin einverstanden/ });
+    await waitFor(() => expect(consent).toHaveAttribute('aria-invalid', 'true'));
+    expect(
+      screen.getByText('Bitte willigt ein oder entfernt die Angaben zur Ernährung.'),
+    ).toBeInTheDocument();
   });
 
   it('lets a no list several names, without dietary questions', async () => {
@@ -379,6 +448,8 @@ describe('Rsvp', () => {
         name: 'Vegetarisch',
       }),
     ).toBeChecked();
+    // The stored reply has the consent, so the form keeps it ticked.
+    expect(screen.getByRole('checkbox', { name: /^Ich bin einverstanden/ })).toBeChecked();
     await user.click(screen.getByRole('button', { name: '+ Begleitung hinzufügen' }));
     await user.type(
       within(screen.getByRole('group', { name: 'Begleitung 2' })).getByRole('textbox', {
@@ -401,6 +472,7 @@ describe('Rsvp', () => {
       message: 'Hurra!',
       language: 'de',
       website: '',
+      dietaryConsent: true,
     });
   });
 

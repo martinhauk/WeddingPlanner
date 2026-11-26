@@ -5,9 +5,13 @@ import { Header } from './components/Header.tsx';
 import { Hero } from './components/Hero.tsx';
 import { formatDate } from './format.ts';
 import { initialLang, type Lang, rememberLang, t } from './i18n.ts';
+import { PrivacyPage } from './privacy/PrivacyPage.tsx';
+import { privacyText } from './privacy/privacy-text.ts';
+import { IMPRINT_ID, isPrivacyPath, PRIVACY_PATH } from './privacy/route.ts';
 import { renderSection } from './sections/registry.tsx';
 import { isShown, navItems } from './sections/titles.ts';
 import type { SectionContext, SiteBuild } from './sections/types.ts';
+import { ui } from './ui.ts';
 
 export type SiteProps = {
   /** The instance's validated `site-content.json`. */
@@ -18,10 +22,15 @@ export type SiteProps = {
   readonly initialLanguage?: Lang;
 };
 
-/** The one-pager: header, hero, then the content's sections in order. */
+/**
+ * The one-pager: header, hero, then the content's sections in order. At `/datenschutz` (alias
+ * `/privacy`) it shows the privacy notice instead; every page links to it in the footer.
+ */
 export function Site({ content, build, initialLanguage }: SiteProps) {
   const [lang, setLang] = useState<Lang>(() => initialLanguage ?? initialLang());
+  const [privacyPage] = useState(() => isPrivacyPath(window.location.pathname));
   const couple = t(content.couple, lang);
+  const title = privacyPage ? `${t(privacyText.title, lang)} · ${couple}` : couple;
 
   useEffect(() => {
     document.documentElement.lang = lang;
@@ -29,8 +38,8 @@ export function Site({ content, build, initialLanguage }: SiteProps) {
   }, [lang]);
 
   useEffect(() => {
-    document.title = couple;
-  }, [couple]);
+    document.title = title;
+  }, [title]);
 
   // The sections render after the browser has handled the URL fragment, so a deep link such as
   // /#rsvp is scrolled to once here. Section ids are [a-z0-9-], so the raw fragment is looked up
@@ -43,8 +52,9 @@ export function Site({ content, build, initialLanguage }: SiteProps) {
     }
   }, []);
 
-  // Keeps the API warm for the RSVP form; without the feature the page calls no API at all.
-  useApiKeepWarm(build.features.rsvp);
+  // Keeps the API warm for the RSVP form; without the feature (or on the privacy page, which has no
+  // form) the page calls no API at all.
+  useApiKeepWarm(build.features.rsvp && !privacyPage);
 
   const ctx: SectionContext = { lang, content, build };
   // The hero button and the highlighted nav entry only while replies can be sent.
@@ -56,17 +66,35 @@ export function Site({ content, build, initialLanguage }: SiteProps) {
     <>
       <Header
         brand={couple}
-        nav={navItems(content, lang)}
-        rsvpId={rsvpId}
+        brandHref={privacyPage ? '/' : '#top'}
+        nav={privacyPage ? [] : navItems(content, lang)}
+        rsvpId={privacyPage ? undefined : rsvpId}
         lang={lang}
         onLangChange={setLang}
       />
       <main id="top">
-        <Hero content={content} lang={lang} rsvpId={rsvpId} />
-        {content.sections.map((section) => renderSection(section, ctx))}
+        {privacyPage ? (
+          <PrivacyPage content={content} regions={build.regions} lang={lang} />
+        ) : (
+          <>
+            <Hero content={content} lang={lang} rsvpId={rsvpId} />
+            {content.sections.map((section) => renderSection(section, ctx))}
+          </>
+        )}
       </main>
       <footer>
-        {couple} · {formatDate(content.event.start, lang, content.event.timeZone, 'long')}
+        <p className="footer-line">
+          {couple} · {formatDate(content.event.start, lang, content.event.timeZone, 'long')}
+        </p>
+        <p className="footer-links">
+          <a href={PRIVACY_PATH}>{t(ui.privacy, lang)}</a>
+          {content.privacy?.imprint !== undefined && (
+            <>
+              {' · '}
+              <a href={`${PRIVACY_PATH}#${IMPRINT_ID}`}>{t(privacyText.imprintTitle, lang)}</a>
+            </>
+          )}
+        </p>
       </footer>
     </>
   );

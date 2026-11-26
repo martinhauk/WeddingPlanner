@@ -85,6 +85,7 @@ export const yesReply: RsvpView = {
   ],
   message: 'Hurra!',
   language: 'de',
+  dietaryConsent: true,
 };
 
 export function mineBody(rsvp: RsvpView, version = '"v1"', open = true) {

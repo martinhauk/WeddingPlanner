@@ -888,10 +888,93 @@ img {
   overflow: hidden;
 }
 
+/* RSVP: dietary consent and the privacy note */
+
+.section-rsvp label.check.consent {
+  align-items: flex-start;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.section-rsvp label.check.consent input {
+  flex: none;
+  margin: 0.15rem 0 0;
+}
+
+.rsvp-privacy {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+/* Privacy notice (/datenschutz) */
+
+.privacy {
+  max-width: 44rem;
+  overflow-wrap: break-word;
+}
+
+.privacy h1 {
+  font-size: clamp(2.2rem, 7vw, 3rem);
+  text-align: center;
+}
+
+.privacy h2 {
+  font-size: clamp(1.5rem, 4.5vw, 1.9rem);
+  text-align: left;
+  margin-top: 2.4rem;
+}
+
+.privacy h2::after {
+  margin-left: 0;
+}
+
+.privacy ul {
+  padding-left: 1.2rem;
+}
+
+.privacy li + li {
+  margin-top: 0.5rem;
+}
+
+.privacy code {
+  font-size: 0.9em;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 0.25rem;
+  padding: 0 0.25rem;
+}
+
+.privacy-back {
+  margin: 0 0 1.5rem;
+  font-size: 0.95rem;
+}
+
+.privacy-address {
+  font-style: normal;
+  white-space: pre-line;
+  margin: 0 0 1rem;
+  padding-left: 0.9rem;
+  border-left: 2px solid var(--line);
+}
+
+.privacy-imprint {
+  white-space: pre-line;
+}
+
 footer {
   text-align: center;
   padding: 3rem 1rem;
   color: var(--muted);
   font: italic 400 1.1rem var(--font-heading);
   border-top: 1px solid var(--line);
+}
+
+.footer-line {
+  margin: 0;
+}
+
+.footer-links {
+  margin: 0.8rem 0 0;
+  font: 400 0.95rem var(--font-body);
 }
