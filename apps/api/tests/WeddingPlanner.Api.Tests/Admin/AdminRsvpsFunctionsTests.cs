@@ -239,5 +239,6 @@ public sealed class AdminRsvpsFunctionsTests
         people = new[] { new { name, dietary = new { tags } } },
         language = "en",
         website = string.Empty,
+        dietaryConsent = true,
     };
 }
