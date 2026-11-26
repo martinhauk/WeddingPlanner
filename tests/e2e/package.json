@@ -1,0 +1,22 @@
+{
+  "name": "@weddingplanner/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Playwright device matrix with screenshot contact sheet, and the read-only smoke suite for deployed environments.",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:pr": "E2E_SUITE=pr playwright test",
+    "test:unit": "node --test \"unit/**/*.test.ts\"",
+    "smoke": "E2E_SUITE=smoke playwright test",
+    "screenshots:index": "node screenshots-tooling/build-contact-sheet.ts",
+    "browsers": "playwright install --with-deps chromium webkit",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
+    "@playwright/test": "1.65.1",
+    "@types/node": "24.19.2",
+    "typescript": "7.0.2"
+  }
+}
