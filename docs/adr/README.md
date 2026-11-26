@@ -25,3 +25,4 @@ one, and set the old one's status to `Superseded by ADR NNNN`.
 | [0008](0008-azurite-via-docker-compose.md)           | Azurite via docker compose for storage integration tests                   | Accepted               |
 | [0009](0009-merge-policy.md)                         | Lead agent squash-merges after green CI and reviewer-agent approval        | Superseded by ADR 0010 |
 | [0010](0010-working-process.md)                      | Every change through a PR, CI gates every deploy, the owner merges         | Accepted               |
+| [0011](0011-client-ip.md)                            | No client-IP header on the managed API; rate limits trust no header        | Accepted               |

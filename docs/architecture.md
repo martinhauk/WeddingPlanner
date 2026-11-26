@@ -176,7 +176,8 @@ Everything the one-pager shows (`packages/content/src/schema/site-content.ts`, J
 - **API defaults in code** (overridable through Bicep parameters): `Rsvp__MaxCompanions` 5,
   `Rsvp__MaxActiveRsvps` 300, `Rsvp__CookieLifetimeDays` 365, `Rsvp__MinSubmitMs` 2500,
   `Matching__FuzzyThreshold` 0.88, `Auth__AdminRole` `admin`, `Auth__AllowedIdentityProviders` `aad`,
-  `Diagnostics__ProbeEnabled` (on until the platform probe is done).
+  `HealthProbe__Enabled` false (Bicep sets it to `true` on `e2e` only), `RateLimiting__ClientIpHeader`
+  empty (no header trusted, [ADR 0011](adr/0011-client-ip.md)).
 - **Admin overrides at runtime:** the `Settings` table holds `deadlineOverride` and `closedManually`.
 - **RSVP is open when** `Features__Rsvp && !closedManually && now <= (deadlineOverride ??
   Rsvp__Deadline)`. The API decides; the static site uses the baked flag and deadline only for
@@ -193,7 +194,7 @@ details with a `code`.
 | Route                                                                  | Auth                  | Purpose                                                                                                                         |
 | ---------------------------------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | `GET /health`                                                          | anonymous             | `{status, version, timeUtc}`, no I/O; keep-warm and smoke target                                                                |
-| `GET /health/probe`                                                    | anonymous, switchable | temporary platform probe: cookie round trip and client-IP header echo (never logged)                                            |
+| `GET /health/probe`                                                    | anonymous, switchable | platform probe, on `e2e` only: cookie round trip and client-IP header echo (never logged)                                       |
 | `GET /rsvp/status`                                                     | anonymous             | open/enabled, deadline, display time zone, limits; cached 60 s                                                                  |
 | `POST /rsvp`                                                           | anonymous             | create an answer: honeypot, minimum fill time, 409 if a cookie exists, 503 at the RSVP cap; sets cookies, returns the edit link |
 | `GET`/`PUT`/`DELETE /rsvp/me`                                          | cookie                | read, update or delete your own answer (read-only after the deadline)                                                           |
@@ -286,9 +287,11 @@ repository and the project board; the owner runs them, never CI.
 | Budget, anomaly alert, action group | €0                            | €0                                                                                          | budget alerts (actual and forecast) are a slow backstop; budgets never stop spending                                                                          |
 
 Rate limiting, layer by layer: Azure's built-in L3/L4 DDoS protection; SWA edge rules and the
-lockdown; in the API, before any storage I/O, per-IP sliding windows (10 writes per 10 minutes, 60
-reads per minute), a per-instance write backstop, a hard cap of 300 active RSVPs, body ≤16 KB JSON
-only, honeypot and minimum fill time. Subscriptions are upgraded to pay-as-you-go on day 1 (a trial
+lockdown; in the API, before any storage I/O, a per-instance write backstop (120 writes per minute),
+a hard cap of 300 active RSVPs, body ≤16 KB JSON only, honeypot and minimum fill time. Per-client
+sliding windows (10 writes per 10 minutes, 60 reads per minute) exist but stay inactive on the managed
+API: no request header carries the caller's address there, and every candidate is either spoofable or
+a shared platform address, so no header is trusted by default ([ADR 0011](adr/0011-client-ip.md)). Subscriptions are upgraded to pay-as-you-go on day 1 (a trial
 subscription would be disabled after 30 days).
 
 ## 13. Security model
@@ -336,8 +339,8 @@ Full guide: [local-development.md](local-development.md).
 
 ## 15. To verify on the first deploy
 
-- Which request header carries the client IP, and whether cookies survive the SWA proxy (platform
-  probe).
+- Done: the platform probe on `e2e` showed that no request header carries the client IP and that
+  cookies survive the SWA proxy, which adds `Domain` ([ADR 0011](adr/0011-client-ip.md)).
 - That ASP.NET Core integration and OpenTelemetry work on the SWA managed host.
 - That metric alerts can use an action group in the ops resource group with a Monitoring Reader
   assignment.

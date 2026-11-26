@@ -30,13 +30,17 @@ public sealed class RateLimitingOptions
     public TimeSpan ReadWindow { get; set; } = TimeSpan.FromMinutes(1);
 
     /// <summary>
-    /// Writes one worker instance accepts per minute from all clients together: the backstop when client
-    /// keys are spoofed or rotated. Default 120.
+    /// Writes one worker instance accepts per minute from all clients together: the backstop when there is no
+    /// client key (the default, see <see cref="ClientIpHeader"/>). Default 120.
     /// </summary>
     public int InstanceWritesPerMinute { get; set; } = 120;
 
-    /// <summary>Single-address header read first for the client key. Default <c>x-azure-clientip</c>; empty skips it.</summary>
-    public string ClientIpHeader { get; set; } = ClientAddress.DefaultHeaderName;
+    /// <summary>
+    /// Trusted single-address header that holds the client key (<see cref="ClientAddress"/>). Default empty: no
+    /// header is trusted, because on the Static Web Apps managed API every candidate is missing or spoofable
+    /// (ADR 0011), so no request has a per-client key and only the instance backstop applies.
+    /// </summary>
+    public string ClientIpHeader { get; set; } = string.Empty;
 }
 
 /// <summary>Registers <see cref="RateLimitingOptions"/>.</summary>
