@@ -154,8 +154,9 @@ parse_args() {
   done
 
   if [ "$ACTION" = status ]; then
-    [ -z "$ENV_NAME$REF$INSTANCE_REF" ] && [ "$DEPLOY" = true ] ||
+    if [ -n "$ENV_NAME$REF$INSTANCE_REF" ] || [ "$DEPLOY" != true ]; then
       usage_error "status takes --repo only"
+    fi
     return
   fi
   [ -n "$ENV_NAME" ] || usage_error "--env is required (e2e, test or production)"
