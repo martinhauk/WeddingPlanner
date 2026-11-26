@@ -1,7 +1,15 @@
 /**
- * The RSVP reply as the form edits it. Until the RSVP API is wired up, a saved reply lives only in
- * this browser (localStorage).
+ * The RSVP reply as the form edits it, and its mapping to and from the RSVP API (docs/api.md). The
+ * reply lives in the API; this browser keeps only the cookies the API sets.
  */
+import type {
+  FieldError,
+  RsvpLimits,
+  RsvpRequest,
+  RsvpRequestPerson,
+  RsvpStatus,
+  RsvpView,
+} from './api/rsvp-client.ts';
 
 export const DIETS = ['vegetarian', 'vegan', 'glutenFree', 'lactoseFree'] as const;
 export type Diet = (typeof DIETS)[number];
@@ -9,81 +17,117 @@ export type Diet = (typeof DIETS)[number];
 /** One guest plus at most five companions. */
 export const MAX_PEOPLE = 6;
 
-export type ReplyPerson = { name: string; diet: Diet[]; dietNote: string };
-export type Reply = {
-  attending: boolean;
-  people: ReplyPerson[];
-  message: string;
-  savedAt: string;
+/** The API's text limits (UTF-16 code units, like `maxlength`); `GET /api/rsvp/status` may lower them. */
+export const DEFAULT_LIMITS: RsvpLimits = {
+  maxPeople: MAX_PEOPLE,
+  maxNameLength: 80,
+  maxNoteLength: 200,
+  maxMessageLength: 1000,
 };
 
-const STORAGE_KEY = 'wp.rsvp.v2';
+export type ReplyPerson = {
+  /** Person id from the API; sent back on an update so the couple's matching keeps it. */
+  readonly id?: string;
+  readonly name: string;
+  readonly diet: readonly Diet[];
+  readonly dietNote: string;
+};
+
+export type Reply = {
+  readonly attending: boolean;
+  readonly people: readonly ReplyPerson[];
+  readonly message: string;
+};
 
 export const emptyPerson = (): ReplyPerson => ({ name: '', diet: [], dietNote: '' });
 
-function isPerson(value: unknown): value is ReplyPerson {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-  const person = value as Record<string, unknown>;
-  return (
-    typeof person.name === 'string' &&
-    typeof person.dietNote === 'string' &&
-    Array.isArray(person.diet) &&
-    person.diet.every((d) => (DIETS as readonly unknown[]).includes(d))
-  );
+export const newReply = (attending: boolean): Reply => ({
+  attending,
+  people: [emptyPerson()],
+  message: '',
+});
+
+export function isDiet(value: unknown): value is Diet {
+  return (DIETS as readonly unknown[]).includes(value);
 }
 
-/** A stored reply, or `null` for anything that is not a well-formed reply. */
-export function parseReply(json: string | null): Reply | null {
-  if (json === null) {
-    return null;
+/** The form limits: the status's, never above the product limits. */
+export function formLimits(status: RsvpStatus | null): RsvpLimits {
+  const limits = status?.limits;
+  if (limits === undefined) {
+    return DEFAULT_LIMITS;
   }
-  let value: unknown;
-  try {
-    value = JSON.parse(json);
-  } catch {
-    return null;
-  }
-  if (typeof value !== 'object' || value === null) {
-    return null;
-  }
-  const reply = value as Record<string, unknown>;
-  const valid =
-    typeof reply.attending === 'boolean' &&
-    typeof reply.message === 'string' &&
-    typeof reply.savedAt === 'string' &&
-    Array.isArray(reply.people) &&
-    reply.people.length > 0 &&
-    reply.people.length <= MAX_PEOPLE &&
-    reply.people.every(isPerson);
-  return valid ? (value as Reply) : null;
+  return {
+    maxPeople: Math.min(limits.maxPeople, DEFAULT_LIMITS.maxPeople),
+    maxNameLength: Math.min(limits.maxNameLength, DEFAULT_LIMITS.maxNameLength),
+    maxNoteLength: Math.min(limits.maxNoteLength, DEFAULT_LIMITS.maxNoteLength),
+    maxMessageLength: Math.min(limits.maxMessageLength, DEFAULT_LIMITS.maxMessageLength),
+  };
 }
 
-export function loadReply(): Reply | null {
-  try {
-    return parseReply(localStorage.getItem(STORAGE_KEY));
-  } catch {
-    return null;
-  }
+/** The form's copy of a stored reply. */
+export function replyFromView(view: RsvpView): Reply {
+  return {
+    attending: view.attending,
+    people: view.people.map((person) => ({
+      ...(person.id === '' ? {} : { id: person.id }),
+      name: person.name,
+      diet: DIETS.filter((diet) => person.dietary.tags.includes(diet)),
+      dietNote: person.dietary.note ?? '',
+    })),
+    message: view.message ?? '',
+  };
 }
 
-export function storeReply(reply: Reply): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(reply));
-  } catch {
-    // Storage blocked: the confirmation still shows for this visit.
-  }
-}
-
-/** Trims names and notes, drops rows without a name, and drops dietary data for a "no". */
-export function normalizeReply(draft: Reply, savedAt: Date): Reply {
-  const people = draft.people
-    .map((person) => ({
+/** The request body: trimmed text, dietary data only for a "yes", person ids kept for an update. */
+export function toRequest(reply: Reply, language: string, website: string): RsvpRequest {
+  const people = reply.people.map((person): RsvpRequestPerson => {
+    const note = person.dietNote.trim();
+    return {
+      ...(person.id === undefined ? {} : { id: person.id }),
       name: person.name.trim(),
-      diet: draft.attending ? person.diet : [],
-      dietNote: draft.attending ? person.dietNote.trim() : '',
-    }))
-    .filter((person) => person.name !== '');
-  return { ...draft, people, message: draft.message.trim(), savedAt: savedAt.toISOString() };
+      ...(reply.attending
+        ? {
+            dietary: {
+              tags: DIETS.filter((d) => person.diet.includes(d)),
+              ...(note ? { note } : {}),
+            },
+          }
+        : {}),
+    };
+  });
+  const message = reply.message.trim();
+  return {
+    attending: reply.attending,
+    people,
+    ...(message === '' ? {} : { message }),
+    language,
+    website,
+  };
+}
+
+/**
+ * Checks the reply before it is sent. The findings use the API's field paths and codes
+ * (`people[1].name` + `required`), so the form shows both the same way.
+ */
+export function validateReply(reply: Reply, limits: RsvpLimits): FieldError[] {
+  const errors: FieldError[] = [];
+  if (reply.people.length > limits.maxPeople) {
+    errors.push({ field: 'people', code: 'too_many' });
+  }
+  reply.people.forEach((person, index) => {
+    const name = person.name.trim();
+    if (name === '') {
+      errors.push({ field: `people[${index}].name`, code: 'required' });
+    } else if (name.length > limits.maxNameLength) {
+      errors.push({ field: `people[${index}].name`, code: 'too_long' });
+    }
+    if (reply.attending && person.dietNote.trim().length > limits.maxNoteLength) {
+      errors.push({ field: `people[${index}].dietary.note`, code: 'too_long' });
+    }
+  });
+  if (reply.message.trim().length > limits.maxMessageLength) {
+    errors.push({ field: 'message', code: 'too_long' });
+  }
+  return errors;
 }

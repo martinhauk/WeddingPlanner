@@ -1,5 +1,6 @@
 import type { SiteContent } from '@weddingplanner/content';
 import { useEffect, useState } from 'react';
+import { useApiKeepWarm } from './api/keep-warm.ts';
 import { Header } from './components/Header.tsx';
 import { Hero } from './components/Hero.tsx';
 import { formatDate } from './format.ts';
@@ -42,16 +43,20 @@ export function Site({ content, build, initialLanguage }: SiteProps) {
     }
   }, []);
 
+  // Keeps the API warm for the RSVP form; without the feature the page calls no API at all.
+  useApiKeepWarm(build.features.rsvp);
+
   const ctx: SectionContext = { lang, content, build };
-  const rsvpId = content.sections.find(
-    (section) => section.type === 'rsvp' && isShown(section, build.features),
-  )?.id;
+  // The hero button and the highlighted nav entry only while replies can be sent.
+  const rsvpId = build.features.rsvp
+    ? content.sections.find((section) => section.type === 'rsvp' && isShown(section))?.id
+    : undefined;
 
   return (
     <>
       <Header
         brand={couple}
-        nav={navItems(content, build.features, lang)}
+        nav={navItems(content, lang)}
         rsvpId={rsvpId}
         lang={lang}
         onLangChange={setLang}

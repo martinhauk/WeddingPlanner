@@ -34,7 +34,7 @@ export const SECTION_COMPONENTS: { readonly [T in SectionType]: SectionComponent
 
 /** Renders one section with the component of its type, or nothing when it is not shown. */
 export function renderSection(section: Section, ctx: SectionContext): ReactNode {
-  if (!isShown(section, ctx.build.features)) {
+  if (!isShown(section)) {
     return null;
   }
   // TypeScript cannot correlate `section.type` with the component's props across the union.

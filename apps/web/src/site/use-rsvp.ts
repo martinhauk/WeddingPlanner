@@ -1,0 +1,332 @@
+import { type RefObject, useEffect, useState } from 'react';
+import {
+  type ApiFailure,
+  createRsvp,
+  deleteRsvp,
+  type FieldError,
+  getMine,
+  getStatus,
+  type RsvpLimits,
+  type RsvpMine,
+  type RsvpState,
+  type RsvpStatus,
+  readRsvpState,
+  updateRsvp,
+} from './api/rsvp-client.ts';
+import type { Lang } from './i18n.ts';
+import {
+  formLimits,
+  newReply,
+  type Reply,
+  replyFromView,
+  toRequest,
+  validateReply,
+} from './rsvp-reply.ts';
+import { useNearViewport } from './use-near-viewport.ts';
+
+/** What the section shows. The own reply (`mine`) is kept next to it. */
+export type RsvpPhase =
+  /** No reply in this browser: the yes/no buttons. */
+  | { readonly kind: 'choose' }
+  /** The state cookie says there is a reply; it loads once the section is near the viewport. */
+  | { readonly kind: 'stored' }
+  | { readonly kind: 'loadFailed'; readonly error: ApiFailure }
+  | { readonly kind: 'form'; readonly mode: 'create' | 'edit'; readonly draft: Reply }
+  /** The thank-you with the own reply. */
+  | { readonly kind: 'saved' };
+
+/** Short messages after an action (announced politely). */
+export type RsvpNotice = 'withdrawn' | 'alreadyAnswered' | 'conflict' | 'replyGone';
+
+export type UseRsvpOptions = {
+  /** `features.rsvp` of the build: when off, nothing is read and nothing is called. */
+  readonly enabled: boolean;
+  readonly lang: Lang;
+  /** The enforced deadline (UTC ISO), from `build.json`. */
+  readonly deadline: string;
+  /** Element whose visibility starts the first API call. */
+  readonly anchor: RefObject<Element | null>;
+};
+
+export type UseRsvp = {
+  readonly phase: RsvpPhase;
+  /** The state cookie as it was when the page loaded. */
+  readonly stored: RsvpState | null;
+  readonly mine: RsvpMine | null;
+  /** The section is near the viewport or the guest pressed a button: the API may be called. */
+  readonly active: boolean;
+  readonly busy: boolean;
+  /** Failure of the last action that is not a validation finding. */
+  readonly error: ApiFailure | null;
+  readonly fieldErrors: readonly FieldError[];
+  readonly notice: RsvpNotice | null;
+  /** Past the deadline: no new replies, the own reply is read-only. */
+  readonly closed: boolean;
+  /** The API refused a write because the deadline has passed (the page had not noticed yet). */
+  readonly closedByApi: boolean;
+  /** The API takes no more new replies (cap reached). */
+  readonly full: boolean;
+  /** The API is not configured (no storage or deadline). */
+  readonly unavailable: boolean;
+  readonly limits: RsvpLimits;
+  /** The guest has acted in the section, so moving the focus is expected. */
+  readonly interacted: boolean;
+  readonly start: (attending: boolean) => void;
+  readonly edit: () => void;
+  readonly cancel: () => void;
+  readonly change: (draft: Reply) => void;
+  readonly submit: (website: string) => Promise<void>;
+  readonly withdraw: () => Promise<void>;
+  /** Loads the stored reply now (also without `IntersectionObserver`). */
+  readonly reveal: () => void;
+  readonly retry: () => void;
+};
+
+const CHOOSE: RsvpPhase = { kind: 'choose' };
+const STORED: RsvpPhase = { kind: 'stored' };
+const SAVED: RsvpPhase = { kind: 'saved' };
+
+/** An unplaced validation finding: the form shows its general message. */
+const INVALID: readonly FieldError[] = [{ field: '', code: 'invalid' }];
+
+/**
+ * State and API calls of the RSVP section. On page load it reads only the `wp_rsvp_state` cookie;
+ * the API is called once the section comes near the viewport or the guest presses a button.
+ */
+export function useRsvp({ enabled, lang, deadline, anchor }: UseRsvpOptions): UseRsvp {
+  const [stored] = useState(() => (enabled ? readRsvpState() : null));
+  const [phase, setPhase] = useState<RsvpPhase>(stored === null ? CHOOSE : STORED);
+  const [mine, setMine] = useState<RsvpMine | null>(null);
+  const [status, setStatus] = useState<RsvpStatus | null>(null);
+  const [requested, setRequested] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<ApiFailure | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<readonly FieldError[]>([]);
+  const [notice, setNotice] = useState<RsvpNotice | null>(null);
+  const [closedByApi, setClosedByApi] = useState(false);
+  const [interacted, setInteracted] = useState(false);
+  const [openedAt] = useState(Date.now);
+
+  const near = useNearViewport(anchor, enabled);
+  const active = enabled && (near || requested);
+
+  // A returning guest: load the own reply.
+  const loadMine = active && phase.kind === 'stored';
+  useEffect(() => {
+    if (!loadMine) {
+      return undefined;
+    }
+    const controller = new AbortController();
+    void getMine(controller.signal).then((result) => {
+      if (controller.signal.aborted) {
+        return;
+      }
+      if (result.ok) {
+        setMine(result.value);
+        setPhase(SAVED);
+      } else if (result.error.kind === 'notFound') {
+        // The reply is gone (the API has cleared the stale cookies): answer anew.
+        setPhase(CHOOSE);
+      } else {
+        setPhase({ kind: 'loadFailed', error: result.error });
+      }
+    });
+    return () => controller.abort();
+  }, [loadMine]);
+
+  // No reply yet: ask whether replies are accepted (deadline, cap) and for the input limits.
+  const loadStatus =
+    active &&
+    status === null &&
+    mine === null &&
+    (phase.kind === 'choose' || phase.kind === 'form');
+  useEffect(() => {
+    if (!loadStatus) {
+      return undefined;
+    }
+    const controller = new AbortController();
+    void getStatus(controller.signal).then((result) => {
+      // Without a status the form still works; a write reports what is wrong.
+      if (!controller.signal.aborted && result.ok) {
+        setStatus(result.value);
+      }
+    });
+    return () => controller.abort();
+  }, [loadStatus]);
+
+  const limits = formLimits(status);
+  const deadlinePassed = openedAt > Date.parse(deadline);
+  const closed =
+    closedByApi ||
+    deadlinePassed ||
+    (mine !== null && !mine.open) ||
+    (status?.enabled === true && !status.open && !status.full);
+  const full = status?.full === true && !status.open;
+  const unavailable = status !== null && !status.enabled;
+
+  const clearFeedback = () => {
+    setError(null);
+    setFieldErrors([]);
+    setNotice(null);
+  };
+
+  /** Reads the own reply again after a conflict, and shows it with `next`. */
+  const reload = async (next: RsvpNotice) => {
+    const result = await getMine();
+    if (result.ok) {
+      setMine(result.value);
+      setPhase(SAVED);
+      setNotice(next);
+    } else if (result.error.kind === 'notFound') {
+      setMine(null);
+      setPhase(CHOOSE);
+      setNotice('replyGone');
+    } else {
+      setError(result.error);
+    }
+  };
+
+  const onWriteFailure = async (failure: ApiFailure, mode: 'create' | 'edit', draft: Reply) => {
+    switch (failure.kind) {
+      case 'validation':
+        setFieldErrors(failure.errors.length > 0 ? failure.errors : INVALID);
+        return;
+      case 'exists':
+        // This browser already has a reply (another tab): show it.
+        await reload('alreadyAnswered');
+        return;
+      case 'conflict':
+        await reload('conflict');
+        return;
+      case 'notFound':
+        if (mode === 'edit') {
+          // The reply was deleted elsewhere: keep the entries and let the guest send them anew.
+          setMine(null);
+          setPhase({
+            kind: 'form',
+            mode: 'create',
+            draft: { ...draft, people: draft.people.map(({ id: _, ...person }) => person) },
+          });
+          setNotice('replyGone');
+        } else {
+          setError({ ...failure, kind: 'unavailable' });
+        }
+        return;
+      case 'closed':
+        setClosedByApi(true);
+        setPhase(mine === null ? CHOOSE : SAVED);
+        return;
+      default:
+        setError(failure);
+    }
+  };
+
+  const start = (attending: boolean) => {
+    setRequested(true);
+    setInteracted(true);
+    clearFeedback();
+    setPhase({ kind: 'form', mode: 'create', draft: newReply(attending) });
+  };
+
+  const edit = () => {
+    if (mine === null) {
+      return;
+    }
+    setInteracted(true);
+    clearFeedback();
+    setPhase({ kind: 'form', mode: 'edit', draft: replyFromView(mine.rsvp) });
+  };
+
+  const cancel = () => {
+    setInteracted(true);
+    clearFeedback();
+    setPhase(mine === null ? CHOOSE : SAVED);
+  };
+
+  const change = (draft: Reply) =>
+    setPhase((current) => (current.kind === 'form' ? { ...current, draft } : current));
+
+  const submit = async (website: string) => {
+    if (phase.kind !== 'form' || busy) {
+      return;
+    }
+    const { draft, mode } = phase;
+    clearFeedback();
+    const findings = validateReply(draft, limits);
+    if (findings.length > 0) {
+      setFieldErrors(findings);
+      return;
+    }
+    setBusy(true);
+    const body = toRequest(draft, lang, website);
+    const result =
+      mode === 'edit' && mine !== null
+        ? await updateRsvp(body, mine.version)
+        : await createRsvp(body);
+    if (result.ok) {
+      setMine(result.value);
+      setPhase(SAVED);
+    } else {
+      await onWriteFailure(result.error, mode, draft);
+    }
+    setBusy(false);
+  };
+
+  const withdraw = async () => {
+    if (mine === null || busy) {
+      return;
+    }
+    clearFeedback();
+    setInteracted(true);
+    setBusy(true);
+    const result = await deleteRsvp(mine.version);
+    if (result.ok || result.error.kind === 'notFound') {
+      setMine(null);
+      setPhase(CHOOSE);
+      setNotice('withdrawn');
+    } else if (result.error.kind === 'conflict') {
+      await reload('conflict');
+    } else if (result.error.kind === 'closed') {
+      setClosedByApi(true);
+    } else {
+      setError(result.error);
+    }
+    setBusy(false);
+  };
+
+  const reveal = () => {
+    setRequested(true);
+    setInteracted(true);
+  };
+
+  const retry = () => {
+    setRequested(true);
+    setInteracted(true);
+    setPhase(STORED);
+  };
+
+  return {
+    phase,
+    stored,
+    mine,
+    active,
+    busy,
+    error,
+    fieldErrors,
+    notice,
+    closed,
+    closedByApi,
+    full,
+    unavailable,
+    limits,
+    interacted,
+    start,
+    edit,
+    cancel,
+    change,
+    submit,
+    withdraw,
+    reveal,
+    retry,
+  };
+}

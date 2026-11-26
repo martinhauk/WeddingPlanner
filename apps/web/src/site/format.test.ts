@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { formatDate, formatDeadline, mediaUrl, telUrl, whatsappUrl } from './format.ts';
 import { t } from './i18n.ts';
 import { tilePoint, tilesAround } from './osm.ts';
-import { normalizeReply, parseReply } from './rsvp-reply.ts';
 
 describe('t', () => {
   it('returns the requested language and falls back to German for missing or blank text', () => {
@@ -54,39 +53,5 @@ describe('osm tiles', () => {
     expect(center?.left).toBeLessThanOrEqual(0);
     expect(center?.left).toBeGreaterThan(-256);
     expect(center?.src).toBe('https://tile.openstreetmap.org/15/17335/10945.png');
-  });
-});
-
-describe('rsvp reply', () => {
-  it('drops empty rows and dietary data of a no', () => {
-    const reply = normalizeReply(
-      {
-        attending: false,
-        people: [
-          { name: ' Ben ', diet: ['vegan'], dietNote: 'x' },
-          { name: '  ', diet: [], dietNote: '' },
-        ],
-        message: ' hi ',
-        savedAt: '',
-      },
-      new Date('2099-01-01T00:00:00Z'),
-    );
-    expect(reply).toEqual({
-      attending: false,
-      people: [{ name: 'Ben', diet: [], dietNote: '' }],
-      message: 'hi',
-      savedAt: '2099-01-01T00:00:00.000Z',
-    });
-  });
-
-  it('rejects malformed stored replies', () => {
-    expect(parseReply(null)).toBeNull();
-    expect(parseReply('not json')).toBeNull();
-    expect(parseReply('{"attending":true,"people":[],"message":"","savedAt":""}')).toBeNull();
-    expect(
-      parseReply(
-        '{"attending":true,"people":[{"name":"A","diet":["meat"],"dietNote":""}],"message":"","savedAt":""}',
-      ),
-    ).toBeNull();
   });
 });
