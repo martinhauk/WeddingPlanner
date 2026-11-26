@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Tests for infra/app (the app infrastructure of one environment) and infra/bicepconfig.json.
+# Tests for infra/app (the app infrastructure and the backup store of one environment) and
+# infra/bicepconfig.json.
 #
 # Everything runs through the local Bicep compiler (`az bicep`): no Azure login, no calls to
 # Azure, nothing is deployed. The tests check that
@@ -8,7 +9,8 @@
 #      @minLength/@maxLength, so a name that could get too long fails here;
 #   2. `az bicep build-params` turns dummy environment variables into the expected parameters,
 #      applies the optional defaults, and fails on missing or invalid variables;
-#   3. the compiled ARM template meets the contract of the issue (template.jq);
+#   3. the compiled ARM templates meet their contracts (template.jq for main.bicep, backup.jq for
+#      backup.bicep, whose parameter file is built like main.bicepparam);
 #   4. bicepconfig.json turns each required linter rule into an error (one fixture per rule).
 #
 # Usage: infra/app/tests/run.sh        (needs az with Bicep, and jq)
@@ -31,6 +33,7 @@ for tool in az jq; do
 done
 
 TEMPLATE="$WORK/main.json"
+BACKUP_TEMPLATE="$WORK/backup.json"
 PARAMS="$WORK/params.json"
 OUT=""
 STATUS=0
@@ -183,27 +186,60 @@ build_params "${VALID_ENV[@]}" DEPLOYMENT_SLUG=wed123456789
 check "DEPLOYMENT_SLUG longer than 11 characters is rejected" status_not 0
 OUT=""
 
-# template.jq prints "group<TAB>name", "ok<TAB>description" or "FAIL<TAB>description".
-if [ -s "$TEMPLATE" ]; then
-  run jq -r -f "$HERE/template.jq" "$TEMPLATE"
-  test_case "template contract (template.jq)"
-  check "template.jq runs" status_is 0
-  RESULTS=$OUT
+# contract FILTER TEMPLATE: run a contract file. It prints "group<TAB>name", "ok<TAB>description"
+# or "FAIL<TAB>description".
+contract() {
+  local filter=$1 template=$2 results result description
+  if [ ! -s "$template" ]; then
+    check "compiled template exists for $filter" false
+    return
+  fi
+  run jq -r -f "$HERE/$filter" "$template"
+  test_case "template contract ($filter)"
+  check "$filter runs" status_is 0
+  results=$OUT
   OUT=""
-  status_is 0 || RESULTS=""
+  status_is 0 || results=""
   while IFS="$(printf '\t')" read -r result description; do
     case "$result" in
       group) test_case "$description" ;;
       ok | FAIL) check "$description" test "$result" = ok ;;
       "") ;;
-      *) check "unexpected template.jq output: $result" false ;;
+      *) check "unexpected $filter output: $result" false ;;
     esac
   done <<EOF
-$RESULTS
+$results
 EOF
-else
-  check "compiled template exists for the contract checks" false
-fi
+}
+
+contract template.jq "$TEMPLATE"
+
+test_case "backup store (backup.bicep)"
+run az bicep build --file "$APP/backup.bicep" --outfile "$BACKUP_TEMPLATE"
+check "az bicep build backup.bicep succeeds" status_is 0
+check "build reports no diagnostics" no_diagnostics
+run az bicep lint --file "$APP/backup.bicep"
+check "az bicep lint backup.bicep succeeds without diagnostics" no_diagnostics
+rm -f "$PARAMS"
+run env -u DEPLOYMENT_SLUG -u ENVIRONMENT_NAME -u DATA_LOCATION DEPLOYMENT_SLUG=wedabc123 \
+  ENVIRONMENT_NAME=production DATA_LOCATION=germanywestcentral \
+  az bicep build-params --file "$APP/backup.bicepparam" --outfile "$PARAMS"
+check "build-params backup.bicepparam succeeds with the deploy job's variables" status_is 0
+OUT=""
+check "sets exactly deploymentSlug, environmentName, dataLocation" \
+  test "$(jq -c '.parameters | keys' "$PARAMS")" = '["dataLocation","deploymentSlug","environmentName"]'
+check "environmentName from ENVIRONMENT_NAME" param_is environmentName '"production"'
+for missing in DEPLOYMENT_SLUG ENVIRONMENT_NAME DATA_LOCATION; do
+  args=(DEPLOYMENT_SLUG=wedabc123 ENVIRONMENT_NAME=test DATA_LOCATION=germanywestcentral)
+  kept=()
+  for kv in "${args[@]}"; do
+    [ "${kv%%=*}" = "$missing" ] || kept+=("$kv")
+  done
+  run env -u DEPLOYMENT_SLUG -u ENVIRONMENT_NAME -u DATA_LOCATION "${kept[@]}" \
+    az bicep build-params --file "$APP/backup.bicepparam" --outfile "$PARAMS"
+  check "backup.bicepparam without $missing fails and names it" fails_naming "$missing"
+done
+contract backup.jq "$BACKUP_TEMPLATE"
 
 test_case "bicepconfig.json"
 check "the five required rules are set to error" config_has '.analyzers.core.rules | [

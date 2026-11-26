@@ -7,9 +7,10 @@
 # sample instance, so no network access is needed and nothing in Azure or on GitHub changes.
 #
 # Covered: fresh and configured (idempotent) runs for e2e and test, the deploy key lifecycle
-# (create, keep, rotate, repair), every precondition that must stop the script before it changes
-# anything, the RBAC replication retry, and that no email, id, instance repo name or private key
-# is ever printed and the temporary files are deleted.
+# (create, keep, rotate, repair), the nightly backup environment backup-<env> and its identity,
+# every precondition that must stop the script before it changes anything, the RBAC replication
+# retry, and that no email, id, instance repo name or private key is ever printed and the
+# temporary files are deleted.
 #
 # Usage: scripts/tests/bootstrap/run.sh
 set -euo pipefail
@@ -51,6 +52,7 @@ SUB=11111111-1111-4111-8111-111111111111
 TENANT=22222222-2222-4222-8222-222222222222
 OWNER=33333333-3333-4333-8333-333333333333
 CLIENT=44444444-4444-4444-8444-444444444444
+BACKUP_CLIENT=66666666-6666-4666-8666-666666666666
 PREFIX="repo:acme@4242/wedding-demo@987654"
 
 # run AZ_STATE GH_STATE [ARGS...]: run bootstrap.sh against the fakes; sets OUT and STATUS.
@@ -132,7 +134,7 @@ no_temp_files() { [ -z "$(ls -A "$RUN_TMP")" ]; }
 # private_output: nothing secret or personal in the output.
 private_output() {
   local value
-  for value in "$SUB" "$TENANT" "$OWNER" "$CLIENT" "$PREFIX" "@example" "PRIVATE KEY" \
+  for value in "$SUB" "$TENANT" "$OWNER" "$CLIENT" "$BACKUP_CLIENT" "$PREFIX" "@example" "PRIVATE KEY" \
     "acme/wedding-instance" "ssh-ed25519"; do
     if printf '%s' "$OUT" | grep -qF -- "$value"; then
       printf '        output contains %s\n' "$value"
@@ -170,6 +172,8 @@ check "sets AZURE_SUBSCRIPTION_ID" variable_created e2e AZURE_SUBSCRIPTION_ID "$
 check "sets AZURE_RESOURCE_GROUP" variable_created e2e AZURE_RESOURCE_GROUP "rg-wedsample1-e2e"
 check "sets exactly these four variables" [ "$(gh_write_count)" -eq 4 ]
 check "sets no INSTANCE_REPO and no deploy key" gh_not_called "INSTANCE_REPO"
+check "no backup environment for e2e" gh_not_called "backup-e2e"
+check "no backup identity for e2e" az_not_called "id-wedsample1-e2e-backup"
 check "warns that the sample emails are placeholders" output_has "example.com placeholders"
 check "prints no ids, emails or keys" private_output
 check "deletes its temporary files" no_temp_files
@@ -220,6 +224,60 @@ check "adds the key before storing the secret" before "POST repos/acme/wedding-i
 check "removes no key" gh_not_called "DELETE"
 check "prints no ids, emails, instance repo or keys" private_output
 check "deletes the temporary key files" no_temp_files
+
+test_case "test: fresh nightly backup environment and identity"
+run "$FIXTURES/az.fresh.json" "$FIXTURES/gh.fresh.json" --env test --instance "$INSTANCE" \
+  --instance-repo acme/wedding-instance
+check "exits 0" status_is 0
+check "creates backup-test: main only, no reviewer, no wait timer, no admin bypass" json_true \
+  "$(body 'PUT repos/acme/wedding-demo/environments/backup-test')" \
+  '. == {wait_timer: 0, prevent_self_review: false, reviewers: null,
+    deployment_branch_policy: {protected_branches: false, custom_branch_policies: true},
+    can_admins_bypass: false}'
+check "allows deployments from main" json_true \
+  "$(body 'POST repos/acme/wedding-demo/environments/backup-test/deployment-branch-policies')" \
+  '. == {name: "main", type: "branch"}'
+check "creates the environment before its variables" before \
+  "PUT repos/acme/wedding-demo/environments/backup-test" "POST repos/acme/wedding-demo/environments/backup-test/variables"
+check "AZURE_CLIENT_ID of backup-test is the backup identity" \
+  variable_created backup-test AZURE_CLIENT_ID "$BACKUP_CLIENT"
+check "AZURE_TENANT_ID of backup-test" variable_created backup-test AZURE_TENANT_ID "$TENANT"
+check "AZURE_SUBSCRIPTION_ID of backup-test" variable_created backup-test AZURE_SUBSCRIPTION_ID "$SUB"
+check "AZURE_RESOURCE_GROUP of backup-test" variable_created backup-test AZURE_RESOURCE_GROUP "rg-wedx7k2p9-test"
+check "exactly four backup variables (no INSTANCE_REPO, no secret)" \
+  [ "$(gh_writes | grep -c '^POST repos/acme/wedding-demo/environments/backup-test/variables ')" -eq 4 ]
+check "no secret in the backup environment" gh_not_called "SECRET INSTANCE_REPO_DEPLOY_KEY --env backup-test"
+check "the deploy environment keeps the deploy identity" variable_created test AZURE_CLIENT_ID "$CLIENT"
+check "checks the backup identity's federated credentials" \
+  az_called "identity federated-credential list --identity-name id-wedx7k2p9-test-backup --resource-group rg-wedx7k2p9-test-ops"
+check "reports the backup identity" output_has "backup identity id-wedx7k2p9-test-backup"
+check "prints no ids" private_output
+
+test_case "test: a backup environment with a reviewer or other branches is repaired"
+state=$(variant gh.configured.json '.["GET repos/acme/wedding-demo/environments/backup-test"].protection_rules += [{id: 9, type: "required_reviewers", reviewers: []}]
+  | .["GET repos/acme/wedding-demo/environments/backup-test/deployment-branch-policies"].branch_policies += [{id: 12, name: "feature/*", type: "branch"}]')
+run "$FIXTURES/az.configured.json" "$state" --env test --instance "$INSTANCE" --instance-repo acme/wedding-instance
+check "exits 0" status_is 0
+check "removes the reviewer (PUT without reviewers)" json_true \
+  "$(body 'PUT repos/acme/wedding-demo/environments/backup-test')" '.reviewers == null and .can_admins_bypass == false'
+check "explains why" output_has "scheduled backup cannot pass"
+check "removes the other branch policy" gh_called "DELETE repos/acme/wedding-demo/environments/backup-test/deployment-branch-policies/12"
+check "keeps main" gh_not_called "deployment-branch-policies/11"
+
+test_case "test: extra federated credentials on the backup identity are removed"
+state=$(variant az.configured.json '.extraBackupCredentials = ["pull-request"]')
+run "$state" "$FIXTURES/gh.configured.json" --env test --instance "$INSTANCE" --instance-repo acme/wedding-instance
+check "exits 0" status_is 0
+check "removes it from the backup identity" az_called \
+  "identity federated-credential delete --name pull-request --identity-name id-wedx7k2p9-test-backup"
+check "keeps github-backup-test" az_not_called "delete --name github-backup-test"
+
+test_case "Azure: custom role replication delay is retried"
+state=$(variant az.fresh.json '.deploymentFailures = 1
+  | .deploymentError = "ERROR: (RoleDefinitionDoesNotExist) The specified role definition does not exist."')
+run "$state" "$FIXTURES/gh.fresh.json" --env test --instance "$INSTANCE" --instance-repo acme/wedding-instance
+check "exits 0" status_is 0
+check "deploys twice" [ "$(az_count 'deployment sub create')" -eq 2 ]
 
 test_case "test: configured environment keeps its deploy key (idempotent)"
 run "$FIXTURES/az.configured.json" "$FIXTURES/gh.configured.json" --env test --instance "$INSTANCE" \
