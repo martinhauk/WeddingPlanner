@@ -1,0 +1,369 @@
+# Deploys ONE environment. Reusable workflow, called only by deploy.yml (e2e -> test -> production).
+#
+# Steps: check the inputs -> gate (skip cleanly while the environment has no Azure variables, or no
+# INSTANCE_REPO for a repo source) -> check out the code at `ref` (production: only commits on main)
+# -> get the instance: `sample` = samples/instance (e2e), `repo` = vars.INSTANCE_REPO fetched with
+# the read-only deploy key into $RUNNER_TEMP/instance, outside the workspace (test, production;
+# production: only commits on the instance repo's main) -> strict content validation -> derive the
+# Bicep parameters from instance.json environments.<env> -> OIDC login -> app infra -> build web
+# (bake + vite, DEPLOY_ENV = the environment) and API -> upload with a deploy token fetched at
+# runtime -> read-only smoke test (version.json SHA and content hash gate, home page, health ping).
+#
+# Failure policy: a missing or invalid instance FAILS the job. There is no fallback to the sample,
+# and a repo instance that still says `"sample": true` is refused.
+#
+# Hygiene (deploy logs of this public repo are public):
+# - The deploy token, the SWA hostname, the instance repo name and the RSVP deadline and time zone
+#   are masked. The instance repo name is read in one step only (its header shows it once, so the
+#   name must stay neutral, see docs/runbooks/instance-repo.md); the Azure ids only in the login.
+# - The instance is fetched with quiet plain git (actions/checkout would print the private commit
+#   subject); the web build listing (it names every media file) is dropped for real content.
+# - `-o none` on deployments, no environment.url, and the job summary shows only commit SHAs.
+#
+# Concurrency: one deploy per environment at a time; a newer run's deploy waits and replaces an
+# older waiting one (cancel-in-progress stays off, so a running deploy is never interrupted).
+name: deploy-environment
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: GitHub Environment to deploy (e2e, test or production).
+        type: string
+        required: true
+      instance-source:
+        description: Where the instance comes from, "sample" (samples/instance, e2e) or "repo" (vars.INSTANCE_REPO, test and production).
+        type: string
+        required: true
+      ref:
+        description: Full commit SHA of this repository to deploy.
+        type: string
+        required: true
+      instance-ref:
+        description: Repo source only. Instance commit SHA or branch (default main); production accepts only commits on the instance repo's main.
+        type: string
+        required: false
+        default: ""
+    secrets:
+      INSTANCE_REPO_DEPLOY_KEY:
+        description: Read-only deploy key of the instance repo (environment secret, set by scripts/bootstrap.sh).
+        required: false
+    outputs:
+      instance-sha:
+        description: The instance commit that was deployed (repo source; empty for the sample or when skipped).
+        value: ${{ jobs.deploy.outputs.instance-sha }}
+
+permissions: {}
+
+jobs:
+  deploy:
+    name: deploy ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ inputs.environment }}
+    concurrency:
+      group: deploy-${{ inputs.environment }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      instance-sha: ${{ steps.instance.outputs.sha }}
+    env:
+      DEPLOY_ENV: ${{ inputs.environment }}
+      INSTANCE_SOURCE: ${{ inputs.instance-source }}
+      DEPLOY_SHA: ${{ inputs.ref }}
+      INSTANCE_REF: ${{ inputs.instance-ref }}
+      AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+    steps:
+      - name: Check the inputs
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          case "$DEPLOY_ENV/$INSTANCE_SOURCE" in
+            e2e/sample | test/repo | production/repo) ;;
+            *) fail "unsupported environment and instance source (e2e/sample, test/repo, production/repo)" ;;
+          esac
+          [[ $DEPLOY_SHA =~ ^[0-9a-f]{40}$ ]] || fail "ref must be a full commit SHA"
+          if [ -n "$INSTANCE_REF" ]; then
+            [ "$INSTANCE_SOURCE" = repo ] || fail "instance-ref applies to the repo source only"
+            if ! [[ $INSTANCE_REF =~ ^[0-9a-f]{40}$ ]]; then
+              if ! [[ $INSTANCE_REF =~ ^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}$ ]] ||
+                ! git check-ref-format --branch "$INSTANCE_REF" >/dev/null 2>&1; then
+                fail "instance-ref must be a full commit SHA or a branch name"
+              fi
+            fi
+          fi
+
+      - name: Skip when the environment is not bootstrapped
+        id: gate
+        env:
+          HAS_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID != '' }}
+          HAS_TENANT_ID: ${{ vars.AZURE_TENANT_ID != '' }}
+          HAS_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID != '' }}
+          HAS_INSTANCE_REPO: ${{ vars.INSTANCE_REPO != '' }}
+          HAS_DEPLOY_KEY: ${{ secrets.INSTANCE_REPO_DEPLOY_KEY != '' }}
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          skip() {
+            echo "::notice::$1; skipping $DEPLOY_ENV."
+            echo "run=false" >>"$GITHUB_OUTPUT"
+            exit 0
+          }
+          [ "$HAS_CLIENT_ID" = true ] ||
+            skip "$DEPLOY_ENV has no Azure variables yet (run scripts/bootstrap.sh --env $DEPLOY_ENV)"
+          if [ "$HAS_TENANT_ID" != true ] || [ "$HAS_SUBSCRIPTION_ID" != true ] || [ -z "$AZURE_RESOURCE_GROUP" ]; then
+            fail "$DEPLOY_ENV is half bootstrapped: AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID or AZURE_RESOURCE_GROUP is missing (re-run scripts/bootstrap.sh --env $DEPLOY_ENV)"
+          fi
+          if [ "$INSTANCE_SOURCE" = repo ]; then
+            [ "$HAS_INSTANCE_REPO" = true ] ||
+              skip "$DEPLOY_ENV has no INSTANCE_REPO variable yet (run scripts/bootstrap.sh --env $DEPLOY_ENV --instance <dir>)"
+            [ "$HAS_DEPLOY_KEY" = true ] ||
+              fail "$DEPLOY_ENV has INSTANCE_REPO but no INSTANCE_REPO_DEPLOY_KEY secret (re-run scripts/bootstrap.sh --env $DEPLOY_ENV --instance <dir>)"
+          fi
+          echo "run=true" >>"$GITHUB_OUTPUT"
+
+      - name: Check out the code
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          # Full commit graph without file history: cheap, and enough for the ancestry check.
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+
+      - name: Production deploys only commits on main
+        if: steps.gate.outputs.run == 'true' && inputs.environment == 'production'
+        run: |
+          git merge-base --is-ancestor "$DEPLOY_SHA" refs/remotes/origin/main || {
+            echo "::error::production deploys only commits on main (ancestors of origin/main)"
+            exit 1
+          }
+
+      - name: Use the sample instance
+        if: steps.gate.outputs.run == 'true' && inputs.instance-source == 'sample'
+        run: echo "INSTANCE_DIR=$GITHUB_WORKSPACE/samples/instance" >>"$GITHUB_ENV"
+
+      - name: Fetch the instance repo (read-only deploy key)
+        id: instance
+        if: steps.gate.outputs.run == 'true' && inputs.instance-source == 'repo'
+        env:
+          REPOSITORY: ${{ vars.INSTANCE_REPO }}
+          DEPLOY_KEY: ${{ secrets.INSTANCE_REPO_DEPLOY_KEY }}
+        run: |
+          echo "::add-mask::$REPOSITORY"
+          fail() { echo "::error::$1"; exit 1; }
+          [[ $REPOSITORY =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || fail "INSTANCE_REPO must be OWNER/NAME"
+          lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+          [ "$(lower "$REPOSITORY")" != "$(lower "$GITHUB_REPOSITORY")" ] ||
+            fail "INSTANCE_REPO must name the private instance repo, not this repository"
+
+          # The key lives in a private temp directory for this step only.
+          ssh_dir=$(mktemp -d "$RUNNER_TEMP/instance-ssh.XXXXXX")
+          trap 'rm -rf "$ssh_dir"' EXIT
+          (umask 077 && printf '%s\n' "$DEPLOY_KEY" >"$ssh_dir/key")
+          # GitHub's published SSH host keys (https://api.github.com/meta, ssh_keys).
+          cat >"$ssh_dir/known_hosts" <<'EOF'
+          github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl
+          github.com ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEmKSENjQEezOmxkZMy7opKgwFB9nkt5YRrYMjNuG5N87uRgg6CLrbo5wAdT/y6v0mKV0U2w0WZ2YB/++Tpockg=
+          github.com ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCj7ndNxQowgcQnjshcLrqPEiiphnt+VTTvDP6mHBL9j1aNUkY4Ue1gvwnGLVlOhGeYrnZaMgRK6+PKCUXaDbC7qtbW8gIkhL7aGCsOr/C56SJMy/BCZfxd1nWzAOxSDPgVsmerOBYfNqltV9/hWCqBywINIR+5dIg6JTJ72pcEpEjcYgXkE2YEFXV1JHnsKgbLWNlhScqb2UmyRkQyytRLtL+38TGxkxCflmO+5Z8CSSNY7GidjMIZ7Q4zMjA2n1nGrlTDkzwDCsw+wqFPGQA179cnfGWOWRVruj16z6XyvxvjJwbz0wQZ75XK5tKSb7FNyeIEs4TT4jk+S4dhPeAUC5y+bDYirYgM4GC7uEnztnZyaVWQ7B381AK4Qdrwt51ZqExKbQpTUNn+EjqoTwvqNj4kqx5QUCI0ThS/YkOxJCXmPUWZbhjpCg56i+2aB6CmK2JGhn57K5mj0MNdBXA4/WnwH6XoPWJzK5Nyu2zB3nAZp+S5hpQs+p1vN1/wsjk=
+          EOF
+          export GIT_SSH_COMMAND="ssh -i $ssh_dir/key -o IdentitiesOnly=yes -o UserKnownHostsFile=$ssh_dir/known_hosts -o StrictHostKeyChecking=yes -o BatchMode=yes -o LogLevel=ERROR"
+          export GIT_TERMINAL_PROMPT=0
+
+          # Plain, quiet git instead of actions/checkout: no commit subjects in the public log.
+          # Blobless: the commit graph of main for the ancestry check, file contents only for the
+          # deployed commit (fetched on demand by the checkout below, while the key is present).
+          dir="$RUNNER_TEMP/instance"
+          rm -rf "$dir"
+          git clone --quiet --filter=blob:none --no-checkout --no-tags --single-branch --branch main \
+            "git@github.com:$REPOSITORY.git" "$dir" ||
+            fail "cannot fetch the main branch of INSTANCE_REPO (check the variable and the deploy key)"
+          if [ -z "$INSTANCE_REF" ]; then
+            target=refs/remotes/origin/main
+          elif [[ $INSTANCE_REF =~ ^[0-9a-f]{40}$ ]]; then
+            git -C "$dir" fetch --quiet --no-tags origin "$INSTANCE_REF" ||
+              fail "instance-ref is not a commit of the instance repo"
+            target=$INSTANCE_REF
+          else
+            git -C "$dir" fetch --quiet --no-tags origin \
+              "+refs/heads/$INSTANCE_REF:refs/remotes/origin/$INSTANCE_REF" ||
+              fail "instance-ref is not a branch of the instance repo"
+            target="refs/remotes/origin/$INSTANCE_REF"
+          fi
+          sha=$(git -C "$dir" rev-parse --verify --quiet "$target^{commit}") ||
+            fail "cannot resolve the instance commit"
+          if [ "$DEPLOY_ENV" = production ]; then
+            git -C "$dir" merge-base --is-ancestor "$sha" refs/remotes/origin/main ||
+              fail "production deploys only instance commits on the instance repo's main branch"
+          fi
+          git -C "$dir" -c advice.detachedHead=false checkout --quiet --detach "$sha"
+          echo "INSTANCE_DIR=$dir" >>"$GITHUB_ENV"
+          echo "sha=$sha" >>"$GITHUB_OUTPUT"
+          echo "instance commit: ${sha:0:7}"
+
+      - name: Check the instance kind
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          f="$INSTANCE_DIR/instance.json"
+          [ -f "$f" ] || fail "the instance has no instance.json"
+          is_sample=$(jq -r '.sample == true' "$f") || fail "instance.json is not valid JSON"
+          case "$INSTANCE_SOURCE/$is_sample" in
+            sample/true | repo/false) ;;
+            repo/true) fail "the instance repo still says \"sample\": true; remove it from instance.json for real content" ;;
+            *) fail "samples/instance must say \"sample\": true" ;;
+          esac
+          echo "EXPECT_SAMPLE=$is_sample" >>"$GITHUB_ENV"
+
+      - name: Set up Node and pnpm
+        if: steps.gate.outputs.run == 'true'
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Validate the instance (strict)
+        if: steps.gate.outputs.run == 'true'
+        # Diagnostics print a code and a JSON path, never values.
+        run: node packages/content/src/cli.ts validate "$INSTANCE_DIR" --strict
+
+      - name: Derive Bicep parameters from the instance
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          f="$INSTANCE_DIR/instance.json"
+          slug=$(jq -er '.slug' "$f") || fail "instance.json has no slug"
+          [[ $slug =~ ^wed[0-9a-z]{3,8}$ ]] || fail "instance.json slug does not match ^wed[0-9a-z]{3,8}$"
+          data_location=$(jq -er '.dataLocation // "germanywestcentral"' "$f")
+          swa_location=$(jq -er '.swaLocation // "westeurope"' "$f")
+          rsvp=$(jq -r --arg e "$DEPLOY_ENV" '.environments[$e].features.rsvp // false' "$f")
+          admin=$(jq -r --arg e "$DEPLOY_ENV" '.environments[$e].features.admin // false' "$f")
+          for flag in "$rsvp" "$admin"; do
+            [ "$flag" = true ] || [ "$flag" = false ] || fail "environments.$DEPLOY_ENV.features must be booleans"
+          done
+          deadline=$(jq -er '.rsvp.deadline' "$f") || fail "instance.json has no rsvp.deadline"
+          time_zone=$(jq -er '.rsvp.timeZone' "$f") || fail "instance.json has no rsvp.timeZone"
+          # Real dates stay out of the log, including the env listing of later steps.
+          echo "::add-mask::$deadline"
+          echo "::add-mask::$time_zone"
+          {
+            echo "DEPLOYMENT_SLUG=$slug"
+            echo "ENVIRONMENT_NAME=$DEPLOY_ENV"
+            echo "DATA_LOCATION=$data_location"
+            echo "SWA_LOCATION=$swa_location"
+            echo "FEATURES_RSVP=$rsvp"
+            echo "FEATURES_ADMIN=$admin"
+            echo "RSVP_DEADLINE=$deadline"
+            echo "RSVP_TIME_ZONE=$time_zone"
+          } >>"$GITHUB_ENV"
+          echo "features for $DEPLOY_ENV: rsvp=$rsvp admin=$admin"
+
+      - name: Azure login (OIDC)
+        if: steps.gate.outputs.run == 'true'
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy app infrastructure
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          az deployment group create --name app-infra --resource-group "$AZURE_RESOURCE_GROUP" \
+            --parameters infra/app/main.bicepparam -o none
+          out=$(az deployment group show --name app-infra --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.outputs -o json)
+          host=$(jq -r '.swaDefaultHostname.value' <<<"$out")
+          echo "::add-mask::$host"
+          {
+            echo "SWA_NAME=$(jq -r '.swaName.value' <<<"$out")"
+            echo "SWA_HOST=$host"
+          } >>"$GITHUB_ENV"
+
+      - name: Set up .NET
+        if: steps.gate.outputs.run == 'true'
+        uses: ./.github/actions/setup-dotnet
+
+      - name: Build web (bake + vite)
+        if: steps.gate.outputs.run == 'true'
+        env:
+          GIT_SHA: ${{ inputs.ref }}
+          API_LOCKDOWN: ${{ vars.API_LOCKDOWN }}
+        run: |
+          export SITE_URL="https://$SWA_HOST"
+          if [ "$INSTANCE_SOURCE" = repo ]; then
+            # The vite build lists every emitted file, including the instance's media file names:
+            # keep stdout of real content out of the public log (errors and warnings use stderr).
+            pnpm --filter @weddingplanner/web build >/dev/null
+            echo "web build done (file listing suppressed for real content)"
+          else
+            pnpm --filter @weddingplanner/web build
+          fi
+          v=apps/web/dist/version.json
+          jq -e --arg sha "$GIT_SHA" --argjson sample "$EXPECT_SAMPLE" \
+            '.sha == $sha and .isSample == $sample' "$v" >/dev/null ||
+            { echo "::error::dist/version.json does not match the commit or the instance kind"; exit 1; }
+          echo "CONTENT_HASH=$(jq -r '.contentHash' "$v")" >>"$GITHUB_ENV"
+
+      - name: Build API (dotnet publish)
+        if: steps.gate.outputs.run == 'true'
+        run: dotnet publish apps/api/src/WeddingPlanner.Api/WeddingPlanner.Api.csproj -c Release -o api-publish
+
+      - name: Fetch deploy token
+        if: steps.gate.outputs.run == 'true'
+        id: token
+        run: |
+          token=$(az staticwebapp secrets list --name "$SWA_NAME" --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.apiKey -o tsv)
+          echo "::add-mask::$token"
+          echo "token=$token" >>"$GITHUB_OUTPUT"
+
+      - name: Upload to Static Web Apps
+        if: steps.gate.outputs.run == 'true'
+        uses: Azure/static-web-apps-deploy@4d27395796ac319302594769cfe812bd207490b1 # v1 (2024-09-11)
+        with:
+          action: upload
+          azure_static_web_apps_api_token: ${{ steps.token.outputs.token }}
+          app_location: apps/web/dist
+          api_location: api-publish
+          output_location: ""
+          skip_app_build: true
+          skip_api_build: true
+          production_branch: main
+
+      - name: Smoke test (read-only)
+        if: steps.gate.outputs.run == 'true'
+        env:
+          API_LOCKDOWN: ${{ vars.API_LOCKDOWN }}
+          INSTANCE_SHA: ${{ steps.instance.outputs.sha }}
+        run: |
+          # GET requests only. Nothing fetched here is printed: status codes and SHAs at most.
+          deployed=false
+          for _ in $(seq 1 30); do
+            version=$(curl -s --max-time 20 "https://$SWA_HOST/version.json" 2>/dev/null) || version=""
+            if jq -e --arg sha "$DEPLOY_SHA" --arg hash "$CONTENT_HASH" \
+              '.sha == $sha and .contentHash == $hash' <<<"$version" >/dev/null 2>&1; then
+              deployed=true
+              break
+            fi
+            sleep 10
+          done
+          [ "$deployed" = true ] ||
+            { echo "::error::/version.json never reported this commit and content hash"; exit 1; }
+          jq -e --argjson sample "$EXPECT_SAMPLE" '.isSample == $sample' <<<"$version" >/dev/null ||
+            { echo "::error::/version.json reports the wrong instance kind (isSample)"; exit 1; }
+          home=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "https://$SWA_HOST/") || true
+          [ "$home" = 200 ] || { echo "::error::home page returned $home"; exit 1; }
+          health=""
+          for _ in $(seq 1 6); do
+            health=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "https://$SWA_HOST/api/health") || true
+            [ "$health" = 200 ] && break
+            sleep 10
+          done
+          echo "version.json: sha and content hash match, home: $home, /api/health: $health"
+          if [ "$health" != 200 ] && [ "$API_LOCKDOWN" != true ]; then
+            echo "::warning::/api/health returned $health on $DEPLOY_ENV"
+          fi
+          {
+            echo "### $DEPLOY_ENV deployed"
+            echo "- commit: \`${DEPLOY_SHA:0:7}\`"
+            if [ -n "$INSTANCE_SHA" ]; then echo "- instance commit: \`${INSTANCE_SHA:0:7}\`"; fi
+          } >>"$GITHUB_STEP_SUMMARY"

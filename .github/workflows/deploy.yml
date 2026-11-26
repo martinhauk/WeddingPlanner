@@ -1,154 +1,235 @@
-# Deploy v1 (minimal): every push to main deploys the e2e environment.
+# Deploy: promotes one commit through e2e -> test -> production (ADR 0004).
 #
-# Steps: derive Bicep parameters from the instance (samples/instance for e2e) -> OIDC login ->
-# app infra (SWA Free, storage, monitoring, alerts) -> build web (bake + vite) and API
-# (dotnet publish) -> upload with a deploy token fetched at runtime -> read-only smoke test.
+# - plan:        decides which environments run for the event and resolves the commit to deploy.
+# - e2e:         the fictional sample instance (samples/instance).
+# - test:        real content from the private instance repo (vars.INSTANCE_REPO, read-only deploy
+#                key); runs after e2e succeeded or was not selected.
+# - production:  the same instance repo, pinned to the instance commit test deployed in this run;
+#                runs after test succeeded or was not selected, and waits for the owner's approval
+#                (GitHub Environment `production`).
+# Each environment is a call of _deploy-environment.yml, which skips cleanly while its environment
+# has no Azure variables (or no INSTANCE_REPO) and fails on a missing or invalid instance.
 #
-# Hygiene (CLAUDE.md): no secrets in logs, hostnames and the deploy token are masked,
-# `-o none` on deployments, no environment.url. Skips cleanly while the environment has no
-# Azure variables (bootstrap not run yet).
+# Triggers:
+# - push to main:           e2e -> test -> production.
+# - repository_dispatch:    type `instance-updated` (the instance repo changed): test -> production.
+#                           Optional client_payload.instance_sha pins the instance commit.
+# - workflow_dispatch:      run from main. `environment` picks all, one environment or test and
+#                           production (what the instance repo's workflow starts, see
+#                           docs/runbooks/instance-repo.md); `ref` picks the commit of this repo
+#                           (production: only ancestors of origin/main; e2e and test: any commit on
+#                           a branch of this repo); `instance-ref` picks the instance commit or
+#                           branch (production: only commits on the instance repo's main).
+#
+# Hygiene (CLAUDE.md): no secrets in logs, hostnames and the deploy token are masked, `-o none` on
+# deployments, no environment.url, job summaries show only commit SHAs. Concurrency is per
+# environment, in _deploy-environment.yml.
 name: deploy
 
 on:
   push:
     branches:
       - main
+  repository_dispatch:
+    types:
+      - instance-updated
   workflow_dispatch:
+    inputs:
+      environment:
+        description: Environments to deploy.
+        type: choice
+        options:
+          - all
+          - e2e
+          - test
+          - production
+          - test-and-production
+        default: all
+      ref:
+        description: Commit SHA, branch or tag of this repo (default the head of main). Production accepts only commits on main.
+        type: string
+        default: ""
+      instance-ref:
+        description: Instance repo commit SHA or branch for test and production (default its main). Production accepts only commits on its main.
+        type: string
+        default: ""
 
 permissions:
   contents: read
 
-concurrency:
-  group: deploy-e2e
-  cancel-in-progress: false
-
 jobs:
-  e2e:
-    name: deploy e2e
+  plan:
+    name: plan
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    environment: e2e
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      sha: ${{ steps.plan.outputs.sha }}
+      e2e: ${{ steps.plan.outputs.e2e }}
+      test: ${{ steps.plan.outputs.test }}
+      production: ${{ steps.plan.outputs.production }}
+      instance-ref: ${{ steps.plan.outputs.instance-ref }}
+    steps:
+      - name: Check out (commit graph of every branch and tag, no file history)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+
+      - name: Decide the environments and resolve the commit
+        id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_ENVIRONMENT: ${{ inputs.environment }}
+          INPUT_REF: ${{ inputs.ref }}
+          INPUT_INSTANCE_REF: ${{ inputs.instance-ref }}
+          PAYLOAD_INSTANCE_SHA: ${{ github.event.client_payload.instance_sha }}
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          # The GitHub Environments accept deployments from main only.
+          [ "$GITHUB_REF" = refs/heads/main ] ||
+            fail "run this workflow from main; pick the commit with the 'ref' input"
+
+          ref=""
+          instance_ref=""
+          case "$EVENT" in
+            push)
+              envs="e2e test production"
+              ;;
+            repository_dispatch)
+              envs="test production"
+              instance_ref=$PAYLOAD_INSTANCE_SHA
+              ;;
+            workflow_dispatch)
+              case "$INPUT_ENVIRONMENT" in
+                all) envs="e2e test production" ;;
+                e2e | test | production) envs=$INPUT_ENVIRONMENT ;;
+                test-and-production) envs="test production" ;;
+                *) fail "unknown environment input" ;;
+              esac
+              ref=$INPUT_REF
+              instance_ref=$INPUT_INSTANCE_REF
+              ;;
+            *) fail "unsupported event $EVENT" ;;
+          esac
+          selected() { [[ " $envs " == *" $1 "* ]]; }
+
+          # Instance ref: a full commit SHA or a branch name of the instance repo.
+          if [ -n "$instance_ref" ] && ! [[ $instance_ref =~ ^[0-9a-f]{40}$ ]]; then
+            if [ "$EVENT" = repository_dispatch ]; then
+              fail "client_payload.instance_sha must be a full commit SHA"
+            fi
+            if ! [[ $instance_ref =~ ^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}$ ]] ||
+              ! git check-ref-format --branch "$instance_ref" >/dev/null 2>&1; then
+              fail "instance-ref must be a full commit SHA or a branch name of the instance repo"
+            fi
+          fi
+          if [ -n "$instance_ref" ] && ! selected test && ! selected production; then
+            echo "::notice::instance-ref is ignored: neither test nor production is deployed."
+            instance_ref=""
+          fi
+
+          # Commit of this repo: default the commit the event ran on (the head of main).
+          if [ -z "$ref" ]; then
+            sha=$GITHUB_SHA
+          else
+            [[ $ref =~ ^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$ ]] ||
+              fail "ref must be a commit SHA, a branch or a tag of this repository"
+            sha=""
+            candidates=("refs/remotes/origin/$ref" "refs/tags/$ref")
+            if [[ $ref =~ ^[0-9a-f]{7,40}$ ]]; then candidates+=("$ref"); fi
+            for candidate in "${candidates[@]}"; do
+              if sha=$(git rev-parse --verify --quiet "$candidate^{commit}"); then break; fi
+              sha=""
+            done
+            [ -n "$sha" ] || fail "ref is no commit, branch or tag of this repository"
+          fi
+
+          if git merge-base --is-ancestor "$sha" refs/remotes/origin/main; then
+            on_main=true
+          else
+            on_main=false
+            if selected production; then
+              fail "production deploys only commits on main (ancestors of origin/main)"
+            fi
+            branches=$(git for-each-ref --contains "$sha" --format='%(refname)' refs/remotes/origin |
+              grep -cv '/HEAD$' || true)
+            [ "$branches" -gt 0 ] || fail "the commit is on no branch of this repository"
+            echo "::warning::deploying ${sha:0:7}, which is not on main, to: $envs"
+          fi
+
+          {
+            echo "sha=$sha"
+            for env in e2e test production; do
+              if selected "$env"; then echo "$env=true"; else echo "$env=false"; fi
+            done
+            echo "instance-ref=$instance_ref"
+          } >>"$GITHUB_OUTPUT"
+          echo "commit ${sha:0:7} (on main: $on_main) -> $envs"
+          {
+            echo "### deploy plan"
+            echo "- commit: \`${sha:0:7}\`"
+            echo "- environments: $envs"
+          } >>"$GITHUB_STEP_SUMMARY"
+
+  e2e:
+    name: e2e
+    needs: plan
+    if: needs.plan.outputs.e2e == 'true'
     permissions:
       contents: read
       id-token: write
-    env:
-      DEPLOY_ENV: e2e
-      INSTANCE_DIR: samples/instance
-      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
-      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
-      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
-    steps:
-      - name: Skip when the environment is not bootstrapped
-        id: gate
-        run: |
-          if [ -z "$AZURE_CLIENT_ID" ] || [ -z "$AZURE_RESOURCE_GROUP" ]; then
-            echo "::notice::e2e has no Azure variables yet (run scripts/bootstrap.sh --env e2e); skipping."
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          fi
+    uses: ./.github/workflows/_deploy-environment.yml
+    with:
+      environment: e2e
+      instance-source: sample
+      ref: ${{ needs.plan.outputs.sha }}
 
-      - name: Check out
-        if: steps.gate.outputs.run == 'true'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+  test:
+    name: test
+    needs:
+      - plan
+      - e2e
+    # After e2e succeeded, or when e2e was not selected (never after a failed or skipped e2e).
+    if: >-
+      ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.test == 'true'
+      && (needs.e2e.result == 'success' || (needs.e2e.result == 'skipped' && needs.plan.outputs.e2e != 'true')) }}
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/_deploy-environment.yml
+    with:
+      environment: test
+      instance-source: repo
+      ref: ${{ needs.plan.outputs.sha }}
+      instance-ref: ${{ needs.plan.outputs.instance-ref }}
+    secrets:
+      # The environment secret of `test` takes precedence inside the called job.
+      INSTANCE_REPO_DEPLOY_KEY: ${{ secrets.INSTANCE_REPO_DEPLOY_KEY }}
 
-      - name: Derive Bicep parameters from the instance
-        if: steps.gate.outputs.run == 'true'
-        run: |
-          f="$INSTANCE_DIR/instance.json"
-          slug=$(jq -r '.slug' "$f")
-          if ! [[ $slug =~ ^wed[0-9a-z]{3,8}$ ]]; then
-            echo "::error::instance.json slug does not match ^wed[0-9a-z]{3,8}$"; exit 1
-          fi
-          {
-            echo "DEPLOYMENT_SLUG=$slug"
-            echo "ENVIRONMENT_NAME=$DEPLOY_ENV"
-            echo "DATA_LOCATION=$(jq -r '.dataLocation // "germanywestcentral"' "$f")"
-            echo "SWA_LOCATION=$(jq -r '.swaLocation // "westeurope"' "$f")"
-            echo "FEATURES_RSVP=$(jq -r --arg e "$DEPLOY_ENV" '.environments[$e].features.rsvp // false' "$f")"
-            echo "FEATURES_ADMIN=$(jq -r --arg e "$DEPLOY_ENV" '.environments[$e].features.admin // false' "$f")"
-            echo "RSVP_DEADLINE=$(jq -r '.rsvp.deadline' "$f")"
-            echo "RSVP_TIME_ZONE=$(jq -r '.rsvp.timeZone' "$f")"
-          } >> "$GITHUB_ENV"
-
-      - name: Azure login (OIDC)
-        if: steps.gate.outputs.run == 'true'
-        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
-        with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Deploy app infrastructure
-        if: steps.gate.outputs.run == 'true'
-        run: |
-          az deployment group create --name app-infra --resource-group "$AZURE_RESOURCE_GROUP" \
-            --parameters infra/app/main.bicepparam -o none
-          out=$(az deployment group show --name app-infra --resource-group "$AZURE_RESOURCE_GROUP" \
-            --query properties.outputs -o json)
-          host=$(jq -r '.swaDefaultHostname.value' <<<"$out")
-          echo "::add-mask::$host"
-          {
-            echo "SWA_NAME=$(jq -r '.swaName.value' <<<"$out")"
-            echo "SWA_HOST=$host"
-          } >> "$GITHUB_ENV"
-
-      - name: Set up Node and pnpm
-        if: steps.gate.outputs.run == 'true'
-        uses: ./.github/actions/setup-node-pnpm
-
-      - name: Set up .NET
-        if: steps.gate.outputs.run == 'true'
-        uses: ./.github/actions/setup-dotnet
-
-      - name: Build web (bake + vite)
-        if: steps.gate.outputs.run == 'true'
-        env:
-          GIT_SHA: ${{ github.sha }}
-        run: SITE_URL="https://$SWA_HOST" pnpm --filter @weddingplanner/web build
-
-      - name: Build API (dotnet publish)
-        if: steps.gate.outputs.run == 'true'
-        run: dotnet publish apps/api/src/WeddingPlanner.Api/WeddingPlanner.Api.csproj -c Release -o api-publish
-
-      - name: Fetch deploy token
-        if: steps.gate.outputs.run == 'true'
-        id: token
-        run: |
-          token=$(az staticwebapp secrets list --name "$SWA_NAME" --resource-group "$AZURE_RESOURCE_GROUP" \
-            --query properties.apiKey -o tsv)
-          echo "::add-mask::$token"
-          echo "token=$token" >> "$GITHUB_OUTPUT"
-
-      - name: Upload to Static Web Apps
-        if: steps.gate.outputs.run == 'true'
-        uses: Azure/static-web-apps-deploy@4d27395796ac319302594769cfe812bd207490b1 # v1 (2024-09-11)
-        with:
-          action: upload
-          azure_static_web_apps_api_token: ${{ steps.token.outputs.token }}
-          app_location: apps/web/dist
-          api_location: api-publish
-          output_location: ""
-          skip_app_build: true
-          skip_api_build: true
-          production_branch: main
-
-      - name: Smoke test (read-only)
-        if: steps.gate.outputs.run == 'true'
-        run: |
-          for _ in $(seq 1 30); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' "https://$SWA_HOST/") || true
-            [ "$code" = "200" ] && break
-            sleep 10
-          done
-          [ "$code" = "200" ] || { echo "::error::home page returned $code"; exit 1; }
-          health=$(curl -s -o /dev/null -w '%{http_code}' "https://$SWA_HOST/api/health") || true
-          echo "home: 200, /api/health: $health"
-          {
-            echo "### e2e deployed"
-            echo "- commit: \`${GITHUB_SHA::7}\`"
-            echo "- home: 200, /api/health: $health"
-          } >> "$GITHUB_STEP_SUMMARY"
+  production:
+    name: production
+    needs:
+      - plan
+      - e2e
+      - test
+    # After test succeeded, or when test was not selected; e2e likewise. Then the approval.
+    if: >-
+      ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.production == 'true'
+      && (needs.e2e.result == 'success' || (needs.e2e.result == 'skipped' && needs.plan.outputs.e2e != 'true'))
+      && (needs.test.result == 'success' || (needs.test.result == 'skipped' && needs.plan.outputs.test != 'true')) }}
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/_deploy-environment.yml
+    with:
+      environment: production
+      instance-source: repo
+      ref: ${{ needs.plan.outputs.sha }}
+      # Exactly the instance commit test deployed in this run; otherwise the requested one or main.
+      instance-ref: ${{ needs.test.outputs.instance-sha || needs.plan.outputs.instance-ref }}
+    secrets:
+      # The environment secret of `production` takes precedence inside the called job.
+      INSTANCE_REPO_DEPLOY_KEY: ${{ secrets.INSTANCE_REPO_DEPLOY_KEY }}
