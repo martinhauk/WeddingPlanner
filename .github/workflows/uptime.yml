@@ -1,0 +1,113 @@
+# Uptime: scheduled, read-only checks of the deployed environments (docs/runbooks/incident.md).
+#
+# - uptime:      every 6 hours, e2e, test and production: home page 200, /version.json with a commit
+#                SHA and the right instance kind, /api/health 200 (or the edge lockdown). Keeps ONE
+#                open issue labelled `incident` in step with the failing environments, naming only
+#                the environments, and fails the run while an environment is down.
+# - cold-start:  every 3 hours, e2e only, at least 1.5 hours after the last uptime check: durations
+#                of the first /api/health, /api/rsvp/status and a warm /api/health, in the job
+#                summary.
+# Both run scripts/ops/uptime.sh; workflow_dispatch runs either one on demand.
+#
+# Hosts: the production GitHub Environment requires a reviewer, so a scheduled job must not use it
+# (and a job that names an environment records a deployment). The checks therefore use no
+# environment and no Azure login: plain HTTPS against the hostnames in the repository secrets
+# UPTIME_HOST_E2E, UPTIME_HOST_TEST and UPTIME_HOST_PRODUCTION, set by the owner after the first
+# deploy of each environment. Secrets, not variables: a secret is masked in every log line, a
+# variable would be printed in the step's env listing. An environment without its secret is skipped.
+#
+# Hygiene (CLAUDE.md): GET requests only, no hostnames or URLs in logs, summaries or issues (status
+# codes, durations and short commit SHAs only), no checkout credentials, least-privilege tokens.
+name: uptime
+
+on:
+  schedule:
+    # Keep both strings in sync with the job conditions below.
+    - cron: "7 */6 * * *"
+    - cron: "37 1-22/3 * * *"
+  workflow_dispatch:
+    inputs:
+      check:
+        description: Which check to run.
+        type: choice
+        options:
+          - uptime
+          - cold-start
+        default: uptime
+
+permissions: {}
+
+jobs:
+  uptime:
+    name: uptime
+    if: >-
+      ${{ github.event.schedule == '7 */6 * * *'
+      || (github.event_name == 'workflow_dispatch' && inputs.check == 'uptime') }}
+    runs-on: ubuntu-latest
+    # Worst case, three environments that time out on every request twice: about 20 minutes.
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+    concurrency:
+      group: uptime
+      cancel-in-progress: false
+    steps:
+      - name: Check out the ops scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/ops
+
+      - name: Check every environment (read-only)
+        id: check
+        # A down environment fails this step; the issue step still runs, the last step fails the job.
+        continue-on-error: true
+        env:
+          UPTIME_HOST_E2E: ${{ secrets.UPTIME_HOST_E2E }}
+          UPTIME_HOST_TEST: ${{ secrets.UPTIME_HOST_TEST }}
+          UPTIME_HOST_PRODUCTION: ${{ secrets.UPTIME_HOST_PRODUCTION }}
+        run: scripts/ops/uptime.sh check
+
+      - name: Open, update or close the incident issue
+        # Only after a complete check that reached at least one environment, and only from main.
+        if: >-
+          ${{ github.ref == 'refs/heads/main' && steps.check.outputs.completed == 'true'
+          && steps.check.outputs.checked != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DOWN: ${{ steps.check.outputs.down }}
+        run: scripts/ops/uptime.sh incident --repo "$GITHUB_REPOSITORY" --down "$DOWN"
+
+      - name: Fail while an environment is down
+        if: steps.check.outcome == 'failure'
+        env:
+          DOWN: ${{ steps.check.outputs.down }}
+        run: |
+          if [ -n "$DOWN" ]; then
+            echo "::error::down: $DOWN (see the job summary and docs/runbooks/incident.md)"
+          else
+            echo "::error::the uptime check did not complete (see its log)"
+          fi
+          exit 1
+
+  cold-start:
+    name: cold start (e2e)
+    if: >-
+      ${{ github.event.schedule == '37 1-22/3 * * *'
+      || (github.event_name == 'workflow_dispatch' && inputs.check == 'cold-start') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the ops scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/ops
+
+      - name: Measure the first API requests after idle (read-only)
+        env:
+          UPTIME_HOST_E2E: ${{ secrets.UPTIME_HOST_E2E }}
+        run: scripts/ops/uptime.sh cold-start --env e2e

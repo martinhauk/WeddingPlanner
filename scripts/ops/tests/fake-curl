@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# Test double for curl, used by scripts/ops/tests/run.sh. No network access.
+#
+# Supports the options scripts/ops/uptime.sh uses: -s, -o FILE, -w FORMAT (%{http_code},
+# %{time_total}, %{redirect_url}), --max-time N, --proto P and one URL. Responses come from the
+# JSON object in $FAKE_CURL_STATE, keyed by "<host><path>" (e.g. "e2e.example.com/api/health"):
+#   {"code": 200, "body": "...", "time": "0.12", "redirect": "", "exit": 0}
+# or an array of such objects served in turn (the last one repeats). A key without a response
+# behaves like an unknown host: exit 6 and http_code 000. A non-zero "exit" writes the -w output
+# with http_code 000 and exits with that status, like a timeout (28). Every request is appended to
+# $FAKE_CURL_LOG as "GET <url>"; any other option fails the call.
+set -euo pipefail
+
+state=${FAKE_CURL_STATE:?FAKE_CURL_STATE is not set}
+log=${FAKE_CURL_LOG:?FAKE_CURL_LOG is not set}
+
+out=""
+format=""
+url=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -s) shift ;;
+    -o)
+      out=$2
+      shift 2
+      ;;
+    -w)
+      format=$2
+      shift 2
+      ;;
+    --max-time | --proto) shift 2 ;;
+    -*)
+      printf 'fake curl: unsupported option: %s\n' "$1" >&2
+      exit 2
+      ;;
+    *)
+      url=$1
+      shift
+      ;;
+  esac
+done
+
+key=${url#https://}
+calls=$(grep -cxF "GET $url" "$log" || true)
+printf 'GET %s\n' "$url" >>"$log"
+response=$(jq -c --arg k "$key" --argjson n "$calls" \
+  '.[$k] // {code: 0, exit: 6} | if type == "array" then .[[$n, length - 1] | min] else . end' "$state")
+
+code=$(jq -r '.code // 200' <<<"$response")
+time=$(jq -r '.time // "0.05"' <<<"$response")
+redirect=$(jq -r '.redirect // ""' <<<"$response")
+status=$(jq -r '.exit // 0' <<<"$response")
+if [ "$status" != 0 ]; then code=0; fi
+if [ -n "$out" ]; then jq -j '.body // ""' <<<"$response" >"$out"; fi
+
+text=$format
+text=${text//'%{http_code}'/$(printf '%03d' "$code")}
+text=${text//'%{time_total}'/$time}
+text=${text//'%{redirect_url}'/$redirect}
+printf '%s' "$text"
+exit "$status"
