@@ -4,7 +4,7 @@
   "sample": true,
   "slug": "wedsample",
   "dataLocation": "germanywestcentral",
-  "swaLocation": "eastus2",
+  "swaLocation": "westeurope",
   "budgetAmount": 10,
   "alertEmails": ["alerts@example.com"],
   "adminEmails": ["anna@example.com", "ben@example.com"],
