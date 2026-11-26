@@ -7,12 +7,22 @@ namespace WeddingPlanner.Api.Features.Rsvp;
 /// Body of <c>POST /api/rsvp</c> and <c>PUT /api/rsvp/me</c>. Every member is optional here so a missing value is
 /// reported by validation (400 <c>validation_failed</c>) rather than as malformed JSON.
 /// </summary>
+/// <param name="Attending">Yes or no.</param>
+/// <param name="People">The guest first, then the companions.</param>
+/// <param name="Message">Optional message to the couple.</param>
+/// <param name="Language">The language the guest used.</param>
+/// <param name="Website">Honeypot: must stay empty.</param>
+/// <param name="DietaryConsent">
+/// Explicit consent to store the dietary data (GDPR Art. 9(2)(a)); required when the reply carries any (see
+/// <see cref="RsvpDietaryConsent"/>).
+/// </param>
 public sealed record RsvpRequest(
     bool? Attending,
     IReadOnlyList<RsvpPersonRequest?>? People,
     string? Message,
     string? Language,
-    string? Website)
+    string? Website,
+    bool? DietaryConsent = null)
 {
     /// <summary>The domain draft for <see cref="RsvpValidator"/>.</summary>
     public RsvpDraft ToDraft() => new(
@@ -41,12 +51,21 @@ public sealed record RsvpDietaryRequest(IReadOnlyList<string?>? Tags, string? No
 }
 
 /// <summary>A reply as the API returns it.</summary>
+/// <param name="Id">Reply id.</param>
+/// <param name="Attending">Yes or no.</param>
+/// <param name="People">The guest first, then the companions.</param>
+/// <param name="Message">The message to the couple, omitted when empty.</param>
+/// <param name="Language">The language the guest used.</param>
+/// <param name="DietaryConsent">Whether the dietary data was stored with the guest's explicit consent.</param>
+/// <param name="CreatedAt">When the reply was created (UTC).</param>
+/// <param name="UpdatedAt">When the reply was last changed (UTC).</param>
 public sealed record RsvpView(
     string Id,
     bool Attending,
     IReadOnlyList<RsvpPersonView> People,
     string? Message,
     string Language,
+    bool DietaryConsent,
     DateTime CreatedAt,
     DateTime UpdatedAt)
 {
@@ -62,6 +81,7 @@ public sealed record RsvpView(
             answer.People.Select(person => new RsvpPersonView(person.Id ?? string.Empty, person.Name, new RsvpDietaryView(person.DietaryTags, person.DietaryNote))).ToList(),
             answer.Message,
             answer.Language,
+            record.DietaryConsent,
             record.CreatedAt.UtcDateTime,
             record.UpdatedAt.UtcDateTime);
     }

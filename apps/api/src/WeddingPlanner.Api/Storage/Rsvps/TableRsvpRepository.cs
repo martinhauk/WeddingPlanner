@@ -11,7 +11,8 @@ namespace WeddingPlanner.Api.Storage.Rsvps;
 /// <see cref="IRsvpRepository"/> on Azure Table Storage. Entity layout (schema version 1):
 /// <c>Attending</c> (bool), <c>People</c> (JSON array of <c>{id, name, tags, note}</c>), <c>PersonCount</c>,
 /// <c>AttendingCount</c> (people coming: <c>PersonCount</c> for a yes, 0 for a no), <c>Message</c>,
-/// <c>Language</c>, <c>TokenHash</c>, <c>CreatedAt</c>, <c>UpdatedAt</c>, <c>SchemaVersion</c>.
+/// <c>Language</c>, <c>DietaryConsent</c> (bool; missing on older entities, read as <see langword="false"/>),
+/// <c>TokenHash</c>, <c>CreatedAt</c>, <c>UpdatedAt</c>, <c>SchemaVersion</c>.
 /// </summary>
 public sealed class TableRsvpRepository(TableStorage storage) : IRsvpRepository
 {
@@ -136,6 +137,7 @@ public sealed class TableRsvpRepository(TableStorage storage) : IRsvpRepository
             ["AttendingCount"] = answer.Attending ? people.Count : 0,
             ["Message"] = answer.Message,
             ["Language"] = answer.Language,
+            ["DietaryConsent"] = record.DietaryConsent,
             ["TokenHash"] = record.TokenHash,
             ["CreatedAt"] = record.CreatedAt.ToUniversalTime(),
             ["UpdatedAt"] = record.UpdatedAt.ToUniversalTime(),
@@ -157,7 +159,8 @@ public sealed class TableRsvpRepository(TableStorage storage) : IRsvpRepository
             answer,
             entity.GetString("TokenHash") ?? string.Empty,
             entity.GetDateTimeOffset("CreatedAt") ?? DateTimeOffset.MinValue,
-            entity.GetDateTimeOffset("UpdatedAt") ?? DateTimeOffset.MinValue);
+            entity.GetDateTimeOffset("UpdatedAt") ?? DateTimeOffset.MinValue,
+            entity.GetBoolean("DietaryConsent") ?? false);
     }
 
     private static string CheckId(string id)

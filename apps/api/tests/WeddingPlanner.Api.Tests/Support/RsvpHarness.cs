@@ -113,6 +113,7 @@ internal sealed class RsvpHarness : IDisposable
         message = "¡Felicidades, Anna y Ben!",
         language,
         website = string.Empty,
+        dietaryConsent = true,
     };
 
     public void Dispose()

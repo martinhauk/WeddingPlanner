@@ -319,7 +319,7 @@ public sealed class RsvpCreateFunctionTests
         var name = field == "name" ? $"Anna{bad}" : "Anna";
         var note = field == "note" ? $"Ohne{bad} Nüsse" : "Ohne Nüsse";
         var message = field == "message" ? $"Hallo{bad} Ben" : "Hallo Ben";
-        var rawBody = $$$"""{"attending":true,"people":[{"name":"{{{name}}}","dietary":{"tags":["vegan"],"note":"{{{note}}}"}}],"message":"{{{message}}}","language":"de"}""";
+        var rawBody = $$$"""{"attending":true,"people":[{"name":"{{{name}}}","dietary":{"tags":["vegan"],"note":"{{{note}}}"}}],"message":"{{{message}}}","language":"de","dietaryConsent":true}""";
 
         var httpContext = await harness.PostAsync(rawBody: rawBody);
 

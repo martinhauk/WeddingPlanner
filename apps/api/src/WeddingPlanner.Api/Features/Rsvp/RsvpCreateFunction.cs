@@ -16,7 +16,7 @@ namespace WeddingPlanner.Api.Features.Rsvp;
 /// </summary>
 /// <remarks>
 /// Order of checks (cheap ones first, I/O last): 503 <c>not_configured</c>, 403 <c>rsvp_closed</c>, body
-/// (415/413/400 <c>invalid_json</c>), 400 <c>validation_failed</c> (honeypot included), 409 <c>rsvp_exists</c> when
+/// (415/413/400 <c>invalid_json</c>), 400 <c>validation_failed</c> (honeypot and dietary consent included), 409 <c>rsvp_exists</c> when
 /// the request already carries a valid <c>wp_rsvp</c> cookie, 503 <c>capacity_reached</c> at the cap. The cap is
 /// checked by counting before the insert, so two simultaneous requests may exceed it by one; it is a cost guard,
 /// not a business limit. Refusals at the cap are not logged one by one: the warning is written at most once per
@@ -68,6 +68,11 @@ public sealed partial class RsvpCreateFunction(
             return RsvpHttp.ValidationFailed(validation.Errors);
         }
 
+        if (RsvpDietaryConsent.Check(answer, input.DietaryConsent) is { } consentError)
+        {
+            return RsvpHttp.ValidationFailed([consentError]);
+        }
+
         if (await RsvpHttp.AuthenticateAsync(repository, request, cancellationToken) is not null)
         {
             return ApiProblem.Create(StatusCodes.Status409Conflict, ProblemCodes.RsvpExists);
@@ -84,7 +89,13 @@ public sealed partial class RsvpCreateFunction(
         }
 
         var credential = RsvpCredential.CreateNew();
-        var record = new RsvpRecord(credential.RsvpId, PersonIds.Assign(answer, []), credential.TokenHash, now, now);
+        var record = new RsvpRecord(
+            credential.RsvpId,
+            PersonIds.Assign(answer, []),
+            credential.TokenHash,
+            now,
+            now,
+            RsvpDietaryConsent.HasDietaryData(answer));
         var stored = await repository.AddAsync(record, cancellationToken);
 
         RsvpCookies.Set(response, credential, answer.Attending, settings.CookieLifetime);
