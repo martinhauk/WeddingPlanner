@@ -316,10 +316,11 @@ jobs:
           echo "::add-mask::$token"
           echo "token=$token" >>"$GITHUB_OUTPUT"
 
-      # The first deployment into a freshly created SWA sometimes fails with "Failed to deploy the
-      # Azure Functions" while the managed functions backend is still being provisioned. SWA
-      # deployments are atomic (nothing goes live on failure), so retrying after a pause is safe (3 attempts; concurrent deploys from other runs also
-      # trigger it).
+      # Since 2026-11 the SWA Free managed functions backend intermittently rejects dotnet-isolated:10.0
+      # packages with "Failed to deploy the Azure Functions" (15 or 31 s after upload, no inner error;
+      # Azure/static-web-apps#1820). The same package succeeds on a later attempt, and our code never
+      # runs during a failed deploy. SWA deployments are atomic (nothing goes live on failure), so up
+      # to 3 attempts with 5 and 10 minute pauses are safe.
       - name: Upload to Static Web Apps
         id: upload
         if: steps.gate.outputs.run == 'true'
@@ -338,8 +339,8 @@ jobs:
       - name: Wait before retry 1
         if: steps.gate.outputs.run == 'true' && steps.upload.outcome == 'failure'
         run: |
-          echo "::warning::SWA upload failed (attempt 1/3); retrying in 90 s."
-          sleep 90
+          echo "::warning::SWA upload failed (attempt 1/3); retrying in 5 min."
+          sleep 300
 
       - name: Upload to Static Web Apps (retry 1)
         id: upload_retry1
@@ -359,10 +360,11 @@ jobs:
       - name: Wait before retry 2
         if: steps.gate.outputs.run == 'true' && steps.upload.outcome == 'failure' && steps.upload_retry1.outcome == 'failure'
         run: |
-          echo "::warning::SWA upload failed (attempt 2/3); retrying in 180 s."
-          sleep 180
+          echo "::warning::SWA upload failed (attempt 2/3); retrying in 10 min."
+          sleep 600
 
       - name: Upload to Static Web Apps (retry 2)
+        id: upload_retry2
         if: steps.gate.outputs.run == 'true' && steps.upload.outcome == 'failure' && steps.upload_retry1.outcome == 'failure'
         uses: Azure/static-web-apps-deploy@4d27395796ac319302594769cfe812bd207490b1 # v1 (2024-09-11)
         with:
@@ -374,6 +376,11 @@ jobs:
           skip_app_build: true
           skip_api_build: true
           production_branch: main
+
+      - name: Explain an upload failure
+        if: failure() && steps.upload_retry2.outcome == 'failure'
+        run: |
+          echo "::error::SWA rejected the upload 3 times; nothing went live. If the reason is 'Failed to deploy the Azure Functions', this is the Azure-side fault in Azure/static-web-apps#1820: re-run the job later."
 
       - name: Smoke test (read-only)
         if: steps.gate.outputs.run == 'true'
