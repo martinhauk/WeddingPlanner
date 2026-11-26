@@ -1,0 +1,291 @@
+// Table files and the manifest of a backup.
+//
+// A backup is a folder <backupId>/ in the backup container:
+//   <backupId>/tables/<TableName>.jsonl.gz   one gzip JSON line per entity, sorted by keys
+//   <backupId>/manifest.json                 written last: a backup without it is incomplete
+//
+// Two hashes per table: `sha256` of the gzip file (integrity of the stored bytes) and
+// `contentSha256` of the canonical entity lines without the server timestamp. The content hash
+// does not depend on compression or on when a row was written, so a restored table can be
+// compared with its backup (verify, restore drill).
+import { createHash, randomBytes } from 'node:crypto';
+import { gunzipSync, gzipSync } from 'node:zlib';
+import { type BackupEntity, BackupFormatError, parseBackupEntity } from './edm.ts';
+
+export const MANIFEST_FORMAT = 'weddingplanner-table-backup';
+export const MANIFEST_VERSION = 1;
+export const MANIFEST_FILE = 'manifest.json';
+
+/** Azure table names: 3-63 letters and digits, starting with a letter. */
+export const TABLE_NAME = /^[A-Za-z][A-Za-z0-9]{2,62}$/;
+/** Table prefixes (the API's Storage__TablePrefix, drill prefixes): a letter, then letters and digits. */
+export const TABLE_PREFIX = /^[A-Za-z][A-Za-z0-9]{0,39}$/;
+/** Backup ids: UTC time, a label and a random suffix, e.g. 20261126T013000Z-nightly-3fa9c2. */
+export const BACKUP_ID = /^\d{8}T\d{6}Z-[a-z0-9]{1,20}-[0-9a-f]{6}$/;
+export const LABEL = /^[a-z0-9]{1,20}$/;
+
+export interface ManifestTable {
+  /** Table name in the source account (including the source prefix). */
+  name: string;
+  rows: number;
+  /** Blob path relative to the backup folder. */
+  file: string;
+  bytes: number;
+  /** SHA-256 (hex) of the gzip file. */
+  sha256: string;
+  /** SHA-256 (hex) of the canonical entity lines (see contentHash). */
+  contentSha256: string;
+}
+
+export interface Manifest {
+  format: typeof MANIFEST_FORMAT;
+  version: typeof MANIFEST_VERSION;
+  backupId: string;
+  label: string;
+  createdAt: string;
+  /** Only tables whose names start with this prefix were exported ("" = all tables). */
+  tablePrefix: string;
+  /** False when the environment had no data account yet (first deploy). */
+  sourcePresent: boolean;
+  tables: ManifestTable[];
+  totals: { tables: number; rows: number; bytes: number };
+}
+
+export interface EncodedTable {
+  gzip: Buffer;
+  rows: number;
+  sha256: string;
+  contentSha256: string;
+}
+
+export function sha256Hex(data: Buffer | string): string {
+  return createHash('sha256').update(data).digest('hex');
+}
+
+function compareKeys(a: BackupEntity, b: BackupEntity): number {
+  if (a.partitionKey !== b.partitionKey) return a.partitionKey < b.partitionKey ? -1 : 1;
+  if (a.rowKey !== b.rowKey) return a.rowKey < b.rowKey ? -1 : 1;
+  return 0;
+}
+
+export function sortEntities(entities: readonly BackupEntity[]): BackupEntity[] {
+  return [...entities].sort(compareKeys);
+}
+
+function sortedProperties(entity: BackupEntity): BackupEntity['properties'] {
+  const sorted: BackupEntity['properties'] = {};
+  for (const name of Object.keys(entity.properties).sort()) {
+    sorted[name] = entity.properties[name] as BackupEntity['properties'][string];
+  }
+  return sorted;
+}
+
+/** The canonical line of an entity: keys and typed properties, no timestamp. */
+export function canonicalLine(entity: BackupEntity): string {
+  return JSON.stringify({
+    partitionKey: entity.partitionKey,
+    rowKey: entity.rowKey,
+    properties: sortedProperties(entity),
+  });
+}
+
+/** SHA-256 over the canonical lines of all entities in key order; independent of input order. */
+export function contentHash(entities: readonly BackupEntity[]): string {
+  const hash = createHash('sha256');
+  for (const entity of sortEntities(entities)) hash.update(`${canonicalLine(entity)}\n`);
+  return hash.digest('hex');
+}
+
+export function encodeTable(entities: readonly BackupEntity[]): EncodedTable {
+  const sorted = sortEntities(entities);
+  for (let i = 1; i < sorted.length; i++) {
+    if (compareKeys(sorted[i - 1] as BackupEntity, sorted[i] as BackupEntity) === 0) {
+      throw new BackupFormatError('duplicate PartitionKey/RowKey in table data');
+    }
+  }
+  const lines = sorted.map((entity) => {
+    const line: Record<string, unknown> = {
+      partitionKey: entity.partitionKey,
+      rowKey: entity.rowKey,
+    };
+    if (entity.timestamp !== undefined) line.timestamp = entity.timestamp;
+    line.properties = sortedProperties(entity);
+    return `${JSON.stringify(line)}\n`;
+  });
+  const gzip = gzipSync(Buffer.from(lines.join(''), 'utf8'), { level: 9 });
+  return {
+    gzip,
+    rows: sorted.length,
+    sha256: sha256Hex(gzip),
+    contentSha256: contentHash(sorted),
+  };
+}
+
+export function decodeTable(gzip: Buffer, where: string): BackupEntity[] {
+  let text: string;
+  try {
+    text = gunzipSync(gzip).toString('utf8');
+  } catch {
+    throw new BackupFormatError(`${where}: not a gzip file`);
+  }
+  const entities: BackupEntity[] = [];
+  let lineNumber = 0;
+  for (const line of text.split('\n')) {
+    lineNumber++;
+    if (line === '') continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      throw new BackupFormatError(`${where}: line ${lineNumber} is not JSON`);
+    }
+    entities.push(parseBackupEntity(parsed, `${where}: line ${lineNumber}`));
+  }
+  return entities;
+}
+
+/** Checks a downloaded table file against its manifest entry and decodes it. */
+export function readTableFile(table: ManifestTable, gzip: Buffer): BackupEntity[] {
+  if (gzip.length !== table.bytes || sha256Hex(gzip) !== table.sha256) {
+    throw new BackupFormatError(`${table.name}: the file does not match the manifest (sha256)`);
+  }
+  const entities = decodeTable(gzip, table.name);
+  if (entities.length !== table.rows) {
+    throw new BackupFormatError(
+      `${table.name}: ${entities.length} rows, the manifest says ${table.rows}`,
+    );
+  }
+  if (contentHash(entities) !== table.contentSha256) {
+    throw new BackupFormatError(`${table.name}: content hash does not match the manifest`);
+  }
+  return entities;
+}
+
+export function tableFile(name: string): string {
+  return `tables/${name}.jsonl.gz`;
+}
+
+export function newBackupId(label: string, now: Date = new Date(), random?: string): string {
+  if (!LABEL.test(label))
+    throw new BackupFormatError('label must be 1-20 lower-case letters or digits');
+  const stamp = now
+    .toISOString()
+    .replace(/[-:]/g, '')
+    .replace(/\.\d{3}Z$/, 'Z');
+  return `${stamp}-${label}-${random ?? randomBytes(3).toString('hex')}`;
+}
+
+export function createManifest(options: {
+  backupId: string;
+  label: string;
+  createdAt: Date;
+  tablePrefix: string;
+  sourcePresent: boolean;
+  tables: ManifestTable[];
+}): Manifest {
+  const tables = [...options.tables].sort((a, b) =>
+    a.name < b.name ? -1 : a.name > b.name ? 1 : 0,
+  );
+  return {
+    format: MANIFEST_FORMAT,
+    version: MANIFEST_VERSION,
+    backupId: options.backupId,
+    label: options.label,
+    createdAt: options.createdAt.toISOString(),
+    tablePrefix: options.tablePrefix,
+    sourcePresent: options.sourcePresent,
+    tables,
+    totals: {
+      tables: tables.length,
+      rows: tables.reduce((sum, t) => sum + t.rows, 0),
+      bytes: tables.reduce((sum, t) => sum + t.bytes, 0),
+    },
+  };
+}
+
+const HEX64 = /^[0-9a-f]{64}$/;
+
+function isCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
+/** Parses and checks a manifest; every field a restore relies on is validated. */
+export function parseManifest(text: string, expectedId?: string): Manifest {
+  const bad = (why: string): never => {
+    throw new BackupFormatError(`manifest: ${why}`);
+  };
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    return bad('not JSON');
+  }
+  if (value === null || typeof value !== 'object' || Array.isArray(value))
+    return bad('not an object');
+  const m = value as Record<string, unknown>;
+  if (m.format !== MANIFEST_FORMAT) bad('unknown format');
+  if (m.version !== MANIFEST_VERSION) bad(`unsupported version ${String(m.version)}`);
+  if (typeof m.backupId !== 'string' || !BACKUP_ID.test(m.backupId)) bad('invalid backupId');
+  if (expectedId !== undefined && m.backupId !== expectedId)
+    bad('backupId does not match its folder');
+  if (typeof m.label !== 'string' || !LABEL.test(m.label)) bad('invalid label');
+  if (typeof m.createdAt !== 'string' || Number.isNaN(Date.parse(m.createdAt)))
+    bad('invalid createdAt');
+  if (
+    typeof m.tablePrefix !== 'string' ||
+    (m.tablePrefix !== '' && !TABLE_PREFIX.test(m.tablePrefix))
+  ) {
+    bad('invalid tablePrefix');
+  }
+  if (typeof m.sourcePresent !== 'boolean') bad('invalid sourcePresent');
+  if (!Array.isArray(m.tables)) return bad('tables must be an array');
+  const names = new Set<string>();
+  const tables = m.tables.map((t: unknown, i): ManifestTable => {
+    if (t === null || typeof t !== 'object') return bad(`tables[${i}] is not an object`);
+    const e = t as Record<string, unknown>;
+    if (typeof e.name !== 'string' || !TABLE_NAME.test(e.name)) bad(`tables[${i}].name is invalid`);
+    const name = e.name as string;
+    if (!name.startsWith(m.tablePrefix as string)) bad(`tables[${i}].name lacks the tablePrefix`);
+    if (names.has(name.toLowerCase())) bad(`tables[${i}].name is a duplicate`);
+    names.add(name.toLowerCase());
+    if (e.file !== tableFile(name)) bad(`tables[${i}].file is invalid`);
+    if (!isCount(e.rows) || !isCount(e.bytes)) bad(`tables[${i}] counts are invalid`);
+    if (typeof e.sha256 !== 'string' || !HEX64.test(e.sha256))
+      bad(`tables[${i}].sha256 is invalid`);
+    if (typeof e.contentSha256 !== 'string' || !HEX64.test(e.contentSha256)) {
+      bad(`tables[${i}].contentSha256 is invalid`);
+    }
+    return {
+      name,
+      rows: e.rows as number,
+      file: e.file as string,
+      bytes: e.bytes as number,
+      sha256: e.sha256 as string,
+      contentSha256: e.contentSha256 as string,
+    };
+  });
+  const manifest = createManifest({
+    backupId: m.backupId as string,
+    label: m.label as string,
+    createdAt: new Date(m.createdAt as string),
+    tablePrefix: m.tablePrefix as string,
+    sourcePresent: m.sourcePresent as boolean,
+    tables,
+  });
+  const totals = m.totals as Record<string, unknown> | undefined;
+  if (
+    !totals ||
+    totals.tables !== manifest.totals.tables ||
+    totals.rows !== manifest.totals.rows ||
+    totals.bytes !== manifest.totals.bytes
+  ) {
+    bad('totals do not match the tables');
+  }
+  // Keep the original createdAt string (toISOString would normalize it).
+  return { ...manifest, createdAt: m.createdAt as string };
+}
+
+/** Table name without the backup's source prefix (the name the API uses). */
+export function logicalName(manifest: Pick<Manifest, 'tablePrefix'>, name: string): string {
+  return name.slice(manifest.tablePrefix.length);
+}
