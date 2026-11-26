@@ -10,17 +10,17 @@
 #                values, the offline infra tests.
 # - hygiene:     (every run) PR title, actionlint, shellcheck, gitleaks, dependency review, the
 #                offline tests of the owner-run scripts.
-# - e2e-build → e2e (device matrix) → screenshots: (every run) the sample site is built once,
-#                every Playwright device project runs in its own job, and their screenshots are
+# - e2e-build → e2e (device matrix) → screenshots: (every run) the sample site is built once and
+#                the harness's own unit tests run, every Playwright device project runs in its own
+#                job against `vite preview` of that build (API mocked), and their screenshots are
 #                merged into the `screenshots-<sha>` artifact with an index.html contact sheet.
 #                Visual comparison is informational only: nothing here diffs screenshots.
 # - ci-ok:       passes only when every needed job succeeded or was skipped by the path filter.
 #
-# Contract with @weddingplanner/e2e (S0-10): the project names of the matrix below, the scripts
+# Contract with @weddingplanner/e2e: the project names of the matrix below, the scripts `test:unit`,
 # `test:pr` (accepts --project) and `screenshots:index`, and screenshots written to
-# tests/e2e/screenshots/<project>/. While tests/e2e/ does not exist, the e2e and screenshots jobs
-# skip the browser install, the tests and the uploads. Optional scripts run with --if-present:
-# `schema` (@weddingplanner/content, S1-01) and `size` (any package, S1-05).
+# tests/e2e/screenshots/<project>/. Optional scripts run with --if-present: `schema`
+# (@weddingplanner/content, S1-01) and `size` (any package, S1-05).
 #
 # Security: no Azure login, no OIDC, no secrets, read-only token, no pull_request_target. Fork
 # runs need approval (scripts/github/setup-repo.sh). Every action is pinned to a commit SHA and
@@ -474,6 +474,9 @@ jobs:
       - name: Build the sample site
         run: pnpm --filter @weddingplanner/web build
 
+      - name: Unit tests of the e2e harness (contact sheet, mocks, smoke checks; no browser)
+        run: pnpm --filter @weddingplanner/e2e test:unit
+
       - name: Share the sample site with the device matrix
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -504,29 +507,16 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Look for the Playwright harness (tests/e2e)
-        id: harness
-        run: |
-          if [ -f tests/e2e/package.json ]; then
-            echo "present=true" >>"$GITHUB_OUTPUT"
-          else
-            echo "present=false" >>"$GITHUB_OUTPUT"
-            echo "::notice::tests/e2e/ does not exist yet (S0-10): skipping browsers, tests and uploads."
-          fi
-
       - name: Set up Node.js and pnpm
-        if: steps.harness.outputs.present == 'true'
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Download the sample site
-        if: steps.harness.outputs.present == 'true'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: ci-sample-site
           path: apps/web/dist
 
       - name: Playwright version
-        if: steps.harness.outputs.present == 'true'
         id: playwright
         run: |
           version=$(pnpm --filter @weddingplanner/e2e exec playwright --version | sed -n -E 's/^Version ([0-9][0-9A-Za-z.+-]*)$/\1/p')
@@ -538,24 +528,23 @@ jobs:
           echo "Playwright $version"
 
       - name: Cache Chromium and WebKit
-        if: steps.harness.outputs.present == 'true'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium-webkit
 
       - name: Install Chromium and WebKit with their system dependencies
-        if: steps.harness.outputs.present == 'true'
         run: pnpm --filter @weddingplanner/e2e exec playwright install --with-deps chromium webkit
 
       - name: Playwright (${{ matrix.project }})
-        if: steps.harness.outputs.present == 'true'
         env:
           PROJECT: ${{ matrix.project }}
-        run: pnpm --filter @weddingplanner/e2e --if-present test:pr --project="$PROJECT"
+          # Serve the downloaded sample build instead of building again.
+          E2E_REUSE_BUILD: "true"
+        run: pnpm --filter @weddingplanner/e2e test:pr --project="$PROJECT"
 
       - name: Upload the screenshots
-        if: ${{ !cancelled() && steps.harness.outputs.present == 'true' }}
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ci-screenshots-${{ matrix.project }}
@@ -565,7 +554,7 @@ jobs:
           overwrite: true
 
       - name: Upload the Playwright report (on failure)
-        if: ${{ failure() && steps.harness.outputs.present == 'true' }}
+        if: ${{ failure() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ci-e2e-report-${{ matrix.project }}
@@ -591,22 +580,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Look for the Playwright harness (tests/e2e)
-        id: harness
-        run: |
-          if [ -f tests/e2e/package.json ]; then
-            echo "present=true" >>"$GITHUB_OUTPUT"
-          else
-            echo "present=false" >>"$GITHUB_OUTPUT"
-            echo "::notice::tests/e2e/ does not exist yet (S0-10): no contact sheet."
-          fi
-
       - name: Set up Node.js and pnpm
-        if: steps.harness.outputs.present == 'true'
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Merge the screenshots of all device projects
-        if: steps.harness.outputs.present == 'true'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: ci-screenshots-*
@@ -614,12 +591,10 @@ jobs:
           path: tests/e2e/screenshots
 
       - name: Build the contact sheet (index.html)
-        if: steps.harness.outputs.present == 'true'
-        run: pnpm --filter @weddingplanner/e2e --if-present screenshots:index
+        run: pnpm --filter @weddingplanner/e2e screenshots:index
 
       - name: Upload screenshots-${{ env.GIT_SHA }}
         id: upload
-        if: steps.harness.outputs.present == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: screenshots-${{ env.GIT_SHA }}
@@ -629,7 +604,6 @@ jobs:
           overwrite: true
 
       - name: Summary
-        if: steps.harness.outputs.present == 'true'
         env:
           ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
         run: |
