@@ -49,7 +49,7 @@ describe('bake: the sample instance for e2e', () => {
       features: { rsvp: true, admin: true },
       rsvpDeadline: '2099-05-01T21:59:00.000Z',
       rsvpTimeZone: 'Europe/Berlin',
-      regions: { app: 'eastus2', data: 'germanywestcentral' },
+      regions: { app: 'westeurope', data: 'germanywestcentral' },
     });
 
     const version = versionInfoSchema.parse(
