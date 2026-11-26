@@ -31,8 +31,10 @@ pnpm dev:swa   # the same + the SWA CLI emulator; open http://localhost:4280
 - Ctrl+C stops Vite, the Functions host and the emulator; Azurite keeps running until
   `pnpm storage:down`.
 - The ports are fixed: Vite 5173, Functions host 7071, emulator 4280, Azurite 10000-10002. Run one
-  stack per machine. If 5173 is taken, Vite moves to the next free port while the emulator still
-  talks to whatever listens on 5173; stop the other dev server first.
+  stack per machine. If Vite cannot bind 5173, it stops with `Port 5173 is already in use`
+  (`strictPort`) instead of moving to a port the emulator does not know; stop the other dev server
+  first (`lsof -nP -iTCP:5173 -sTCP:LISTEN`). A second Vite without the emulator, for example in
+  another worktree, can take another port: `pnpm dev:web --port 5183`.
 
 ## How the pieces connect
 
