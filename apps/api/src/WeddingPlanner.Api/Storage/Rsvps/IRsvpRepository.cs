@@ -41,7 +41,17 @@ public interface IRsvpRepository
 /// <param name="TokenHash">Lower-case hex SHA-256 of the edit token.</param>
 /// <param name="CreatedAt">When the reply was created (UTC).</param>
 /// <param name="UpdatedAt">When the reply was last changed (UTC).</param>
-public sealed record RsvpRecord(string Id, RsvpAnswer Answer, string TokenHash, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt)
+/// <param name="DietaryConsent">
+/// Whether the guest explicitly consented to storing the dietary data (GDPR Art. 9(2)(a)). Every stored reply with
+/// dietary data has it; <see langword="false"/> for replies without dietary data.
+/// </param>
+public sealed record RsvpRecord(
+    string Id,
+    RsvpAnswer Answer,
+    string TokenHash,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt,
+    bool DietaryConsent = false)
 {
     /// <summary>Never prints the token hash or personal data (records print every member by default).</summary>
     public override string ToString() => $"RsvpRecord {{ Id = {Id} }}";

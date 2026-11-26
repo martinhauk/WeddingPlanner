@@ -31,6 +31,7 @@ public sealed class RsvpPrivacyTests
             people = new[] { new { name = Name, dietary = new { tags = new[] { "vegan" }, note = Note } } },
             message = Message,
             language = "de",
+            dietaryConsent = true,
         };
 
         var created = await harness.PostAsync(body);

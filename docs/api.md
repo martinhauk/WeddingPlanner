@@ -83,7 +83,8 @@ the failure is logged by exception type only, at most once per hour and worker i
   ],
   "message": "¡Felicidades!",
   "language": "es",
-  "website": ""
+  "website": "",
+  "dietaryConsent": true
 }
 ```
 
@@ -98,6 +99,7 @@ the failure is logged by exception type only, at most once per hour and worker i
 | `message`               | optional, at most 1000 characters, line breaks kept                                              |
 | `language`              | required language tag such as `de`, `en`, `es` (stored lower case)                               |
 | `website`               | honeypot: hidden in the form, must be empty                                                      |
+| `dietaryConsent`        | `true` required when any stored person has a dietary tag or note, else `required`                |
 
 Text is NFC-normalised and trimmed; control characters, lone surrogates, Unicode noncharacters (such as
 U+FFFE), format characters (category Cf: bidirectional controls, BOM, soft hyphen, zero-width space,
@@ -105,7 +107,11 @@ word joiner, tag characters and the like, except the joiners ZWJ and ZWNJ) and t
 and U+FFA0 are removed; names and notes collapse whitespace to single spaces. Text with nothing visible
 left (only whitespace, joiners or variation selectors) counts as empty, so such a name is `required`.
 An unknown tag is `unknown_tag` per entry; more than 10 entries are one `too_many` for the whole list.
-For a "no", dietary data is dropped and never stored. Unknown members are ignored; duplicate members,
+For a "no", dietary data is dropped and never stored. Allergies and intolerances can be health data
+(GDPR Art. 9), so dietary data is stored only with explicit consent: a reply that still has a dietary
+tag or note after validation needs `dietaryConsent: true`, otherwise it is 400 `validation_failed` with
+`dietaryConsent` / `required` (checked after the other rules). The reply stores the flag
+(`dietaryConsent` in the view: `true` exactly when dietary data was stored with consent). Unknown members are ignored; duplicate members,
 wrong types or a non-object body are 400 `invalid_json`. Lengths count UTF-16 code units, like
 `maxlength` in the browser.
 
@@ -124,6 +130,7 @@ wrong types or a non-object body are 400 `invalid_json`. Lengths count UTF-16 co
   ],
   "message": "¡Felicidades!",
   "language": "es",
+  "dietaryConsent": true,
   "createdAt": "2099-04-01T10:00:00Z",
   "updatedAt": "2099-04-01T10:00:00Z"
 }
@@ -201,7 +208,8 @@ In the worker pipeline, before any storage I/O (`apps/api/CLAUDE.md`, "Request p
 
 Table `Rsvps` (plus `Storage__TablePrefix`), partition `rsvp`, row key = reply id. Columns:
 `Attending`, `People` (JSON `[{id, name, tags, note}]`), `PersonCount`, `AttendingCount` (people coming,
-0 for a no), `Message`, `Language`, `TokenHash`, `CreatedAt`, `UpdatedAt`, `SchemaVersion` (1). No IP
+0 for a no), `Message`, `Language`, `DietaryConsent` (missing on older rows: read as `false`),
+`TokenHash`, `CreatedAt`, `UpdatedAt`, `SchemaVersion` (1). No IP
 addresses and no tokens are stored.
 
 ## Admin endpoints

@@ -100,6 +100,11 @@ public sealed class RsvpMineFunctions(IRsvpRepository repository, RsvpSettings s
             return RsvpHttp.ValidationFailed(validation.Errors);
         }
 
+        if (RsvpDietaryConsent.Check(answer, input.DietaryConsent) is { } consentError)
+        {
+            return RsvpHttp.ValidationFailed([consentError]);
+        }
+
         if (await RsvpHttp.AuthenticateAsync(repository, request, cancellationToken) is not { } session)
         {
             return RsvpHttp.NotFound(request);
@@ -112,7 +117,12 @@ public sealed class RsvpMineFunctions(IRsvpRepository repository, RsvpSettings s
 
         var current = session.Stored.Record;
         var existingIds = current.Answer.People.Select(person => person.Id).OfType<string>();
-        var record = current with { Answer = PersonIds.Assign(answer, existingIds), UpdatedAt = now };
+        var record = current with
+        {
+            Answer = PersonIds.Assign(answer, existingIds),
+            UpdatedAt = now,
+            DietaryConsent = RsvpDietaryConsent.HasDietaryData(answer),
+        };
 
         StoredRsvp? replaced;
         try

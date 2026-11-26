@@ -40,6 +40,7 @@ public sealed class TableRsvpRepositoryTests
         read.Record.TokenHash.ShouldBe(record.TokenHash);
         read.Record.CreatedAt.ShouldBe(_created);
         read.Record.UpdatedAt.ShouldBe(_created);
+        read.Record.DietaryConsent.ShouldBeTrue();
     }
 
     [Fact]
@@ -52,7 +53,7 @@ public sealed class TableRsvpRepositoryTests
         var entity = (await store.Table.GetEntityAsync<TableEntity>(TableRsvpRepository.PartitionKey, record.Id, cancellationToken: Token)).Value;
 
         entity.Keys.Where(key => key is not ("PartitionKey" or "RowKey" or "Timestamp" or "odata.etag")).Order().ShouldBe(
-            ["Attending", "AttendingCount", "CreatedAt", "Language", "Message", "People", "PersonCount", "SchemaVersion", "TokenHash", "UpdatedAt"]);
+            ["Attending", "AttendingCount", "CreatedAt", "DietaryConsent", "Language", "Message", "People", "PersonCount", "SchemaVersion", "TokenHash", "UpdatedAt"]);
         entity.GetInt32("PersonCount").ShouldBe(2);
         entity.GetInt32("AttendingCount").ShouldBe(2);
         entity.GetString("TokenHash").ShouldBe(record.TokenHash);
@@ -153,5 +154,6 @@ public sealed class TableRsvpRepositoryTests
             "es"),
         new string('a', 64),
         _created,
-        _created);
+        _created,
+        DietaryConsent: true);
 }

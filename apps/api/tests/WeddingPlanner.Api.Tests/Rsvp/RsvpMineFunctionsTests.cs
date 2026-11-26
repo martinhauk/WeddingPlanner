@@ -117,6 +117,7 @@ public sealed class RsvpMineFunctionsTests
                 new { name = "Jürgen Müller" },
             },
             language = "de",
+            dietaryConsent = true,
         };
 
         var httpContext = await harness.PutMineAsync(TestHttp.CookieHeader(created), body, created.Response.Headers.ETag.ToString());
@@ -149,6 +150,7 @@ public sealed class RsvpMineFunctionsTests
             people = new[] { new { name = "Pablo\uFFFE Pérez", dietary = new { tags = new[] { "vegan" }, note = "Sin\uFFFE nueces" } } },
             message = "Hola\uFFFE",
             language = "es",
+            dietaryConsent = true,
         };
 
         var httpContext = await harness.PutMineAsync(TestHttp.CookieHeader(created), body, created.Response.Headers.ETag.ToString());
