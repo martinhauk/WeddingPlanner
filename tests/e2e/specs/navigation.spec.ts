@@ -31,6 +31,15 @@ test.describe('navigation', () => {
     await expect(page.locator(`#${rsvp.id} h2`)).toBeInViewport();
   });
 
+  test('a deep link opens the page at its section, also on small phones', async ({ page }) => {
+    // Regression: on a 360 px phone /#rsvp ended three sections short (a late browser scroll).
+    const rsvp = sectionOfType('rsvp');
+    await page.goto(`/#${rsvp.id}`);
+    await expect(page.locator(`#${rsvp.id} h2`)).toBeInViewport();
+    await page.waitForTimeout(500);
+    await expect(page.locator(`#${rsvp.id} h2`)).toBeInViewport();
+  });
+
   test.describe('menu on small screens', () => {
     test.beforeEach(async ({ page }) => {
       await page.goto('/');

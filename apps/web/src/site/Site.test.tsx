@@ -78,6 +78,41 @@ describe('Site', () => {
     }
   });
 
+  it('repeats the deep-link jump while the page resizes, until the visitor scrolls', () => {
+    const scrolled: string[] = [];
+    const original = Element.prototype.scrollIntoView;
+    const originalObserver = globalThis.ResizeObserver;
+    let onResize: (() => void) | undefined;
+    Element.prototype.scrollIntoView = function scrollIntoView(this: Element) {
+      scrolled.push(this.id);
+    };
+    globalThis.ResizeObserver = class {
+      constructor(callback: () => void) {
+        onResize = callback;
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {
+        onResize = undefined;
+      }
+    } as unknown as typeof ResizeObserver;
+    window.location.hash = '#faq';
+    try {
+      render(<Site content={content} build={build} initialLanguage="de" />);
+      // Late images or fonts above the section change the layout: jump again.
+      onResize?.();
+      expect(scrolled).toEqual(['faq', 'faq']);
+      // The visitor scrolls on their own: the page no longer moves for them.
+      window.dispatchEvent(new Event('wheel'));
+      onResize?.();
+      expect(scrolled).toEqual(['faq', 'faq']);
+    } finally {
+      Element.prototype.scrollIntoView = original;
+      globalThis.ResizeObserver = originalObserver;
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  });
+
   it('follows the order of the content, not of the section types', () => {
     render(
       <Site

@@ -30,6 +30,8 @@ test.describe('RSVP', () => {
     await companion.getByLabel('Laktosefrei').check();
     await companion.getByLabel('Allergien oder Hinweise (optional)').fill('Keine Nüsse');
     await rsvp.getByLabel('Nachricht an uns (optional)').fill('Wir freuen uns sehr!');
+    // Dietary data needs the explicit consent (health data); without it nothing is sent.
+    await rsvp.getByRole('checkbox', { name: /^Ich bin einverstanden/ }).check();
     await snap(page, 'rsvp-filled-yes', { lang: 'de', target: rsvp });
 
     await rsvp.getByRole('button', { name: 'Antwort speichern' }).click();
@@ -58,6 +60,7 @@ test.describe('RSVP', () => {
           message: 'Wir freuen uns sehr!',
           language: 'de',
           website: '',
+          dietaryConsent: true,
         },
       },
     ]);
