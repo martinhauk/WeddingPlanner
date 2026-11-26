@@ -15,15 +15,15 @@ never real content or personal data ([repo hygiene](conventions/repo-hygiene.md)
 | Area            | Decision                                                                                                                                                                                                                                                                                                                                |
 | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Hosting         | Azure Static Web Apps (SWA) **Free** with the managed Functions API on **.NET 10 isolated** (`dotnet-isolated:10.0`); `Microsoft.NET.Sdk` + Functions Worker SDK 2.x + ASP.NET Core integration. Bicep for infrastructure, GitHub Actions with OIDC for deploys. [ADR 0001](adr/0001-hosting-azure-static-web-apps.md)                  |
-| Regions         | Data, monitoring and resource groups in **germanywestcentral**; the Static Web App in **westeurope**, the only EU region SWA offers. Bicep parameters `dataLocation` and `swaLocation`. [ADR 0006](adr/0006-azure-regions.md)                                                                                                           |
+| Regions         | Data, monitoring and resource groups in **germanywestcentral**; the Static Web App in **eastus2**: `westeurope`, the only EU region SWA offers, accepts no new SWA customers. Bicep parameters `dataLocation` and `swaLocation`. [ADR 0006](adr/0006-azure-regions.md)                                                                  |
 | Data            | Azure Table Storage: `Rsvps`, `Guests`, `MatchDecisions`, `Settings`. Connection string written by Bicep into the SWA app settings (managed functions have no managed identity). Nightly backup to a private blob container. [ADR 0002](adr/0002-azure-table-storage.md)                                                                |
 | Frontend        | Vite + React + TypeScript, pnpm workspaces, Node 24 LTS (`.nvmrc`), pnpm pinned via `packageManager` and installed with Homebrew or npm (not corepack).                                                                                                                                                                                 |
 | Lint and format | **Biome v2** (one `biome.json`) + `tsc --noEmit`; .NET: `.editorconfig` + analyzers (warnings as errors) + `dotnet format --verify-no-changes`. No ESLint or Prettier. CI is the gate; no mandatory git hooks. [ADR 0007](adr/0007-biome-for-lint-and-format.md)                                                                        |
-| Content         | One **private instance repo per deployment** (`instance.json`, `site.json`, `media/`) is the single source of truth, **baked into the static build at deploy time**. No runtime content API, no public blob. [ADR 0003](adr/0003-private-instance-repo-baked-at-build.md)                                                               |
+| Content         | One **private instance repo per deployment** (`instance.json`, `site-content.json`, `media/`) is the single source of truth, **baked into the static build at deploy time**. No runtime content API, no public blob. [ADR 0003](adr/0003-private-instance-repo-baked-at-build.md)                                                       |
 | Content schema  | Zod sources in `packages/content` (one file per section type plus the instance config) → inferred TS types and generated, committed JSON Schemas (`site.schema.json`, `instance.schema.json`) that instance files reference via `$schema`. `schemaVersion` field; breaking changes need a bump and a migration note.                    |
 | Naming          | npm scope `@weddingplanner/*`. Deployment slugs are neutral: `^wed[0-9a-z]{3,8}$` (random suffix, never names), used in Azure resource names and public logs.                                                                                                                                                                           |
 | Environments    | Build once per `main` commit, promote the same artifact: **e2e** (automatic, sample content) → **test** (automatic, real content) → **production** (owner approval for every deploy). Separate resource group, SWA, storage and federated credential each. No SWA PR previews. [ADR 0004](adr/0004-environments-e2e-test-production.md) |
-| Feature flags   | Per-environment `features` in `instance.json`, applied to the UI (`build.json`) and the API (`Features__*` app settings → 404 when off). Guest-visible features ship dark. [ADR 0005](adr/0005-feature-flags-per-environment.md)                                                                                                        |
+| Feature flags   | Per-environment `features` in `instance.json`, applied to the UI (`build.json`: a note instead of the feature) and the API (`Features__*` app settings → 404 when off). Guest-visible features ship dark. [ADR 0005](adr/0005-feature-flags-per-environment.md)                                                                         |
 | Admin auth      | SWA preconfigured `aad` provider (any Microsoft account), role `admin` via SWA invitations sent personally by the owner. GitHub provider blocked. Route rules `/admin*`, `/api/admin*`. The API re-checks role and provider. Admin is a separate HTML entry.                                                                            |
 | Tests           | Vitest + Testing Library; xUnit for Domain and API; integration tests against **Azurite via docker compose** (service container in CI). Contract fixtures shared by TS and .NET. Playwright device matrix with screenshots. [ADR 0008](adr/0008-azurite-via-docker-compose.md)                                                          |
 | Merging         | The lead agent squash-merges when `ci-ok` is green and an independent reviewer agent approved. [ADR 0009](adr/0009-merge-policy.md)                                                                                                                                                                                                     |
@@ -35,8 +35,10 @@ WeddingPlanner/
 ├─ apps/
 │  ├─ web/                    @weddingplanner/web: public one-pager + /admin entry (Vite, React, TS)
 │  │  ├─ swa-config/          build-swa-config.ts: the ONLY source of staticwebapp.config.json
-│  │  └─ src/                 app/ content/ (generated/ is gitignored) i18n/ design/ layout/
-│  │                          sections/<type>/ features/ pages/ api/ lib/ admin/<area>/
+│  │  ├─ admin/index.html     the admin entry (separate bundle)
+│  │  └─ src/                 main.tsx; site/ (Site.tsx, sections/, components/, api/: RSVP
+│  │                          client and keep-warm); content/build.ts (generated/ is gitignored);
+│  │                          admin/<area>/
 │  └─ api/
 │     ├─ src/WeddingPlanner.Api/        Program.cs, host.json, Http/ Pipeline/ Security/
 │     │                                 RateLimiting/ Storage/ Features/{Health,Rsvp,Admin/*}
@@ -44,14 +46,15 @@ WeddingPlanner/
 ├─ packages/
 │  ├─ content/                @weddingplanner/content: Zod schemas (src/schema/sections/<type>.ts,
 │  │                          instance.ts), resolveText, validate + bake CLI;
-│  │                          schema/{site,instance}.schema.json (generated, committed)
+│  │                          schema/{site-content,site,instance}.schema.json (generated, committed)
 │  ├─ api-contracts/          @weddingplanner/api-contracts: Zod DTOs + JSON fixtures (shared with .NET)
 │  └─ WeddingPlanner.Domain/  pure .NET: RSVP rules, name normalisation, fuzzy matching, CSV
 ├─ tests/e2e/                 @weddingplanner/e2e: Playwright device matrix, specs/ (PR), smoke/
 │                             (read-only), *.e2e-env.spec.ts (write path), screenshot contact sheet
 ├─ tools/withjoy-import/      generic page extractor (URL passed as argument) that writes into a
 │                             local instance checkout, never into this repo
-├─ samples/instance/          complete fictional instance: instance.json, site.json, media/
+├─ samples/instance/          complete fictional instance: instance.json, site-content.json,
+│                             site.json (legacy), media/
 ├─ infra/
 │  ├─ bootstrap/              subscription scope, owner-run: RGs, deploy identity + OIDC credential
 │  │                          per environment, RBAC, lock, action group; cost.bicep (budget, anomaly alert)
@@ -59,10 +62,12 @@ WeddingPlanner/
 ├─ scripts/                   bootstrap.sh, bootstrap-cost.sh, instance/new-instance.sh,
 │                             github/{setup-repo,create-project,apply-ruleset}.sh,
 │                             ops/{lockdown,invite-admin,list-admins,remove-admin,restore-table}.sh
-├─ docs/                      architecture.md, conventions/, adr/, runbooks/, privacy/
+├─ docs/                      architecture.md, local-development.md, api.md, conventions/, adr/,
+│                             runbooks/, privacy/
 ├─ .github/                   workflows/ (ci, deploy, uptime, backup), actions/, templates, CODEOWNERS
 └─ CLAUDE.md, package.json, pnpm-workspace.yaml, tsconfig.base.json, biome.json,
-   WeddingPlanner.slnx, global.json, Directory.Build.props, Directory.Packages.props, docker-compose.yml
+   WeddingPlanner.slnx, global.json, Directory.Build.props, Directory.Packages.props, docker-compose.yml,
+   swa-cli.config.json
 ```
 
 Shared files have exactly one owning task, so parallel agents never collide; see
@@ -95,7 +100,7 @@ GitHub Actions ──OIDC (federated credential per environment)──▶ Bicep 
 | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
 | Code, IaC, schemas, sample instance                                     | this public repo                                                                                                                                                                                                                                    | PR → CI → `e2e`/`test` automatically, `production` on approval |
 | Pointers and credentials per environment                                | GitHub Environment (`e2e`, `test`, `production`): variables `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP`, `INSTANCE_REPO`; secret `INSTANCE_REPO_DEPLOY_KEY` (read-only); optional `API_LOCKDOWN` override | bootstrap and ops scripts                                      |
-| Deployment config, content, flags, admin list                           | private instance repo (`instance.json`, `site.json`, `media/`)                                                                                                                                                                                      | PRs there; its workflow validates and triggers the deploy      |
+| Deployment config, content, flags, admin list                           | private instance repo (`instance.json`, `site-content.json`, `media/`)                                                                                                                                                                              | PRs there; its workflow validates and triggers the deploy      |
 | Secrets (storage and App Insights connection strings, SWA deploy token) | computed in Bicep / fetched at deploy time, masked, never output                                                                                                                                                                                    | every deploy                                                   |
 | Runtime data (RSVPs, guests, match decisions, admin overrides)          | Azure Table Storage                                                                                                                                                                                                                                 | API and admin UI                                               |
 | Admin identities                                                        | SWA role invitations                                                                                                                                                                                                                                | `scripts/ops/invite-admin.sh`                                  |
@@ -114,36 +119,45 @@ its IANA time zone, optional `sample: true`, and `environments.{e2e,test,product
 (`rsvp`, `admin`, …). Emails and budget are private: they feed the bootstrap scripts and never reach
 any generated file. The schema is strict (unknown keys are rejected).
 
-### site.json (per deployment, private)
+### site-content.json (per deployment, private)
 
-`schemaVersion`, `i18n {languages, defaultLanguage}`, `couple`, `event {start, end, timeZone, title,
-primaryLocationId, afterText}`, `theme {preset, colors, fonts}`, `seo`, `locations[]` (venues,
-hotels, …), `contacts[]`, `sections[]` (each `{id, type, template, visible?, nav?, appearance?,
-data}`), RSVP texts, `pages {privacy, imprint?}`, `footer` and `uiStrings` overrides.
+Everything the one-pager shows (`packages/content/src/schema/site-content.ts`, JSON Schema
+`schema/site-content.schema.json`): `schemaVersion`, `couple`, `event {start, timeZone}`,
+`tagline`, `place`, an optional display date for the RSVP deadline, `theme {colors, fonts}`,
+`hero {image}`, and `sections[]` (each `{id, type, title?, nav?, visible?, data}`), rendered in order.
 
-- Text fields are `Localizable`: a plain string or `{ <lang>: text }`. Fallback order: current
-  language, default language, first language with a value.
-- Markdown fields allow no raw HTML and only `https`, `mailto` and `tel` links.
-- **Section types** (one template each; hero has two to prove templates are swappable): hero
-  (fullbleed, centered), countdown, story, schedule, locations (map list with travel and hotels),
-  weddingParty (click to reveal), dresscode, music (playlist link, no embed), text, faq, gifts (text
-  only, no bank details), contact, rsvpCta. Header, navigation, language switcher and footer are fixed
-  in code; which sections appear, in which order and with which template comes from content.
+- Text fields are `LocalizedText`: `{ de, en?, es? }`. German is required and the fallback; English
+  and Spanish are optional (missing translations are validation warnings).
+- **Section types:** story, schedule, locations (venue cards with a Google Maps link and a
+  click-to-load OpenStreetMap map), weddingParty, dresscode, music (playlist link, no embed), text,
+  faq, gifts (text only, no bank details), contact (`tel:` and `mailto:` links) and rsvp. Header,
+  hero with countdown, navigation, language switcher and footer are fixed in code; which sections
+  appear and in which order comes from content. `visible: false` keeps a draft out of the build.
+- Media are paths inside the instance's `media/` folder, published under `/media/`.
 - **Deliberately not in content:** RSVP open/closed state (deployment config plus admin override),
-  indexing (always `noindex`), dietary options (a fixed API enum).
+  indexing (always `noindex`), dietary options (a fixed API enum), feature flags (`instance.json`).
+- `site.json` is the older, richer content format (`i18n`, `locations[]`, `contacts[]`, templates,
+  markdown fields). It is still validated and baked, but the page no longer reads it; new content
+  goes into `site-content.json`.
 
 ### Bake and delivery
 
 1. The deploy pipeline checks out the instance repo (read-only deploy key) for `test` and
    `production`; `e2e` always uses `samples/instance/`.
-2. `pnpm content:validate --strict` validates instance, site and media references (diagnostics print
-   a code and a JSON path, never values).
-3. `pnpm content:bake` (`INSTANCE_DIR`, `DEPLOY_ENV`) writes `apps/web/src/content/generated/`
-   (`site.json`, `media.json`, `build.json` with `siteUrl`, `features`, RSVP deadline and time zone),
-   responsive WebP images with placeholders, the OG image and calendar files into
-   `apps/web/public/content/`, and `public/version.json` (`{sha, builtAt, contentHash, isSample}`).
-4. Budgets: largest image variant ≤300 KB, initial JS ≤150 KB gzipped.
-5. The smoke tests check that `sha` and `contentHash` match and that `isSample` is false on `test` and
+2. `pnpm content:validate --strict` validates instance, site content and media references
+   (diagnostics print a code and a JSON path, never values).
+3. `pnpm content:bake` (`INSTANCE_DIR`, `DEPLOY_ENV`) writes
+   `apps/web/src/content/generated/build.json` (`siteUrl`, `features` of `DEPLOY_ENV`, RSVP deadline
+   in UTC and its time zone) and `apps/web/public/version.json` (`{sha, builtAt, contentHash,
+   isSample}`). It also still writes the legacy `site.json` outputs (`site.json`, `media.json`,
+   `public/content/media/`), which the page does not read.
+4. `vite build` reads `$INSTANCE_DIR/site-content.json` through a Vite plugin: it validates the file
+   (invalid content fails the build), drops hidden sections, inlines the content as a module, builds
+   the theme CSS with self-hosted fonts, and emits only the images the published content uses to
+   `dist/media/`. Diagnostics name a code and a JSON path, never content.
+5. Budgets: initial JS ≤150 KB gzipped; images ≤300 KB (responsive WebP variants, the OG image and
+   calendar files are _planned_).
+6. The smoke tests check that `sha` and `contentHash` match and that `isSample` is false on `test` and
    `production`.
 
 **Adding a language:** add it to `i18n.languages`, run `pnpm content:validate`, which lists every
@@ -151,9 +165,10 @@ missing translation, and fill in the texts.
 
 ## 6. Configuration and feature flags
 
-- **Feature flags:** `environments.<env>.features` in `instance.json` → `build.json` (UI hidden) and
-  `Features__Rsvp` / `Features__Admin` app settings (API returns 404 before any I/O). Code default off;
-  the `e2e` sample has everything on. See [feature flags](conventions/feature-flags.md).
+- **Feature flags:** `environments.<env>.features` in `instance.json` → `build.json` (the UI shows a
+  note instead of the feature and calls no API for it) and `Features__Rsvp` / `Features__Admin` app
+  settings (API returns 404 before any I/O). Code default off; the `e2e` sample has everything on.
+  See [feature flags](conventions/feature-flags.md).
 - **Emergency lockdown:** `API_LOCKDOWN`, a GitHub Environment variable override set only by
   `scripts/ops/lockdown.sh`, makes the generated SWA config require role `admin` for `/api/*`.
 - **API defaults in code** (overridable through Bicep parameters): `Rsvp__MaxCompanions` 5,
@@ -163,7 +178,8 @@ missing translation, and fill in the texts.
 - **Admin overrides at runtime:** the `Settings` table holds `deadlineOverride` and `closedManually`.
 - **RSVP is open when** `Features__Rsvp && !closedManually && now <= (deadlineOverride ??
   Rsvp__Deadline)`. The API decides; the static site uses the baked flag and deadline only for
-  display and calls `/api/rsvp/status` only on `/rsvp`.
+  display and calls `/api/rsvp/status` only once the RSVP section nears the viewport or the guest
+  presses a button.
 - **Missing configuration** fails only the feature that needs it (503 `not_configured`);
   `/api/health` never depends on storage. Every new app setting needs a code default.
 
@@ -295,16 +311,25 @@ subscription would be disabled after 30 days).
 
 ## 14. Local development
 
+Full guide: [local-development.md](local-development.md).
+
 - Prerequisites: Node 24 via `fnm` (`.nvmrc`), pnpm via Homebrew or npm (not corepack), .NET 10 SDK,
-  Azure Functions Core Tools v4, Azure CLI with Bicep, and Docker Desktop or OrbStack (the active
-  docker context is used).
-- `pnpm install`, `pnpm storage:up` (Azurite on ports 10000-10002), `pnpm dev` (Vite, the Functions
-  host and the SWA CLI emulator with the generated config, so routes, roles and the API behave as on
-  Azure). `pnpm dev:web` alone is enough for frontend work.
-- The emulator's `/.auth/login/aad` mock login can assign the `admin` role.
-- The default content is `samples/instance/` baked for `e2e`. A local checkout of a private instance
-  repo can be previewed with the `test` environment; never copy real content into this repo.
-- Tests use dynamic ports and random table prefixes, so several worktrees can run side by side.
+  Azure Functions Core Tools v4, Azure CLI with Bicep (infra work only), and Docker Desktop or
+  OrbStack (the active docker context is used).
+- `pnpm install`, then `pnpm dev`: Azurite (`docker compose`, ports 10000-10002), the Functions host
+  (`func start --port 7071`, `local.settings.json` created from the committed sample) and Vite on
+  http://localhost:5173, which proxies `/api/*` to the host, so the page calls the API same-origin.
+  `pnpm dev:web` alone is enough for frontend work.
+- `pnpm dev:swa` adds the SWA CLI emulator on http://localhost:4280 with the generated
+  `staticwebapp.config.json` (`swa-cli.config.json`), so routes, roles and the API behave as on
+  Azure. Its `/.auth/login/aad` mock sign-in can assign the `admin` role, and `/api/*` requests then
+  carry `x-ms-client-principal`.
+- The default content is `samples/instance/` baked for `e2e` (every flag on); `DEPLOY_ENV=production`
+  shows the sample with the flags off. A local checkout of a private instance repo can be previewed
+  with `INSTANCE_DIR` and the `test` environment; never copy real content into this repo.
+- Tests use dynamic ports and random table prefixes, so several worktrees can run side by side and
+  share one Azurite (`pnpm storage:up` reuses a running one). The dev stack itself uses fixed ports:
+  one per machine.
 
 ## 15. To verify on the first deploy
 

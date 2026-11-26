@@ -14,16 +14,21 @@ A classy one-pager for a wedding: the couple, the schedule, locations and hotels
 FAQ and contacts, in German, English and Spanish, plus an RSVP form and a small admin area. One
 codebase serves any number of deployments; each wedding's content lives in its own private repo.
 
-Features (all _planned_):
+Features (anything marked _planned_ is not on `main` yet):
 
-- **One-pager with modular sections:** which sections appear, in which order and with which
-  template is configured per deployment.
-- **Three languages:** de, en, es, with a language switcher.
-- **Open RSVP:** up to five companions, per-person dietary options and a note, a message to the
-  couple; guests can revisit and edit their answer (cookie and personal edit link).
+- **One-pager with modular sections:** hero with countdown, story, schedule, locations with maps,
+  wedding party, dress code, music, FAQ, gifts (text only, no bank details), contacts and RSVP;
+  which sections appear and in which order is configured per deployment in `site-content.json`.
+- **Three languages:** de, en, es (German is the default), with a language switcher.
+- **Open RSVP:** up to five companions, per-person dietary options (vegetarian, vegan, gluten-free,
+  lactose-free) and a note, a message to the couple, and a "no" that can name several people;
+  guests can revisit, change or withdraw their answer from the same browser (cookie). A personal
+  edit link for other devices is _planned_.
 - **Admin area** (Microsoft sign-in, invited admins only): responses with totals, guest list with
-  CSV import, fuzzy matching of responses to the guest list, CSV export, RSVP deadline settings.
-- **Privacy by design:** no tracking, self-hosted fonts, the map loads only after a click.
+  CSV import, fuzzy matching of responses to the guest list, CSV export, RSVP deadline settings
+  (_planned_).
+- **Privacy by design:** no tracking, self-hosted fonts, the map loads only after a click, Google
+  Maps is a plain link.
 
 ## Architecture
 
@@ -77,13 +82,25 @@ Prerequisites:
 
 ```sh
 pnpm install     # install the workspace
+pnpm dev         # Azurite + the Functions API (:7071) + the site on http://localhost:5173
+```
+
+`pnpm dev` starts Azurite with `docker compose`, the Functions host (`func start`, with
+`local.settings.json` created from the committed sample) and Vite, which proxies `/api/*` to the
+host. It renders the fictional sample instance (Anna & Ben) with every feature on, so the RSVP form
+works end to end. `pnpm dev:swa` adds the Static Web Apps CLI emulator on http://localhost:4280 for
+the edge routes and a mock admin sign-in; `pnpm dev:web` starts only the site. Details, ports and
+troubleshooting: [docs/local-development.md](docs/local-development.md).
+
+Checks before you commit:
+
+```sh
 pnpm lint        # Biome: lint, format check, import order
 pnpm typecheck   # tsc --noEmit in every package
 pnpm test        # unit tests
+pnpm build       # build every package
+dotnet test WeddingPlanner.slnx   # API and domain tests (integration tests need pnpm storage:up)
 ```
-
-The local stack (`pnpm storage:up` to start Azurite, then `pnpm dev`, served on
-http://localhost:4280) is _planned_ and documented here as soon as the web app and the API land.
 
 ## Create your own deployment
 
@@ -102,16 +119,22 @@ See [ADR 0004](docs/adr/0004-environments-e2e-test-production.md) and
 
 ## Content editing
 
-_Planned._ Content lives in the deployment's private instance repo (`site.json`, `instance.json`,
-`media/`), validated against JSON Schemas published from `packages/content`, with editor
-autocompletion via `$schema`.
+Content lives in the deployment's private instance repo: `site-content.json` (everything the
+one-pager shows), `instance.json` (slug, regions, budget, emails, RSVP deadline, feature flags per
+environment) and `media/`. Both files are validated against JSON Schemas published from
+`packages/content` (`pnpm content:validate <dir>`), with editor autocompletion via `$schema`. To
+preview an instance locally, run `INSTANCE_DIR=../my-instance DEPLOY_ENV=test pnpm dev` with the
+checkout outside this repo. The workflow of the instance repo is in
+[docs/runbooks/instance-repo.md](docs/runbooks/instance-repo.md).
 
 ## Cost and security
 
 - About €0 per month on the Static Web Apps Free plan; static traffic is never billed (above the
   monthly quota the site stops instead). A budget alert is a backstop, and an edge lockdown stops API
   executions within minutes.
-- Data at rest in `germanywestcentral`; the Static Web App in `westeurope`.
+- Data at rest in `germanywestcentral`; the Static Web App (static content on the global edge and
+  the managed API) in `eastus2`, because `westeurope` accepts no new Static Web Apps customers
+  ([ADR 0006](docs/adr/0006-azure-regions.md)).
 - No Azure credentials in GitHub: deploys use OIDC; Azure secrets are computed or fetched at deploy
   time and masked. The only GitHub secret per environment is the read-only `INSTANCE_REPO_DEPLOY_KEY`.
 - This repository is public and contains no personal data; see
