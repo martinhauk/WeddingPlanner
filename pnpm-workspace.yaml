@@ -19,3 +19,16 @@ allowBuilds:
   esbuild: true
   sharp: true
   keytar: false
+
+# Security overrides for transitive dev dependencies of @azure/static-web-apps-cli (the local
+# emulator behind `pnpm dev:swa`; it is never deployed). The CLI's latest release still pulls the
+# vulnerable versions, so pin the first patched ones until it updates (issue #82). Remove an entry
+# once `pnpm why <name>` shows the CLI no longer needs it.
+#   adm-zip: DoS, path and symlink issues in <= 0.6.0
+#   tmp:     path traversal and symlink writes in < 0.2.6
+# Not overridden: minimatch 9 (via rimraf 5 -> glob 10). The fix exists only in minimatch 11, which
+# glob 10 cannot use (globs silently match nothing), and no glob release supports it yet. The CLI
+# passes only its own fixed patterns, so the ReDoS is not reachable; the alert is dismissed.
+overrides:
+  adm-zip: 0.6.1
+  tmp: 0.2.7
