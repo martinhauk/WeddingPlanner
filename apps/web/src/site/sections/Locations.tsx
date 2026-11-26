@@ -1,4 +1,5 @@
 import { LocationCard } from '../components/LocationCard.tsx';
+import { InlineText } from '../components/Paragraphs.tsx';
 import { SectionFrame } from '../components/SectionFrame.tsx';
 import { searchUrl } from '../format.ts';
 import { t } from '../i18n.ts';
@@ -24,7 +25,11 @@ export function Locations({ section, ctx }: SectionProps<'locations'>) {
               <li key={index}>
                 <strong>{hotel.name}</strong>
                 <span className="muted-inline">{hotel.address}</span>
-                {hotel.note !== undefined && <span>{t(hotel.note, lang)}</span>}
+                {hotel.note !== undefined && (
+                  <span>
+                    <InlineText text={t(hotel.note, lang)} />
+                  </span>
+                )}
                 <span className="links">
                   {hotel.url !== undefined && (
                     <a href={hotel.url} target="_blank" rel="noreferrer">

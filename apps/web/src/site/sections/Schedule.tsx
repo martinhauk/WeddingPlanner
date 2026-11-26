@@ -1,3 +1,4 @@
+import { InlineText } from '../components/Paragraphs.tsx';
 import { SectionFrame } from '../components/SectionFrame.tsx';
 import { t } from '../i18n.ts';
 import type { SectionProps } from './types.ts';
@@ -21,7 +22,11 @@ export function Schedule({ section, ctx }: SectionProps<'schedule'>) {
               <span className="time">{item.time}</span>
               <span className="what">{t(item.title, lang)}</span>
               {where !== undefined && <span className="where">{where}</span>}
-              {item.note !== undefined && <span className="note">{t(item.note, lang)}</span>}
+              {item.note !== undefined && (
+                <span className="note">
+                  <InlineText text={t(item.note, lang)} />
+                </span>
+              )}
             </li>
           );
         })}

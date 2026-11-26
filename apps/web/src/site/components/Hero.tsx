@@ -4,6 +4,12 @@ import { type Lang, t } from '../i18n.ts';
 import { ui } from '../ui.ts';
 import { Countdown } from './Countdown.tsx';
 
+/** The hero's background photos: `hero.images` (at most two), else `hero.image`, else none. */
+export function heroImages(content: Pick<SiteContent, 'hero'>): readonly string[] {
+  const { image, images } = content.hero;
+  return images ?? (image === undefined ? [] : [image]);
+}
+
 export type HeroProps = {
   readonly content: SiteContent;
   readonly lang: Lang;
@@ -11,12 +17,28 @@ export type HeroProps = {
   readonly rsvpId: string | undefined;
 };
 
+/**
+ * The first screen: tagline, names, date, place, countdown and the RSVP button, on full-bleed
+ * photos (side by side when there are two) under a scrim that keeps the text readable.
+ */
 export function Hero({ content, lang, rsvpId }: HeroProps) {
-  const { event, hero } = content;
+  const { event } = content;
+  const images = heroImages(content);
   return (
-    <section className={hero.image === undefined ? 'hero' : 'hero has-image'}>
-      {hero.image !== undefined && (
-        <img className="hero-image" src={mediaUrl(hero.image)} alt="" fetchPriority="high" />
+    <section className={images.length === 0 ? 'hero' : `hero has-image images-${images.length}`}>
+      {images.length > 0 && (
+        <div className="hero-media">
+          {images.map((image, index) => (
+            <img
+              // biome-ignore lint/suspicious/noArrayIndexKey: static content, the same file may repeat
+              key={index}
+              src={mediaUrl(image)}
+              alt=""
+              fetchPriority="high"
+              decoding="async"
+            />
+          ))}
+        </div>
       )}
       <div className="hero-inner">
         <p className="eyebrow">{t(content.tagline, lang)}</p>
