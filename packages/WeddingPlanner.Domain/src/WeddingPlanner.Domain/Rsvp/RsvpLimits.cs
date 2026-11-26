@@ -10,6 +10,9 @@ public sealed class RsvpLimits
     /// <summary>Largest allowed number of companions (the product limit: the guest plus five).</summary>
     public const int MaxCompanionsCeiling = 5;
 
+    /// <summary>Shortest name of one person, in Unicode code points (see <see cref="PersonNames"/>).</summary>
+    public const int MinNameLength = 2;
+
     /// <summary>Longest name of one person.</summary>
     public const int MaxNameLength = 80;
 

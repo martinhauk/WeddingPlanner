@@ -4,8 +4,9 @@ namespace WeddingPlanner.Domain.Rsvp;
 
 /// <summary>
 /// Validates and normalises an <see cref="RsvpDraft"/>. Text is sanitised first (<see cref="TextSanitizer"/>) and
-/// then checked against <see cref="RsvpLimits"/>. Dietary data is dropped for a "no": it is only needed for
-/// people who come, so it is never stored for anyone else.
+/// then checked against <see cref="RsvpLimits"/> and the name rules (<see cref="PersonNames"/>); a reply cannot
+/// name the same person twice. Dietary data is dropped for a "no": it is only needed for people who come, so it
+/// is never stored for anyone else.
 /// </summary>
 public static partial class RsvpValidator
 {
@@ -70,6 +71,8 @@ public static partial class RsvpValidator
             return people;
         }
 
+        // Keys of the valid names so far: a later person with the same name is reported as a duplicate.
+        var names = new HashSet<string>(StringComparer.Ordinal);
         for (var index = 0; index < draftPeople.Count; index++)
         {
             var field = $"people[{index}]";
@@ -86,13 +89,13 @@ public static partial class RsvpValidator
             }
 
             var name = TextSanitizer.SingleLine(draftPerson.Name);
-            if (name.Length == 0)
+            if (NameError(name) is { } nameError)
             {
-                errors.Add(new($"{field}.name", RsvpValidationCodes.Required));
+                errors.Add(new($"{field}.name", nameError));
             }
-            else if (name.Length > RsvpLimits.MaxNameLength)
+            else if (!names.Add(PersonNames.DuplicateKey(name)))
             {
-                errors.Add(new($"{field}.name", RsvpValidationCodes.TooLong));
+                errors.Add(new($"{field}.name", RsvpValidationCodes.Duplicate));
             }
 
             IReadOnlyList<string> tags = [];
@@ -112,6 +115,13 @@ public static partial class RsvpValidator
 
         return people;
     }
+
+    private static string? NameError(string name) => name.Length switch
+    {
+        0 => RsvpValidationCodes.Required,
+        > RsvpLimits.MaxNameLength => RsvpValidationCodes.TooLong,
+        _ => PersonNames.Check(name),
+    };
 
     private static List<string> ValidateTags(IReadOnlyList<string?>? draftTags, string field, List<RsvpValidationError> errors)
     {
@@ -153,13 +163,19 @@ public static class RsvpValidationCodes
     /// <summary>The text is longer than its limit.</summary>
     public const string TooLong = "too_long";
 
+    /// <summary>A name is shorter than <see cref="RsvpLimits.MinNameLength"/>.</summary>
+    public const string TooShort = "too_short";
+
+    /// <summary>A name that an earlier person of the same reply already has (see <see cref="PersonNames.DuplicateKey"/>).</summary>
+    public const string Duplicate = "duplicate";
+
     /// <summary>The reply names more people, or a person more dietary tag entries, than allowed.</summary>
     public const string TooMany = "too_many";
 
     /// <summary>A dietary tag that is not one of <see cref="DietaryTags.All"/>.</summary>
     public const string UnknownTag = "unknown_tag";
 
-    /// <summary>The value has the wrong format.</summary>
+    /// <summary>The value has the wrong format; for a name: no letter, or a web address or <c>@</c> (<see cref="PersonNames"/>).</summary>
     public const string Invalid = "invalid";
 
     /// <summary>The honeypot field was filled in.</summary>
