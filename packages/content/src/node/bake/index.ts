@@ -214,6 +214,7 @@ function createOutput(input: {
     features: { rsvp: input.features.rsvp, admin: input.features.admin },
     rsvpDeadline: new Date(instance.rsvp.deadline).toISOString(),
     rsvpTimeZone: instance.rsvp.timeZone,
+    regions: { app: instance.swaLocation, data: instance.dataLocation },
   });
   const version = versionInfoSchema.parse({
     sha: input.sha,
