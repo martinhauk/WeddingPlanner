@@ -211,7 +211,8 @@ main() {
     [ "$answer" = "$ENV_NAME" ] || die "not confirmed; nothing was written"
   fi
   printf '\nRestoring backup %s\n' "$BACKUP_ID"
-  cli "${args[@]}" || die "the restore failed; see above (re-running is safe: rows are upserted)"
+  # A retry after a partial restore needs --force: the tables that already got rows fail the guard.
+  cli "${args[@]}" || die "the restore failed; see above (retry with --force: rows are upserted)"
 
   args=(verify --backup-id "$BACKUP_ID")
   if [ -n "$TABLES" ]; then args+=(--tables "$TABLES"); fi

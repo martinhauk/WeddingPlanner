@@ -310,6 +310,7 @@ export async function runDrill(
   );
   const drillPrefix = `drill${randomBytes(4).toString('hex')}`;
   let plan: RestorePlanItem[] = [];
+  let result: DrillResult;
   try {
     plan = planRestore(manifest, { tablePrefix: drillPrefix });
     await restoreBackup(
@@ -324,14 +325,39 @@ export async function runDrill(
       { backupId: manifest.backupId, tablePrefix: drillPrefix },
       log,
     );
-    return {
+    result = {
       backupId: manifest.backupId,
       tables: manifest.totals.tables,
       rows: manifest.totals.rows,
       ok: verify.ok,
     };
-  } finally {
-    for (const item of plan) await tables.deleteTable(item.target);
-    log(`deleted ${plan.length} temporary drill table(s)`);
+  } catch (error) {
+    // Clean up, but report the original failure: a cleanup error is only logged here.
+    await deleteDrillTables(tables, plan, log);
+    throw error;
   }
+  const cleanup = await deleteDrillTables(tables, plan, log);
+  if (cleanup.failed) throw cleanup.error;
+  return result;
+}
+
+/** Deletes every temporary drill table, also after one deletion fails; returns the first error. */
+async function deleteDrillTables(
+  tables: TableStore,
+  plan: readonly RestorePlanItem[],
+  log: Log,
+): Promise<{ failed: false } | { failed: true; error: unknown }> {
+  let outcome: { failed: false } | { failed: true; error: unknown } = { failed: false };
+  let deleted = 0;
+  for (const item of plan) {
+    try {
+      await tables.deleteTable(item.target);
+      deleted++;
+    } catch (error) {
+      if (!outcome.failed) outcome = { failed: true, error };
+      log(`could not delete temporary drill table ${item.target}`);
+    }
+  }
+  log(`deleted ${deleted} of ${plan.length} temporary drill table(s)`);
+  return outcome;
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { redact } from '../src/cli.ts';
-import { annotateDoubles } from '../src/storage.ts';
+import { annotateDoubles, stateOfPages } from '../src/storage.ts';
 
 describe('annotateDoubles', () => {
   const body =
@@ -40,5 +40,34 @@ describe('redact', () => {
     expect(text).not.toContain('bkwedabc123prod');
     expect(text).not.toContain('abc/def==');
     expect(text).toContain('<account>.table.<endpoint>');
+  });
+});
+
+describe('stateOfPages', () => {
+  async function* pages(...list: unknown[][]): AsyncIterable<unknown[]> {
+    for (const page of list) yield page;
+  }
+
+  it('reads past an empty page that carries a continuation token', async () => {
+    await expect(stateOfPages(pages([], [{ PartitionKey: 'p', RowKey: 'r' }]))).resolves.toBe(
+      'non-empty',
+    );
+  });
+
+  it('reports empty only when every page is empty', async () => {
+    await expect(stateOfPages(pages([], []))).resolves.toBe('empty');
+    await expect(stateOfPages(pages())).resolves.toBe('empty');
+  });
+
+  it('stops at the first page with a row', async () => {
+    let read = 0;
+    async function* counted(): AsyncIterable<unknown[]> {
+      for (const page of [[{}], [{}]]) {
+        read++;
+        yield page;
+      }
+    }
+    await expect(stateOfPages(counted())).resolves.toBe('non-empty');
+    expect(read).toBe(1);
   });
 });
