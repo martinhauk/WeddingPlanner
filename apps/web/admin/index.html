@@ -1,26 +1,20 @@
 <!doctype html>
-<html lang="en">
+<html lang="de">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex, nofollow" />
-    <!-- Placeholder of the admin entry (built to dist/admin/index.html, served for /admin* to the
-         role `admin` only). The admin shell (S3-08) replaces it and loads src/admin/main.tsx. -->
+    <!-- The admin entry: built to dist/admin/index.html and served for /admin* to the role `admin`
+         only. It loads src/admin/main.tsx; public pages never load admin code. -->
     <link rel="icon" href="data:," />
-    <title>Admin</title>
+    <title>Admin · Antworten</title>
   </head>
   <body>
-    <main>
-      <h1>Admin</h1>
-      <p>The admin area is not available yet.</p>
-      <p lang="de">Der Admin-Bereich ist noch nicht verfügbar.</p>
-      <p lang="es">El área de administración aún no está disponible.</p>
-      <p>
-        <a href="/.auth/logout?post_logout_redirect_uri=/">
-          <span lang="en">Sign out</span> · <span lang="de">Abmelden</span> ·
-          <span lang="es">Cerrar sesión</span>
-        </a>
-      </p>
-    </main>
+    <div id="root"></div>
+    <noscript>
+      <p>Der Admin-Bereich braucht JavaScript.</p>
+      <p><a href="/.auth/logout?post_logout_redirect_uri=/">Abmelden</a></p>
+    </noscript>
+    <script type="module" src="/src/admin/main.tsx"></script>
   </body>
 </html>
