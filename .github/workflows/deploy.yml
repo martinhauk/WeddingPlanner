@@ -9,6 +9,10 @@
 #                (GitHub Environment `production`).
 # Each environment is a call of _deploy-environment.yml, which skips cleanly while its environment
 # has no Azure variables (or no INSTANCE_REPO) and fails on a missing or invalid instance.
+# Backups (docs/runbooks/backup-restore.md): test and production export every table to their own
+# backup storage account before anything changes (a failed backup stops that deploy, so production
+# never runs after a test deploy whose backup failed); e2e runs a restore drill after its deploy,
+# so a broken backup or restore path stops the promotion before test. Nightly: backup.yml.
 #
 # Triggers:
 # - push to main:           e2e -> test -> production.

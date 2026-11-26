@@ -1,0 +1,116 @@
+# Nightly table backup of test and production (docs/runbooks/backup-restore.md).
+#
+# Each environment exports every table of its data account with tools/table-backup into its own
+# backup storage account (container table-backups: WORM 30 days, versioning, soft delete). Never
+# into pipeline artifacts: this repository is public and its artifacts are downloadable.
+#
+# Identity: the deploy environments cannot be used here (production waits for a reviewer, which a
+# schedule cannot pass). Each job runs in the GitHub Environment backup-<env> instead, created by
+# scripts/bootstrap.sh: deployments from main only, no reviewer, and a dedicated identity
+# id-<slug>-<env>-backup with Reader (to find the accounts), Storage Table Data Reader and the
+# write-only "WeddingPlanner Backup Writer" role on the app resource group. It can neither change
+# guest data nor read or delete backups.
+#
+# Skips cleanly while backup-<env> has no Azure variables (bootstrap not re-run yet) or the
+# environment was never deployed. Hygiene: account names are masked, nothing prints row counts.
+name: backup
+
+on:
+  schedule:
+    # 01:30 UTC = 02:30 CET / 03:30 CEST. GitHub may start scheduled runs late.
+    - cron: "30 1 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  backup:
+    name: backup ${{ matrix.environment }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        environment:
+          - test
+          - production
+    environment: backup-${{ matrix.environment }}
+    concurrency:
+      group: backup-${{ matrix.environment }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      BACKUP_ENV: ${{ matrix.environment }}
+      AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+    steps:
+      - name: Skip when the backup environment is not bootstrapped
+        id: gate
+        env:
+          HAS_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID != '' }}
+          HAS_TENANT_ID: ${{ vars.AZURE_TENANT_ID != '' }}
+          HAS_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID != '' }}
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          [ "$GITHUB_REF" = refs/heads/main ] || fail "backups run from main only"
+          if [ "$HAS_CLIENT_ID" != true ]; then
+            echo "::notice::backup-$BACKUP_ENV has no Azure variables yet (re-run scripts/bootstrap.sh --env $BACKUP_ENV); skipping."
+            echo "run=false" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$HAS_TENANT_ID" != true ] || [ "$HAS_SUBSCRIPTION_ID" != true ] || [ -z "$AZURE_RESOURCE_GROUP" ]; then
+            fail "backup-$BACKUP_ENV is half bootstrapped (re-run scripts/bootstrap.sh --env $BACKUP_ENV)"
+          fi
+          echo "run=true" >>"$GITHUB_OUTPUT"
+
+      - name: Check out
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node and pnpm
+        if: steps.gate.outputs.run == 'true'
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Azure login (OIDC, backup identity)
+        if: steps.gate.outputs.run == 'true'
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Export the tables
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          # Naming contract of infra/app: the data account starts with "st", the backup account
+          # with "bk"; exactly one of each per resource group.
+          # one_account PREFIX: set ACCOUNT to the only account named PREFIX... ("" when none).
+          one_account() {
+            local count
+            ACCOUNT=$(az storage account list --resource-group "$AZURE_RESOURCE_GROUP" \
+              --query "[?starts_with(name, '$1')].name" -o tsv)
+            count=$(printf '%s' "$ACCOUNT" | grep -c . || true)
+            [ "$count" -le 1 ] || { echo "::error::more than one $1... storage account"; exit 1; }
+            if [ "$count" -eq 1 ]; then echo "::add-mask::$ACCOUNT"; fi
+          }
+          one_account bk
+          backup=$ACCOUNT
+          if [ -z "$backup" ]; then
+            echo "::notice::$BACKUP_ENV has no backup store yet (it is created by the first deploy); skipping."
+            exit 0
+          fi
+          one_account st
+          data=$ACCOUNT
+          from=(--no-source)
+          if [ -n "$data" ]; then from=(--tables-account "$data"); fi
+          node tools/table-backup/src/cli.ts export --label nightly --quiet "${from[@]}" \
+            --backup-account "$backup" --json >"$RUNNER_TEMP/backup-manifest.json"
+          id=$(jq -er '.backupId' "$RUNNER_TEMP/backup-manifest.json")
+          rm -f "$RUNNER_TEMP/backup-manifest.json"
+          {
+            echo "### $BACKUP_ENV nightly backup"
+            echo "- backup id: \`$id\`"
+          } >>"$GITHUB_STEP_SUMMARY"
