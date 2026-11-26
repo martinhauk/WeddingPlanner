@@ -133,8 +133,8 @@ checkout outside this repo. The workflow of the instance repo is in
   monthly quota the site stops instead). A budget alert is a backstop, and an edge lockdown stops API
   executions within minutes.
 - Data at rest in `germanywestcentral`; the Static Web App (static content on the global edge and
-  the managed API) in `eastus2`, because `westeurope` accepts no new Static Web Apps customers
-  ([ADR 0006](docs/adr/0006-azure-regions.md)).
+  the managed API) in `westus2`: `westeurope` accepts no new Static Web Apps customers, and
+  `eastus2` fails most .NET 10 API deploys ([ADR 0006](docs/adr/0006-azure-regions.md)).
 - No Azure credentials in GitHub: deploys use OIDC; Azure secrets are computed or fetched at deploy
   time and masked. The only GitHub secret per environment is the read-only `INSTANCE_REPO_DEPLOY_KEY`.
 - This repository is public and contains no personal data; see

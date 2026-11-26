@@ -33,7 +33,7 @@ param dataLocation string = 'germanywestcentral'
   'westus2'
   'eastasia'
 ])
-param swaLocation string = 'eastus2'
+param swaLocation string = 'westus2'
 
 @description('API feature flag Features__Rsvp (instance.json environments.<env>.features.rsvp).')
 param featuresRsvp bool = false
