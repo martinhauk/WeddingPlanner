@@ -26,8 +26,11 @@
 #   subject); the web build listing (it names every media file) is dropped for real content.
 # - `-o none` on deployments, no environment.url, and the job summary shows only commit SHAs.
 #
-# Concurrency: one deploy per environment at a time; a newer run's deploy waits and replaces an
-# older waiting one (cancel-in-progress stays off, so a running deploy is never interrupted).
+# Gate: deploy.yml runs ci.yml on the same commit first; this workflow runs only after it passed.
+#
+# Concurrency: one deploy per environment at a time, and a newer run cancels the older run's deploy
+# of the same environment, running or waiting for approval (cancel-in-progress). See deploy.yml for
+# the one risk (a cancelled Bicep step leaves its ARM deployment running: DeploymentActive).
 name: deploy-environment
 
 on:
@@ -69,7 +72,10 @@ jobs:
     timeout-minutes: 40
     environment: ${{ inputs.environment }}
     # Only the newest commit matters: a newer run cancels an older one that is still running or
-    # waiting for approval. SWA uploads are atomic, so a cancelled upload leaves the site unchanged.
+    # waiting for approval. SWA uploads are atomic, so a cancelled upload leaves the site unchanged,
+    # and a cancelled backup has changed nothing (the next run backs up again). A cancelled Bicep
+    # step leaves its ARM deployment running, so the next run may fail with DeploymentActive:
+    # re-run it once that ARM deployment has finished.
     concurrency:
       group: deploy-${{ inputs.environment }}
       cancel-in-progress: true

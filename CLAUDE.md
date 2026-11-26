@@ -10,8 +10,8 @@ deployment lives in a private instance repo and never enters this repo.
 
 ## Read first
 
-1. The GitHub issue you are implementing. It is the contract: its acceptance criteria must all be met,
-   and its **Key paths** define the files you own.
+1. The tracker issue of your work package and the lead's brief. The issue's acceptance criteria are
+   the contract; the brief names the files you own.
 2. [`docs/conventions/`](docs/conventions/README.md): code style, git and PRs, testing, Definition of
    Done, repo hygiene, feature flags.
 3. [`docs/architecture.md`](docs/architecture.md) and the decisions in [`docs/adr/`](docs/adr/README.md).
@@ -24,19 +24,16 @@ deployment lives in a private instance repo and never enters this repo.
 apps/web/                 @weddingplanner/web: Vite + React + TS one-pager, plus a separate /admin entry
 apps/api/                 .NET 10 isolated Functions API (src/WeddingPlanner.Api, tests/)
 packages/content/         @weddingplanner/content: Zod schemas, validate + bake CLI, generated JSON Schemas
-packages/api-contracts/   @weddingplanner/api-contracts: Zod DTOs + JSON fixtures shared with .NET tests
 packages/WeddingPlanner.Domain/  pure .NET domain logic (RSVP rules, name matching, CSV)
 tests/e2e/                @weddingplanner/e2e: Playwright device matrix, screenshots, read-only smoke
-tools/                    developer tools (e.g. content import into a local instance checkout)
-samples/instance/         the complete fictional sample instance (Anna & Ben)
+tools/table-backup/       table export/restore CLI (deploy backups, nightly backup, restore drill)
+samples/instance/         the complete fictional sample instance (Anna & Ben); instance-template/
 infra/                    Bicep: bootstrap/ (owner-run, subscription scope), app/ (CI-run, RG scope)
-scripts/                  owner-run scripts: bootstrap, github/, ops/, instance/
+scripts/                  owner-run scripts: bootstrap*.sh, github/, ops/, smoke/
 docs/                     architecture.md, local-development.md, api.md, conventions/, adr/,
-                          runbooks/
-.github/                  workflows, PR and issue templates, CODEOWNERS
+                          runbooks/, privacy/
+.github/                  workflows (ci, deploy, backup, uptime), PR/issue templates, rulesets/, CODEOWNERS
 ```
-
-Folders appear as their tasks land; the list above is the target layout.
 
 ## Commands
 
@@ -85,51 +82,43 @@ shellcheck.
 Local stack details (ports, proxy, mock admin sign-in, troubleshooting):
 [`docs/local-development.md`](docs/local-development.md).
 
-## Workflow: issue → branch → PR → merge
+## Workflow: work package → branch → PR → owner merge
 
-1. Move the issue to **In Progress** on the project board.
-2. Branch from `origin/main` as **`sN-NN-short-name`** (stage, task number, slug), for example
-   `s1-07-hero-countdown`. Use one git worktree per task.
+Every change to this repo goes through a PR ([ADR 0010](docs/adr/0010-working-process.md)).
+
+1. One **tracker issue per work package** (WP). PRs link it with **`Closes #N`** (or `Refs #N` while
+   it stays open); the board moves only through that automation.
+2. Branch from `origin/main` as **`wp-NN-short-name`** (e.g. `wp-03-write-path-e2e`), or
+   `fix-short-name` outside a WP. One git worktree per agent.
 3. Commit with [Conventional Commits](https://www.conventionalcommits.org/) (`feat(web): …`,
-   `fix(api): …`, `docs: …`, `chore(ci): …`).
-4. Open a PR whose **title is a Conventional Commit summary** and whose body contains
-   **`Closes #N`**, the filled-in PR template checklist, how you verified the change, and any
-   deviations from the issue. Move the issue to **In Review**.
-5. CI must report **`ci-ok`** green. An independent reviewer agent (fresh context: issue + diff only)
-   reviews the PR; fix its findings on the same branch.
-6. **Merge policy:** the lead agent squash-merges once `ci-ok` is green **and** the reviewer agent has
-   approved. Implementers never merge their own PR. Merging deploys to the `e2e` and `test`
-   environments automatically; `production` waits for the owner's approval.
+   `fix(api): …`, `docs: …`, `ci: …`).
+4. Open a PR: **Conventional Commit title**; body with `Closes #N` / `Refs #N`, the PR template
+   checklist, how you verified it, and deviations.
+5. **`ci-ok`** must be green (the only required check).
+6. **Review:** an independent reviewer agent (fresh context: issue + diff only) reviews every PR that
+   touches a risky path: `apps/api/src/WeddingPlanner.Api/` `Security/`, `RateLimiting/`,
+   `Features/Rsvp/`, `Features/Admin/`; `infra/`; `.github/workflows/`; `scripts/bootstrap*`,
+   `scripts/ops/`; the privacy text and `docs/privacy/data-inventory.md`. The lead reviews all other
+   PRs. One fix round on the same branch, then a re-check.
+7. **The owner merges**, squash only. Merging deploys: `deploy.yml` runs the full CI on the commit,
+   then `e2e` → `test`; `production` waits for the owner's approval.
 
-Agents never push to `main`, force-push someone else's branch, run deploy workflows, approve
-deployments, or change GitHub environments, secrets or rulesets. The owner runs the scripts in
-`scripts/github/` and `scripts/bootstrap*`.
+Agents never merge PRs, push to `main`, force-push someone else's branch, run deploy workflows,
+approve deployments, or change GitHub settings, environments, secrets or rulesets. The owner runs
+the scripts in `scripts/github/` and `scripts/bootstrap*`.
 
 ## File ownership
 
-Parallel agents must never edit the same file. Stay inside your issue's Key paths. If you need a
-change elsewhere, say so in the PR and let the lead agent file an issue.
+Parallel agents must never edit the same file. The lead's brief names the files each work package
+owns; stay inside them. If you need a change elsewhere, say so in the PR instead of making it.
 
-- **Root JS/tooling files** (`package.json`, `pnpm-workspace.yaml`, `tsconfig.base.json`,
-  `biome.json`, `.gitignore`, `.gitattributes`, `.editorconfig`, `.nvmrc`, `CLAUDE.md`): created by
-  S0-01. Later tasks touch them only where their issue says so (S0-11: the `dev*` and `storage:*`
-  script lines; S0-03: the `[*.cs]` block of `.editorconfig`).
-- **Root .NET files** (`global.json`, `WeddingPlanner.slnx`, `Directory.Build.props`,
-  `Directory.Packages.props`), `apps/api/src/WeddingPlanner.Api/Program.cs` and
-  `docker-compose.yml`: S0-03. `Program.cs` pre-wires every middleware and feature registration, so
-  feature tasks edit only their own folder.
-- **`staticwebapp.config.json`** is only ever generated by `apps/web/swa-config/` (S0-07). Never
-  hand-write it.
-- **Workflows:** `ci.yml` belongs to S0-08. `deploy.yml` is edited strictly in sequence:
-  S0-12, then S1-13, then S1-16.
-- **Section tasks** touch only `apps/web/src/sections/<type>/`,
-  `packages/content/src/schema/sections/<type>.ts`, their own string module and
-  `tests/e2e/specs/sections/<type>.spec.ts`. They never edit `samples/instance/` (S1-01 completes it
-  up front).
-- **Admin area tasks** touch only `apps/web/src/admin/<area>/` (the shell and tab stubs come from
-  S3-08).
-- **`@weddingplanner/api-contracts`**: the index is created by S2-01; S3-00 adds one admin file per
-  area.
+- **Root tooling and .NET files** (`package.json`, `pnpm-workspace.yaml`, `tsconfig.base.json`,
+  `biome.json`, `.editorconfig`, `global.json`, `WeddingPlanner.slnx`, `Directory.*.props`,
+  `docker-compose.yml`, `CLAUDE.md`) and the **workflows** change only when the brief says so.
+- `apps/api/src/WeddingPlanner.Api/Program.cs` pre-wires every middleware and feature registration,
+  so feature work edits only its own folder.
+- **`staticwebapp.config.json`** is only ever generated by `apps/web/swa-config/`. Never hand-write
+  it.
 
 ## Lockfile conflicts
 
