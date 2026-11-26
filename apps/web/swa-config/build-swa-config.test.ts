@@ -418,11 +418,27 @@ describe('pages the config points to', () => {
     expect(hrefs).toContain('/');
   });
 
+  it('gives the admin entry only its own module script and a logout link', () => {
+    const page = parsePage('/admin/index.html');
+    const scripts = [...page.querySelectorAll('script')];
+    expect(scripts.map((script) => [script.type, script.getAttribute('src')])).toEqual([
+      ['module', '/src/admin/main.tsx'],
+    ]);
+    expect(page.querySelector('noscript')?.innerHTML).toContain(
+      '/.auth/logout?post_logout_redirect_uri=/',
+    );
+    expect(page.querySelector('meta[name="robots"]')?.getAttribute('content')).toBe(
+      'noindex, nofollow',
+    );
+  });
+
   it.each(['/403.html', '/404.html', '/admin/index.html'])(
-    '%s loads no external assets and runs no script',
+    '%s loads no external assets',
     (urlPath) => {
       const page = parsePage(urlPath);
-      expect(page.querySelectorAll('script')).toHaveLength(0);
+      if (urlPath !== '/admin/index.html') {
+        expect(page.querySelectorAll('script')).toHaveLength(0);
+      }
       const external = /^(?:[a-z][a-z0-9+.-]*:)?\/\//i;
       for (const element of page.querySelectorAll('[src], link[href]')) {
         const url = element.getAttribute('src') ?? element.getAttribute('href') ?? '';
