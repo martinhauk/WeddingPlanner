@@ -26,6 +26,16 @@ export type SiteProps = {
  * The one-pager: header, hero, then the content's sections in order. At `/datenschutz` (alias
  * `/privacy`) it shows the privacy notice instead; every page links to it in the footer.
  */
+
+/** How long a deep link keeps re-jumping to its section while late images and fonts load. */
+const DEEP_LINK_SETTLE_MS = 5000;
+
+/** Upper bound for the repeated deep-link jumps, so the page never fights the browser for long. */
+const DEEP_LINK_MAX_JUMPS = 10;
+
+/** Any of these means the visitor scrolls on their own: stop re-jumping to the deep link. */
+const USER_SCROLL_EVENTS = ['wheel', 'touchstart', 'keydown', 'pointerdown'] as const;
+
 export function Site({ content, build, initialLanguage }: SiteProps) {
   const [lang, setLang] = useState<Lang>(() => initialLanguage ?? initialLang());
   const [privacyPage] = useState(() => isPrivacyPath(window.location.pathname));
@@ -42,14 +52,51 @@ export function Site({ content, build, initialLanguage }: SiteProps) {
   }, [title]);
 
   // The sections render after the browser has handled the URL fragment, so a deep link such as
-  // /#rsvp is scrolled to once here. Section ids are [a-z0-9-], so the raw fragment is looked up
-  // as is: decoding could throw on a malformed fragment (/#%) and unmount the page.
+  // /#rsvp is scrolled to here. Section ids are [a-z0-9-], so the raw fragment is looked up as is:
+  // decoding could throw on a malformed fragment (/#%) and unmount the page.
+  // The first jump is not the last word: images and fonts above the target still take their space
+  // (the page grows), and Chromium may apply its own late fragment scroll with a wrong offset (on a
+  // 360 px phone /#rsvp ended three sections short). Until the visitor scrolls, taps or types, or
+  // DEEP_LINK_SETTLE_MS pass, the jump is repeated when the page resizes and when a scroll the
+  // visitor did not cause moves the target (at most DEEP_LINK_MAX_JUMPS times).
   useEffect(() => {
     const id = window.location.hash.slice(1);
     const target = id === '' ? null : document.getElementById(id);
-    if (target !== null && typeof target.scrollIntoView === 'function') {
-      target.scrollIntoView();
+    if (target === null || typeof target.scrollIntoView !== 'function') {
+      return;
     }
+    let jumps = 0;
+    let landedTop = 0;
+    const jump = () => {
+      if (jumps >= DEEP_LINK_MAX_JUMPS) {
+        return;
+      }
+      jumps += 1;
+      target.scrollIntoView({ behavior: 'instant', block: 'start' });
+      landedTop = target.getBoundingClientRect().top;
+    };
+    const moved = () => {
+      if (Math.abs(target.getBoundingClientRect().top - landedTop) > 1) {
+        jump();
+      }
+    };
+    jump();
+    const resize = typeof ResizeObserver === 'function' ? new ResizeObserver(jump) : undefined;
+    resize?.observe(document.body);
+    const stop = () => {
+      resize?.disconnect();
+      window.clearTimeout(timer);
+      window.removeEventListener('scroll', moved);
+      for (const type of USER_SCROLL_EVENTS) {
+        window.removeEventListener(type, stop);
+      }
+    };
+    const timer = window.setTimeout(stop, DEEP_LINK_SETTLE_MS);
+    window.addEventListener('scroll', moved, { passive: true });
+    for (const type of USER_SCROLL_EVENTS) {
+      window.addEventListener(type, stop, { passive: true });
+    }
+    return stop;
   }, []);
 
   // Keeps the API warm for the RSVP form; without the feature (or on the privacy page, which has no
