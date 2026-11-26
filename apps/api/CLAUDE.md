@@ -85,17 +85,15 @@ Worker middleware, outermost first (`Program.ConfigurePipeline`):
    runs: no counters, no I/O, no cookies. Every other function (`Health`, `HealthProbe`) is never gated.
 3. `RateLimitingMiddleware`: `Rsvp*` functions only, in memory per worker instance. Per client 10
    writes per 10 minutes and 60 reads per minute, plus 120 writes per minute per instance for all
-   clients; 429 `rate_limited` with `Retry-After`. The client key comes from `Http/ClientAddress`
-   (`RateLimiting__ClientIpHeader`, default `x-azure-clientip`, then the first `X-Forwarded-For` entry;
-   IPv6 per /64) and is never logged. On the Functions host the worker never sees the client's
-   `X-Forwarded-For` (the host replaces it, and the connection address is the host or proxy peer for
-   every guest), so the single-address header is the only real per-client source; the connection
-   address is never used. Without it `ResolveKey` returns `null`: the request skips the per-client
-   limits and only the per-instance write backstop applies. All limits are app settings with code
+   clients; 429 `rate_limited` with `Retry-After`. The client key comes from `Http/ClientAddress`: only
+   the trusted header named by `RateLimiting__ClientIpHeader` (IPv6 per /64), never logged. Its code
+   default is **empty**: on the SWA managed API no header carries the caller's address
+   (`X-Azure-ClientIP` and friends are spoofable, `X-Forwarded-For` never reaches the worker, the
+   connection address and `Client-IP` are platform addresses; ADR 0011), so `ResolveKey` returns `null`,
+   the request skips the per-client limits and only the per-instance write backstop applies. Never key on
+   `X-Forwarded-For` or the connection address. All limits are app settings with code
    defaults (`RateLimitingOptions`). The client limit is checked first; a write the instance backstop
-   refuses gives its client permit back (`SlidingWindowLimiter.Release`). Before `Features__Rsvp` is
-   turned on in `production`, the probe (`scripts/smoke/api-probe.sh` or `GET /api/health/probe`, see
-   "Platform probe") must confirm on `e2e` that `x-azure-clientip` is present and not spoofable.
+   refuses gives its client permit back (`SlidingWindowLimiter.Release`).
 4. `RequestOriginGuardMiddleware`: writes to gated functions (`Rsvp*`, `Admin*`). `Sec-Fetch-Site:
    cross-site` → 403 `cross_site_request`; a body that is not `application/json` (UTF-8) → 415 (a body is
    required for POST/PUT/PATCH); `Content-Length` above 16 KB (`Rsvp*`) or 256 KB (`Admin*`) → 413. The
@@ -204,7 +202,7 @@ duplicate members rejected) and need no MVC services, so middleware can write th
   first deploy to the SWA managed host). Always build admin routes from `AdminRoutes`;
   `AdminFunctionCatalogTests` fails on a route that starts with `admin`.
 
-## Platform probe (temporary)
+## Platform probe (e2e only)
 
 `GET /api/health/probe` (`Features/Health/ProbeFunction`, function `HealthProbe`, never gated) measures
 two undocumented SWA behaviours: which forwarding header carries the client IP (and at which
@@ -214,18 +212,22 @@ forwarding headers, the XFF hop count, the connection address, `cookieReceived` 
 `hasClientPrincipal`. No I/O, `Cache-Control: no-store`, values never logged or stored (a capturing-logger
 test enforces this).
 
-- **Switch:** `Diagnostics__ProbeEnabled`, code default `true` until the findings are recorded; `false`
-  (or any malformed value) answers 404 `not_found` problem+json without a cookie.
+- **Switch:** `HealthProbe__Enabled`, code default **off**; only `true` switches it on, anything else
+  answers 404 `not_found` problem+json without a cookie. infra/app sets it to `true` on `e2e` only. Not
+  `Diagnostics__…`: SWA rejects app settings starting with `DIAGNOSTICS_`.
 - **Run it:** `BASE_URL=https://<host> scripts/smoke/api-probe.sh` (read-only GETs; plain `http` only for
   localhost). It does the two-step round trip with a cookie jar in a temp dir, exits 1 if the cookie is
   missing, has the wrong attributes or does not come back, and prints only pass/fail lines, header
   names, counts and XFF positions, never values or `BASE_URL`. It also reports which headers pass a
-  spoofed client value through.
+  spoofed client value through and how many distinct values each address source showed over
+  `PROBE_REPEATS` requests (`PROBE_CURL_OPTS=-4`/`-6` pins the address family). A `Domain` attribute
+  equal to the host passes: the SWA proxy adds it.
 - **Local behaviour** (Core Tools 4.17): the Functions host replaces a client-sent `X-Forwarded-For`, and
   the worker's forwarded-headers handling then consumes it, so the worker sees no XFF, the client's
   address as the connection address and the host-to-worker hop in `X-Original-For`. The single-address
-  headers (`X-Azure-ClientIP`, `X-Client-IP`, …) pass client values through unchanged locally. What SWA
-  does is measured by S0-12; record only header names and positions, never addresses.
+  headers (`X-Azure-ClientIP`, `X-Client-IP`, …) pass client values through unchanged locally. On SWA
+  the connection address is a shared platform address instead of the client's: findings in ADR 0011.
+  Record only header names and positions, never addresses.
 
 ## Fallbacks (decide with the lead agent, record in an ADR)
 
