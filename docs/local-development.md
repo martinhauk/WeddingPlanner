@@ -124,11 +124,12 @@ use random table prefixes, so several worktrees can share it. After a change to 
 
 ## Troubleshooting
 
-| Symptom                                                | Cause and fix                                                                                 |
-| ------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
-| `func: command not found`                              | Install Azure Functions Core Tools v4.                                                        |
-| `Port 7071 is unavailable` or the emulator won't start | Another stack runs; stop it (`lsof -nP -iTCP:7071 -sTCP:LISTEN` shows the process).           |
-| RSVP calls answer 503 `not_configured`                 | Azurite is not running (`pnpm storage:up`), or `Rsvp__Deadline` was edited into the `T` form. |
-| RSVP calls answer 404 `not_found`                      | `Features__Rsvp` is not `true` in `local.settings.json`.                                      |
-| The RSVP section says "opens soon"                     | The bake ran for an environment with `features.rsvp` off; restart without `DEPLOY_ENV`.       |
-| `/admin` shows the 403 page after the mock sign-in     | The mock sign-in lacks the role `admin` (one role per line); sign out and in again.           |
+| Symptom                                                | Cause and fix                                                                             |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| `func: command not found`                              | Install Azure Functions Core Tools v4.                                                    |
+| `Port 7071 is unavailable` or the emulator won't start | Another stack runs; stop it (`lsof -nP -iTCP:7071 -sTCP:LISTEN` shows the process).       |
+| RSVP calls answer 503 `not_configured`                 | `Storage__ConnectionString` is missing, or `Rsvp__Deadline` was edited into the `T` form. |
+| RSVP writes and reads answer 500, status still "open"  | Azurite is not running (`pnpm storage:up`).                                               |
+| RSVP calls answer 404 `not_found`                      | `Features__Rsvp` is not `true` in `local.settings.json`.                                  |
+| The RSVP section says "opens soon"                     | The bake ran for an environment with `features.rsvp` off; restart without `DEPLOY_ENV`.   |
+| `/admin` shows the 403 page after the mock sign-in     | The mock sign-in lacks the role `admin` (one role per line); sign out and in again.       |
