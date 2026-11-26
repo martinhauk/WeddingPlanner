@@ -316,8 +316,32 @@ jobs:
           echo "::add-mask::$token"
           echo "token=$token" >>"$GITHUB_OUTPUT"
 
+      # The first deployment into a freshly created SWA sometimes fails with "Failed to deploy the
+      # Azure Functions" while the managed functions backend is still being provisioned. SWA
+      # deployments are atomic (nothing goes live on failure), so one retry after a pause is safe.
       - name: Upload to Static Web Apps
+        id: upload
         if: steps.gate.outputs.run == 'true'
+        continue-on-error: true
+        uses: Azure/static-web-apps-deploy@4d27395796ac319302594769cfe812bd207490b1 # v1 (2024-09-11)
+        with:
+          action: upload
+          azure_static_web_apps_api_token: ${{ steps.token.outputs.token }}
+          app_location: apps/web/dist
+          api_location: api-publish
+          output_location: ""
+          skip_app_build: true
+          skip_api_build: true
+          production_branch: main
+
+      - name: Wait before retrying the upload
+        if: steps.gate.outputs.run == 'true' && steps.upload.outcome == 'failure'
+        run: |
+          echo "::warning::SWA upload failed; retrying once in 60 s (first deploy into a new SWA)."
+          sleep 60
+
+      - name: Upload to Static Web Apps (retry)
+        if: steps.gate.outputs.run == 'true' && steps.upload.outcome == 'failure'
         uses: Azure/static-web-apps-deploy@4d27395796ac319302594769cfe812bd207490b1 # v1 (2024-09-11)
         with:
           action: upload
