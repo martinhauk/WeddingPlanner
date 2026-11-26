@@ -92,5 +92,123 @@ export const ui = {
     },
     change: { de: 'Antwort ändern', en: 'Change reply', es: 'Cambiar respuesta' },
     who: { de: 'Wer kann nicht kommen?', en: "Who can't come?", es: '¿Quién no puede venir?' },
+    person: { de: 'Person', en: 'Person', es: 'Persona' },
+    attendance: { de: 'Eure Antwort', en: 'Your reply', es: 'Vuestra respuesta' },
+    opensSoon: {
+      de: 'Die Anmeldung öffnet bald – schaut gern wieder vorbei.',
+      en: 'RSVP opens soon – please check back.',
+      es: 'La confirmación abrirá pronto – volved a pasar más adelante.',
+    },
+    deadlinePassed: {
+      de: 'Die Antwortfrist endete am',
+      en: 'Replies closed on',
+      es: 'El plazo de respuesta terminó el',
+    },
+    answeredYes: {
+      de: 'Ihr habt bereits zugesagt.',
+      en: "You've already said yes.",
+      es: 'Ya habéis confirmado vuestra asistencia.',
+    },
+    answeredNo: {
+      de: 'Ihr habt bereits abgesagt.',
+      en: "You've already told us you can't come.",
+      es: 'Ya nos habéis dicho que no podéis venir.',
+    },
+    showReply: { de: 'Antwort anzeigen', en: 'Show reply', es: 'Ver respuesta' },
+    loading: {
+      de: 'Eure Antwort wird geladen …',
+      en: 'Loading your reply …',
+      es: 'Cargando vuestra respuesta …',
+    },
+    saving: { de: 'Wird gespeichert …', en: 'Saving …', es: 'Guardando …' },
+    coming: { de: 'Dabei sind', en: 'Coming', es: 'Vienen' },
+    notComing: { de: 'Nicht dabei', en: 'Not coming', es: 'No vienen' },
+    yourMessage: { de: 'Eure Nachricht', en: 'Your message', es: 'Vuestro mensaje' },
+    withdraw: { de: 'Antwort zurückziehen', en: 'Withdraw reply', es: 'Retirar respuesta' },
+    withdrawConfirm: {
+      de: 'Wollt ihr eure Antwort wirklich zurückziehen?',
+      en: 'Do you really want to withdraw your reply?',
+      es: '¿Seguro que queréis retirar vuestra respuesta?',
+    },
+    withdrawYes: { de: 'Ja, zurückziehen', en: 'Yes, withdraw', es: 'Sí, retirar' },
+    cancel: { de: 'Abbrechen', en: 'Cancel', es: 'Cancelar' },
+    withdrawn: {
+      de: 'Eure Antwort wurde zurückgezogen.',
+      en: 'Your reply has been withdrawn.',
+      es: 'Vuestra respuesta se ha retirado.',
+    },
+    readOnly: {
+      de: 'Die Antwortfrist ist vorbei. Für Änderungen meldet euch bitte direkt bei uns.',
+      en: 'The reply period is over. For changes, please contact us directly.',
+      es: 'El plazo de respuesta ha terminado. Para cambios, contactad directamente con nosotros.',
+    },
+    retry: { de: 'Erneut versuchen', en: 'Try again', es: 'Reintentar' },
+    alreadyAnswered: {
+      de: 'Aus diesem Browser gibt es schon eine Antwort – hier ist sie.',
+      en: 'This browser has already sent a reply – here it is.',
+      es: 'Desde este navegador ya se envió una respuesta – aquí está.',
+    },
+    conflict: {
+      de: 'Eure Antwort wurde inzwischen an anderer Stelle geändert. Hier ist der aktuelle Stand.',
+      en: 'Your reply was changed elsewhere in the meantime. Here is the current version.',
+      es: 'Vuestra respuesta se cambió mientras tanto desde otro lugar. Aquí está la versión actual.',
+    },
+    replyGone: {
+      de: 'Eure gespeicherte Antwort wurde nicht gefunden. Bitte sendet sie noch einmal.',
+      en: "We couldn't find your saved reply. Please send it again.",
+      es: 'No encontramos vuestra respuesta guardada. Por favor, enviadla de nuevo.',
+    },
+    contactHint: {
+      de: 'Ihr könnt uns auch direkt Bescheid geben',
+      en: 'You can also let us know directly',
+      es: 'También podéis avisarnos directamente',
+    },
+  },
+  rsvpError: {
+    nameRequired: {
+      de: 'Bitte gebt einen Namen ein.',
+      en: 'Please enter a name.',
+      es: 'Por favor, escribid un nombre.',
+    },
+    tooLong: {
+      de: 'Dieser Text ist zu lang.',
+      en: 'This text is too long.',
+      es: 'Este texto es demasiado largo.',
+    },
+    checkFields: {
+      de: 'Bitte prüft die markierten Angaben.',
+      en: 'Please check the highlighted fields.',
+      es: 'Por favor, revisad los campos marcados.',
+    },
+    validation: {
+      de: 'Die Antwort konnte nicht gespeichert werden. Bitte prüft eure Angaben.',
+      en: "Your reply couldn't be saved. Please check your entries.",
+      es: 'No se pudo guardar la respuesta. Por favor, revisad los datos.',
+    },
+    closed: {
+      de: 'Die Antwortfrist ist abgelaufen.',
+      en: 'The reply period has ended.',
+      es: 'El plazo de respuesta ha terminado.',
+    },
+    rateLimited: {
+      de: 'Zu viele Versuche in kurzer Zeit. Bitte wartet ein paar Minuten und versucht es dann erneut.',
+      en: 'Too many attempts in a short time. Please wait a few minutes and try again.',
+      es: 'Demasiados intentos en poco tiempo. Esperad unos minutos y volved a intentarlo.',
+    },
+    network: {
+      de: 'Keine Verbindung. Bitte prüft eure Internetverbindung und versucht es erneut.',
+      en: 'No connection. Please check your internet connection and try again.',
+      es: 'Sin conexión. Comprobad vuestra conexión a internet y volved a intentarlo.',
+    },
+    full: {
+      de: 'Online können wir leider keine weiteren Antworten annehmen.',
+      en: "Sorry, we can't accept any more replies online.",
+      es: 'Lo sentimos, ya no podemos aceptar más respuestas en línea.',
+    },
+    unavailable: {
+      de: 'Das hat leider nicht geklappt. Bitte versucht es später noch einmal.',
+      en: "Sorry, that didn't work. Please try again later.",
+      es: 'Lo sentimos, no ha funcionado. Volved a intentarlo más tarde.',
+    },
   },
 } as const satisfies Record<string, UiText | Record<string, UiText>>;

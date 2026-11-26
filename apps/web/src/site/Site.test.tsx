@@ -1,11 +1,25 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { KEEP_WARM_IDLE_FALLBACK_MS } from './api/keep-warm.ts';
 import { Site } from './Site.tsx';
+import { json, mockApi, mockIntersectionObserver, openStatus } from './test/fake-api.ts';
 import { build, buildWithoutRsvp, content, contentWith, sections } from './test/fixture.ts';
+
+let api: ReturnType<typeof mockApi>;
 
 beforeEach(() => {
   localStorage.clear();
+  mockIntersectionObserver();
+  api = mockApi({
+    'GET /api/health': () => json(200, { status: 'ok' }),
+    'GET /api/rsvp/status': () => json(200, openStatus),
+  });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 
 const headings = () =>
@@ -94,11 +108,29 @@ describe('Site', () => {
     expect(document.getElementById('dresscode')).toBeNull();
   });
 
-  it('hides the RSVP section, its nav entry and the hero button when the flag is off', () => {
+  it('shows an "opens soon" note without hero button or API calls when the flag is off', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     render(<Site content={content} build={buildWithoutRsvp} initialLanguage="de" />);
-    expect(document.getElementById('rsvp')).toBeNull();
-    expect(screen.queryByRole('link', { name: 'Zusagen' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Ja, wir kommen' })).toBeNull();
+    const section = screen.getByRole('region', { name: 'Seid ihr dabei?' });
+    expect(
+      within(section).getByText('Die Anmeldung öffnet bald – schaut gern wieder vorbei.'),
+    ).toBeInTheDocument();
+    expect(within(section).queryByRole('button')).toBeNull();
+    expect(within(screen.getByRole('main')).queryByRole('link', { name: 'Zusagen' })).toBeNull();
+    expect(
+      within(screen.getByRole('navigation')).getByRole('link', { name: 'Zusagen' }),
+    ).not.toHaveClass('nav-rsvp');
+
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(api.calls).toEqual([]);
+  });
+
+  it('calls no API on page load except the keep-warm ping', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    render(<Site content={content} build={build} initialLanguage="de" />);
+    expect(api.calls).toEqual([]);
+    await vi.advanceTimersByTimeAsync(KEEP_WARM_IDLE_FALLBACK_MS);
+    expect(api.calls.map((call) => `${call.method} ${call.url}`)).toEqual(['GET /api/health']);
   });
 
   it('links the hero button to the RSVP section when the flag is on', () => {

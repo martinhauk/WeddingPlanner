@@ -1,4 +1,4 @@
-import type { Features, Section, SiteContent } from '@weddingplanner/content';
+import type { Section, SiteContent } from '@weddingplanner/content';
 import { type Lang, t } from '../i18n.ts';
 import { sectionTitles } from '../ui.ts';
 
@@ -13,19 +13,19 @@ export function navLabel(section: Section, lang: Lang): string {
 }
 
 /**
- * Whether the page shows the section: not hidden by the content, and its feature switched on for
- * this build (the RSVP section needs `features.rsvp`; the API enforces the same flag).
+ * Whether the page shows the section: not hidden by the content. The RSVP section is shown with
+ * `features.rsvp` off too, with an "opens soon" note instead of the form (the API enforces the flag).
  */
-export function isShown(section: Section, features: Features): boolean {
-  return section.visible !== false && (section.type !== 'rsvp' || features.rsvp);
+export function isShown(section: Section): boolean {
+  return section.visible !== false;
 }
 
 export type NavItem = { readonly id: string; readonly label: string };
 
 /** Navigation entries: every shown section that has a label, in content order. */
-export function navItems(content: SiteContent, features: Features, lang: Lang): NavItem[] {
+export function navItems(content: SiteContent, lang: Lang): NavItem[] {
   return content.sections
-    .filter((section) => isShown(section, features))
+    .filter(isShown)
     .map((section) => ({ id: section.id, label: navLabel(section, lang) }))
     .filter((item) => item.label !== '');
 }

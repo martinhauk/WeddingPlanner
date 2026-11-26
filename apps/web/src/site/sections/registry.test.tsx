@@ -71,11 +71,15 @@ describe('section registry', () => {
     }
   });
 
-  it('renders the RSVP section only with the rsvp flag', () => {
-    expect(isShown(sections.rsvp, build.features)).toBe(true);
-    expect(isShown(sections.rsvp, buildWithoutRsvp.features)).toBe(false);
-    const { container } = render(renderSection(sections.rsvp, { ...ctx, build: buildWithoutRsvp }));
-    expect(container).toBeEmptyDOMElement();
+  it('renders the RSVP section without the rsvp flag as an "opens soon" note', () => {
+    expect(isShown(sections.rsvp)).toBe(true);
+    expect(isShown(sections.dresscode)).toBe(false);
+    render(renderSection(sections.rsvp, { ...ctx, build: buildWithoutRsvp }));
+    expect(screen.getByRole('region', { name: 'Seid ihr dabei?' })).toBeInTheDocument();
+    expect(
+      screen.getByText('Die Anmeldung öffnet bald – schaut gern wieder vorbei.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button')).toBeNull();
   });
 });
 
@@ -90,13 +94,13 @@ describe('titles and navigation', () => {
     const untitled: Section = { id: 'quote', type: 'text', data: { text: { de: 'Zitat' } } };
     render(renderSection(untitled, ctx));
     expect(screen.queryByRole('heading')).toBeNull();
-    expect(navItems({ ...content, sections: [untitled] }, build.features, 'de')).toEqual([]);
+    expect(navItems({ ...content, sections: [untitled] }, 'de')).toEqual([]);
   });
 
   it('lists shown sections only, with the nav label first', () => {
-    const items = navItems(content, buildWithoutRsvp.features, 'en');
+    const items = navItems(content, 'en');
     expect(items.map((item) => item.id)).not.toContain('dresscode');
-    expect(items.map((item) => item.id)).not.toContain('rsvp');
+    expect(items.find((item) => item.id === 'rsvp')?.label).toBe('RSVP');
     expect(items.find((item) => item.id === 'faq')?.label).toBe('FAQ');
   });
 });
