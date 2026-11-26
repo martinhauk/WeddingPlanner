@@ -59,11 +59,25 @@ public sealed class ProbeFunctionTests
     }
 
     [Fact]
-    public async Task IsOnByDefaultAndSetsTheProbeCookie()
+    public async Task IsOffByCodeDefault()
     {
+        // Every app setting has a code default, and a missing one may only disable a feature (CLAUDE.md).
+        ProbeFunction.EnabledByDefault.ShouldBeFalse();
         var httpContext = CreateHttpContext();
 
         await RunAsync(Probe(settingValue: null), httpContext);
+
+        httpContext.Response.StatusCode.ShouldBe(StatusCodes.Status404NotFound);
+        httpContext.Response.Headers.CacheControl.ToString().ShouldBe("no-store");
+        httpContext.Response.Headers.ContainsKey("Set-Cookie").ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task SwitchedOnItSetsTheProbeCookie()
+    {
+        var httpContext = CreateHttpContext();
+
+        await RunAsync(Probe(), httpContext);
 
         httpContext.Response.StatusCode.ShouldBe(StatusCodes.Status200OK);
         httpContext.Response.ContentType.ShouldNotBeNull().ShouldStartWith("application/json");
@@ -72,12 +86,10 @@ public sealed class ProbeFunctionTests
     }
 
     [Theory]
-    [InlineData("")]
-    [InlineData(" ")]
     [InlineData("true")]
     [InlineData("True")]
     [InlineData(" TRUE ")]
-    public void MissingEmptyOrTrueSettingKeepsTheProbeOn(string value)
+    public void OnlyATrueSettingSwitchesTheProbeOn(string value)
     {
         var httpContext = CreateHttpContext();
 
@@ -88,12 +100,14 @@ public sealed class ProbeFunctionTests
     }
 
     [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
     [InlineData("false")]
     [InlineData("False")]
     [InlineData("0")]
     [InlineData("off")]
     [InlineData("not-a-boolean")]
-    public async Task FalseOrMalformedSettingAnswers404WithoutACookie(string value)
+    public async Task EmptyFalseOrMalformedSettingAnswers404WithoutACookie(string value)
     {
         var httpContext = CreateHttpContext();
         httpContext.Request.Headers["X-Forwarded-For"] = ClientAddress;
@@ -111,25 +125,44 @@ public sealed class ProbeFunctionTests
         ReadBody(httpContext).ShouldNotContain(ClientAddress);
     }
 
-    [Fact]
-    public void TheAppSettingDiagnosticsProbeEnabledSwitchesItOff()
+    [Theory]
+    [InlineData("true", StatusCodes.Status200OK)]
+    [InlineData("false", StatusCodes.Status404NotFound)]
+    public void TheAppSettingHealthProbeEnabledSwitchesIt(string value, int expectedStatus)
     {
         // App settings arrive as environment variables; "__" maps to the configuration key separator.
         var prefix = $"WPTEST_{Guid.NewGuid():N}_";
-        var variable = prefix + "Diagnostics__ProbeEnabled";
-        Environment.SetEnvironmentVariable(variable, "false");
+        var variable = prefix + "HealthProbe__Enabled";
+        Environment.SetEnvironmentVariable(variable, value);
         try
         {
             var configuration = new ConfigurationBuilder().AddEnvironmentVariables(prefix).Build();
             var httpContext = CreateHttpContext();
 
             new ProbeFunction(configuration).Run(httpContext.Request)
-                .ShouldBeOfType<ObjectResult>().StatusCode.ShouldBe(StatusCodes.Status404NotFound);
+                .ShouldBeAssignableTo<ObjectResult>().ShouldNotBeNull().StatusCode.ShouldBe(expectedStatus);
         }
         finally
         {
             Environment.SetEnvironmentVariable(variable, null);
         }
+    }
+
+    [Fact]
+    public void TheAppSettingAvoidsThePrefixesStaticWebAppsReserves()
+    {
+        // Static Web Apps rejects app settings with these prefixes (case-insensitive), so a Diagnostics__ name
+        // could never be set; infra/app/tests checks the same list for every Bicep app setting.
+        string[] reserved =
+        [
+            "APPSETTING_", "AZUREBLOBSTORAGE_", "AZUREFILESSTORAGE_", "AZURE_FUNCTION_", "CONTAINER_", "DIAGNOSTICS_",
+            "DOCKER_", "FUNCTIONS_", "IDENTITY_", "MACHINEKEY_", "MAINSITE_", "MSDEPLOY_", "SCMSITE_", "SCM_",
+            "WEBSITES_", "WEBSITE_", "WEBSOCKET_", "AZUREWEB",
+        ];
+        var appSetting = ProbeFunction.EnabledSettingKey.Replace(":", "__", StringComparison.Ordinal);
+
+        appSetting.ShouldBe("HealthProbe__Enabled");
+        reserved.ShouldAllBe(prefix => !appSetting.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -142,7 +175,7 @@ public sealed class ProbeFunctionTests
         httpContext.Request.Headers["X-Forwarded-Host"] = ForwardedHost;
         httpContext.Request.Headers["Accept"] = "application/json";
 
-        await RunAsync(Probe(settingValue: null), httpContext);
+        await RunAsync(Probe(), httpContext);
 
         using var body = JsonDocument.Parse(ReadBody(httpContext));
         var root = body.RootElement;
@@ -198,12 +231,12 @@ public sealed class ProbeFunctionTests
     public async Task TheSecondCallOfTheRoundTripSeesTheCookieOfTheFirst()
     {
         var first = CreateHttpContext();
-        await RunAsync(Probe(settingValue: null), first);
+        await RunAsync(Probe(), first);
         var nameAndValue = first.Response.Headers.SetCookie.ToString().Split(';')[0];
         var second = CreateHttpContext();
         second.Request.Headers.Cookie = nameAndValue;
 
-        await RunAsync(Probe(settingValue: null), second);
+        await RunAsync(Probe(), second);
 
         ReadJson(first).GetProperty("cookieReceived").GetBoolean().ShouldBeFalse();
         ReadJson(second).GetProperty("cookieReceived").GetBoolean().ShouldBeTrue();
@@ -356,7 +389,7 @@ public sealed class ProbeFunctionTests
         var services = new ServiceCollection();
         services.AddLogging(logging => logging.SetMinimumLevel(LogLevel.Trace).AddProvider(sink));
         services.AddMvcCore();
-        services.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
+        services.AddSingleton<IConfiguration>(Enabled());
         await using var provider = services.BuildServiceProvider();
         var httpContext = CreateHttpContext(provider);
         httpContext.Connection.RemoteIpAddress = IPAddress.Parse(EdgeAddress);
@@ -378,11 +411,11 @@ public sealed class ProbeFunctionTests
     }
 
     [Fact]
-    public void AnswersWithTheAppServicesAndNoConfigurationAtAll()
+    public void AnswersWithTheAppServicesAndNoOtherConfiguration()
     {
-        // No Diagnostics__ProbeEnabled, no storage, no feature flags: the probe is on by code default.
+        // Only HealthProbe__Enabled: no storage, no feature flags.
         var services = new ServiceCollection();
-        var configuration = new ConfigurationBuilder().Build();
+        var configuration = Enabled();
         services.AddSingleton<IConfiguration>(configuration);
         Program.ConfigureServices(services, configuration);
         using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateOnBuild = true, ValidateScopes = true });
@@ -392,6 +425,12 @@ public sealed class ProbeFunctionTests
 
         result.ShouldBeOfType<OkObjectResult>().Value.ShouldBeOfType<ProbeResponse>().CookieReceived.ShouldBeFalse();
     }
+
+    private static IConfiguration Enabled() => new ConfigurationBuilder()
+        .AddInMemoryCollection(new Dictionary<string, string?> { [ProbeFunction.EnabledSettingKey] = "true" })
+        .Build();
+
+    private static ProbeFunction Probe() => new(Enabled());
 
     private static ProbeFunction Probe(string? settingValue)
     {
@@ -413,7 +452,7 @@ public sealed class ProbeFunctionTests
             httpContext.Request.Headers[header.Key] = header.Value;
         }
 
-        return Probe(settingValue: null).Run(httpContext.Request)
+        return Probe().Run(httpContext.Request)
             .ShouldBeOfType<OkObjectResult>().Value.ShouldBeOfType<ProbeResponse>();
     }
 

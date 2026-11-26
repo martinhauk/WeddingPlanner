@@ -181,20 +181,19 @@ In the worker pipeline, before any storage I/O (`apps/api/CLAUDE.md`, "Request p
 - **Rate limits** (in memory, per worker instance): per client 10 writes per 10 minutes and 60 reads per
   minute, plus 120 writes per minute per instance for all clients together. Overridable with
   `RateLimiting__WritesPerClient`, `__WriteWindowSeconds`, `__ReadsPerClient`, `__ReadWindowSeconds`,
-  `__InstanceWritesPerMinute`. The client key is the address in `RateLimiting__ClientIpHeader` (default
-  `x-azure-clientip`), else the first `X-Forwarded-For` entry without port; IPv6 counts per /64. On the
-  Functions host the worker never sees the client's `X-Forwarded-For` (the host replaces it, and the
-  connection address is the host or proxy peer, the same for every guest), so the configured
-  single-address header is the only real per-client source. The connection address is never used.
-  Without a usable header a request has no client key: it skips the per-client limits and only the
-  per-instance write limit applies. Addresses are never logged or stored. A write that the instance
+  `__InstanceWritesPerMinute`. The client key is the address in the trusted header named by
+  `RateLimiting__ClientIpHeader` (port removed, IPv6 per /64). Its code default is empty: on the SWA
+  managed API no header carries the caller's address (the candidates are spoofable or shared platform
+  addresses, [ADR 0011](adr/0011-client-ip.md)), so no header is trusted. `X-Forwarded-For` and the
+  connection address are never used. A request without a client key skips the per-client limits and
+  only the per-instance write limit applies. Addresses are never logged or stored. A write that the instance
   limit refuses gives its per-client permit back, and a write that the client limit refuses never uses
   the instance budget.
-- **Before `Features__Rsvp` is turned on in `production`:** the platform probe
-  (`scripts/smoke/api-probe.sh`, or `GET /api/health/probe` directly) run against the `e2e` environment
-  must confirm that `x-azure-clientip` reaches the API and that a client-sent value does not pass through
-  (not spoofable). Otherwise the per-client limits are either off or trivially bypassed, and only the
-  per-instance limit protects the API.
+- **Platform probe:** `GET /api/health/probe` (switch `HealthProbe__Enabled`, code default off, on for
+  `e2e` only) with `scripts/smoke/api-probe.sh`. It found that the per-client limits cannot be keyed on
+  the managed API, so the per-instance limit protects it ([ADR 0011](adr/0011-client-ip.md)). Re-run it on
+  `e2e` after platform changes; set `RateLimiting__ClientIpHeader` only if it reports a header that the
+  platform overwrites with the caller's address.
 - **CSRF:** `SameSite=Strict` credential cookie, JSON-only bodies (a cross-site JSON request needs a
   preflight the API never answers; no CORS headers), and writes with `Sec-Fetch-Site: cross-site` are
   rejected.

@@ -6,6 +6,7 @@
     "Storage__ConnectionString": "UseDevelopmentStorage=true",
     "Features__Rsvp": "true",
     "Features__Admin": "true",
+    "HealthProbe__Enabled": "true",
     "Rsvp__Deadline": "2099-05-01 23:59:00+02:00",
     "Rsvp__TimeZone": "Europe/Berlin"
   }

@@ -126,6 +126,8 @@ module staticWebApp './modules/static-web-app.bicep' = {
     featuresAdmin: featuresAdmin
     rsvpDeadline: rsvpDeadline
     rsvpTimeZone: rsvpTimeZone
+    // The platform probe (scripts/smoke/api-probe.sh) runs on e2e only; test and production answer 404.
+    healthProbeEnabled: environmentName == 'e2e'
   }
 }
 

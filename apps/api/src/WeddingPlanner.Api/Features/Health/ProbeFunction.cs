@@ -12,15 +12,16 @@ using WeddingPlanner.Api.Pipeline;
 namespace WeddingPlanner.Api.Features.Health;
 
 /// <summary>
-/// <c>GET /api/health/probe</c>: a temporary, switchable platform probe for two undocumented Static Web Apps
+/// <c>GET /api/health/probe</c>: a switchable platform probe (off by default) for two undocumented Static Web Apps
 /// behaviours. It echoes the caller's own forwarding headers (which header carries the client IP, and at which
 /// <c>X-Forwarded-For</c> position) and sets the <c>wp_probe</c> cookie so a second call shows whether the cookie
 /// survives the proxy in both directions (<c>scripts/smoke/api-probe.sh</c> runs the round trip).
 /// </summary>
 /// <remarks>
 /// Anonymous, never feature-gated, no I/O, <c>Cache-Control: no-store</c>. The values are only echoed to the
-/// caller: never logged or stored. Switched off with the app setting <c>Diagnostics__ProbeEnabled=false</c> once
-/// the findings are recorded (S0-12); it then answers 404 like a disabled feature.
+/// caller: never logged or stored. Off by code default; the app setting <c>HealthProbe__Enabled=true</c> switches
+/// it on, which infra/app does on <c>e2e</c> only. Switched off it answers 404 like a disabled feature. Findings:
+/// ADR 0011 (<c>docs/adr/0011-client-ip.md</c>).
 /// <para>
 /// The worker sees the request after the Functions host has proxied it, and the forwarded-headers handling of the
 /// ASP.NET Core integration may already have consumed the last <c>X-Forwarded-For</c> entry: it then moves that
@@ -33,11 +34,14 @@ public sealed class ProbeFunction(IConfiguration configuration)
     /// <summary>Function name (no <c>Rsvp</c>/<c>Admin</c> prefix, so the feature gate never applies).</summary>
     public const string FunctionName = "HealthProbe";
 
-    /// <summary>Configuration key of the app setting <c>Diagnostics__ProbeEnabled</c>.</summary>
-    public const string EnabledSettingKey = "Diagnostics:ProbeEnabled";
+    /// <summary>
+    /// Configuration key of the app setting <c>HealthProbe__Enabled</c>. Not <c>Diagnostics__…</c>: Static Web Apps
+    /// rejects app settings that start with <c>DIAGNOSTICS_</c>.
+    /// </summary>
+    public const string EnabledSettingKey = "HealthProbe:Enabled";
 
-    /// <summary>Code default of <see cref="EnabledSettingKey"/>: on until the measurement is recorded.</summary>
-    public const bool EnabledByDefault = true;
+    /// <summary>Code default of <see cref="EnabledSettingKey"/>: off, so a missing setting never exposes the probe.</summary>
+    public const bool EnabledByDefault = false;
 
     /// <summary>Name of the probe cookie.</summary>
     public const string CookieName = "wp_probe";
@@ -115,7 +119,7 @@ public sealed class ProbeFunction(IConfiguration configuration)
     }
 
     /// <summary>
-    /// Reads <c>Diagnostics__ProbeEnabled</c>: missing or empty means <see cref="EnabledByDefault"/>, a boolean
+    /// Reads <c>HealthProbe__Enabled</c>: missing or empty means <see cref="EnabledByDefault"/> (off), a boolean
     /// is taken as is, and a malformed value switches the probe off (fail closed).
     /// </summary>
     internal static bool IsEnabled(string? value)

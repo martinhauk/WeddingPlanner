@@ -81,11 +81,13 @@ always writes the complete set. The API has a code default for each.
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | Read from the `existing` Application Insights component            |
 | `Features__Rsvp`, `Features__Admin`     | `true` or `false`                                                  |
 | `Rsvp__Deadline`, `Rsvp__TimeZone`      | `rsvpDeadline`, `rsvpTimeZone`                                     |
+| `HealthProbe__Enabled`                  | `true` on `e2e` only (platform probe, ADR 0011), else `false`      |
 
 Both connection strings are secrets: they go straight into the app settings and are never a
 parameter or an output. Shared key access stays enabled on the storage account because SWA managed
 functions have no managed identity. Setting names avoid the prefixes SWA reserves (`AzureWeb*`,
-`WEBSITE_*`, `FUNCTIONS_*`, ...), which is why the connection string is not `AzureWebJobsStorage`.
+`WEBSITE_*`, `FUNCTIONS_*`, `DIAGNOSTICS_*`, ...), which is why the connection string is not
+`AzureWebJobsStorage` and the probe switch is not `Diagnostics__…`.
 
 ## Alerts
 

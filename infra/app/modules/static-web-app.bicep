@@ -34,6 +34,9 @@ param rsvpDeadline string
 @description('IANA time zone of the RSVP deadline (app setting Rsvp__TimeZone).')
 param rsvpTimeZone string
 
+@description('Switches the platform probe GET /api/health/probe on (app setting HealthProbe__Enabled, ADR 0011).')
+param healthProbeEnabled bool
+
 resource storageAccount 'Microsoft.Storage/storageAccounts@2026-06-01' existing = {
   name: storageAccountName
 }
@@ -72,6 +75,7 @@ resource appSettings 'Microsoft.Web/staticSites/config@2025-03-01' = {
     Features__Admin: featuresAdmin ? 'true' : 'false'
     Rsvp__Deadline: rsvpDeadline
     Rsvp__TimeZone: rsvpTimeZone
+    HealthProbe__Enabled: healthProbeEnabled ? 'true' : 'false'
   }
 }
 
