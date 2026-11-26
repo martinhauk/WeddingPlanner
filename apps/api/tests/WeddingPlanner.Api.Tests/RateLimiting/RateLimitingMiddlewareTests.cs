@@ -20,6 +20,9 @@ public sealed class RateLimitingMiddlewareTests
 {
     private const string ProxyPeerAddress = "192.0.2.10";
 
+    /// <summary>The header these tests configure as trusted (the code default trusts none).</summary>
+    private const string TrustedHeader = "x-trusted-client-ip";
+
     private readonly FakeTimeProvider _time = new(new DateTimeOffset(2099, 4, 1, 10, 0, 0, TimeSpan.Zero));
 
     [Fact]
@@ -169,6 +172,34 @@ public sealed class RateLimitingMiddlewareTests
         (await InvokeAsync(middleware, "RsvpGetMine", "GET", clientAddress: null)).FunctionRan.ShouldBeTrue();
     }
 
+    [Fact]
+    public async Task WithTheCodeDefaultSpoofedHeadersGiveNoPerClientKey()
+    {
+        // On the managed API these headers pass a client value through unchanged (ADR 0011). With the default
+        // options a caller can neither rotate them past the per-client limit nor pin another guest's bucket:
+        // there is no per-client bucket at all, only the instance backstop.
+        var middleware = new RateLimitingMiddleware(
+            Microsoft.Extensions.Options.Options.Create(Options(new()
+            {
+                ["RateLimiting:WritesPerClient"] = "1",
+                ["RateLimiting:ReadsPerClient"] = "1",
+                ["RateLimiting:InstanceWritesPerMinute"] = "2",
+            })),
+            _time);
+        string[] spoofable = ["X-Azure-ClientIP", "X-Azure-SocketIP", "X-Client-IP", "X-Real-IP", "True-Client-IP", "X-Forwarded-For"];
+
+        for (var index = 0; index < 2; index++)
+        {
+            (await InvokeAsync(middleware, "RsvpCreate", "POST", clientAddress: null, Spoofed(spoofable, "203.0.113.1")))
+                .FunctionRan.ShouldBeTrue("a repeated spoofed value never hits a per-client limit");
+            (await InvokeAsync(middleware, "RsvpStatus", "GET", clientAddress: null, Spoofed(spoofable, "203.0.113.1")))
+                .FunctionRan.ShouldBeTrue();
+        }
+
+        (await InvokeAsync(middleware, "RsvpCreate", "POST", clientAddress: null, Spoofed(spoofable, "203.0.113.99")))
+            .FunctionRan.ShouldBeFalse("a rotated spoofed value does not escape the instance backstop");
+    }
+
     [Theory]
     [InlineData("Health", "GET")]
     [InlineData("HealthProbe", "GET")]
@@ -214,11 +245,18 @@ public sealed class RateLimitingMiddlewareTests
         options.ReadsPerClient.ShouldBe(60);
         options.ReadWindow.ShouldBe(TimeSpan.FromMinutes(1));
         options.InstanceWritesPerMinute.ShouldBe(120);
-        options.ClientIpHeader.ShouldBe("x-azure-clientip");
+        options.ClientIpHeader.ShouldBeEmpty("no header is trusted by default (ADR 0011)");
     }
 
-    private RateLimitingMiddleware Middleware(Dictionary<string, string?>? settings = null) =>
-        new(Microsoft.Extensions.Options.Options.Create(Options(settings ?? [])), _time);
+    /// <summary>A middleware that trusts <see cref="TrustedHeader"/>, so the per-client limits can be tested.</summary>
+    private RateLimitingMiddleware Middleware(Dictionary<string, string?>? settings = null)
+    {
+        var withTrustedHeader = new Dictionary<string, string?>(settings ?? []) { ["RateLimiting:ClientIpHeader"] = TrustedHeader };
+        return new(Microsoft.Extensions.Options.Options.Create(Options(withTrustedHeader)), _time);
+    }
+
+    private static Dictionary<string, string> Spoofed(IEnumerable<string> names, string value) =>
+        names.ToDictionary(name => name, _ => value, StringComparer.OrdinalIgnoreCase);
 
     private static RateLimitingOptions Options(Dictionary<string, string?> settings)
     {
@@ -233,7 +271,8 @@ public sealed class RateLimitingMiddlewareTests
         RateLimitingMiddleware middleware,
         string functionName,
         string method,
-        string? clientAddress)
+        string? clientAddress,
+        Dictionary<string, string>? otherHeaders = null)
     {
         var httpContext = TestFunctionContext.CreateHttpContext();
         httpContext.Request.Method = method;
@@ -242,7 +281,12 @@ public sealed class RateLimitingMiddlewareTests
         httpContext.Connection.RemoteIpAddress = IPAddress.Parse(ProxyPeerAddress);
         if (clientAddress is not null)
         {
-            httpContext.Request.Headers["X-Azure-ClientIP"] = clientAddress;
+            httpContext.Request.Headers[TrustedHeader] = clientAddress;
+        }
+
+        foreach (var (name, value) in otherHeaders ?? [])
+        {
+            httpContext.Request.Headers[name] = value;
         }
 
         var functionRan = false;

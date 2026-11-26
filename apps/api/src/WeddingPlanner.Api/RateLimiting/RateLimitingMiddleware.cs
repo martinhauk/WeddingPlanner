@@ -24,9 +24,10 @@ namespace WeddingPlanner.Api.RateLimiting;
 /// </list>
 /// A write the instance backstop refuses gives its per-client permit back. A refused request answers 429
 /// <c>rate_limited</c> problem+json with <c>Retry-After</c> in seconds. The client
-/// key comes from <see cref="ClientAddress"/> and is never logged. A request without a client key (no usable
-/// client-address header) skips the per-client limits, so guests are never pooled into one shared bucket; its
-/// writes still count against the per-instance backstop. Health, probe and admin functions are not limited
+/// key comes from <see cref="ClientAddress"/> and is never logged. A request without a client key skips the
+/// per-client limits, so guests are never pooled into one shared bucket; its writes still count against the
+/// per-instance backstop. By code default no header is trusted (on the Static Web Apps managed API no header
+/// carries the caller's address, ADR 0011), so every request is such a request. Health, probe and admin functions are not limited
 /// here (the admin area is behind the platform login).
 /// </remarks>
 public sealed class RateLimitingMiddleware : IFunctionsWorkerMiddleware
@@ -71,7 +72,7 @@ public sealed class RateLimitingMiddleware : IFunctionsWorkerMiddleware
 
     private bool TryAcquire(HttpRequest request, out TimeSpan retryAfter)
     {
-        // Null when no client-address header is usable: then only the per-instance write backstop applies.
+        // Null without a trusted client-address header (the default): then only the per-instance write backstop applies.
         var key = ClientAddress.ResolveKey(request, _clientIpHeader);
         if (!RequestOriginGuardMiddleware.IsWrite(request.Method))
         {
