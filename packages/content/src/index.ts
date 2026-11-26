@@ -5,6 +5,13 @@
 // with `export type` only; validation and baking live in `@weddingplanner/content/node`.
 
 export { eventDate, privacyDeleteBy } from './privacy.ts';
+export {
+  type InlinePart,
+  isAllowedLinkUrl,
+  LINK_URL_PATTERN,
+  linkHref,
+  parseInline,
+} from './inline-text.ts';
 export { type LanguageFallback, resolveText } from './resolve-text.ts';
 export type { BuildInfo, VersionInfo } from './schema/build.ts';
 export type {
@@ -25,4 +32,5 @@ export type {
   SiteFontId,
   SitePrivacy,
   SiteTheme,
+  StoryItem,
 } from './schema/site-content.ts';

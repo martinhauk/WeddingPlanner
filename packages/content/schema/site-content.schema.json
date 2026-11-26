@@ -51,6 +51,14 @@
       "properties": {
         "image": {
           "$ref": "#/$defs/MediaPath"
+        },
+        "images": {
+          "minItems": 1,
+          "maxItems": 2,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MediaPath"
+          }
         }
       },
       "additionalProperties": false
@@ -225,6 +233,14 @@
             "line": {
               "type": "string",
               "pattern": "^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
+            },
+            "onAccent": {
+              "type": "string",
+              "pattern": "^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
+            },
+            "frame": {
+              "type": "string",
+              "pattern": "^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
             }
           },
           "required": [
@@ -308,6 +324,25 @@
           "properties": {
             "text": {
               "$ref": "#/$defs/LocalizedText"
+            },
+            "items": {
+              "maxItems": 30,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "heading": {
+                    "$ref": "#/$defs/LocalizedText"
+                  },
+                  "text": {
+                    "$ref": "#/$defs/LocalizedText"
+                  }
+                },
+                "required": [
+                  "text"
+                ],
+                "additionalProperties": false
+              }
             },
             "images": {
               "maxItems": 12,
@@ -467,6 +502,35 @@
                   },
                   "note": {
                     "$ref": "#/$defs/LocalizedText"
+                  },
+                  "links": {
+                    "maxItems": 10,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "$ref": "#/$defs/LocalizedText"
+                        },
+                        "url": {
+                          "type": "string",
+                          "pattern": "^(?:https:\\/\\/[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}(?::\\d{1,5})?(?:[/?#][^\\s<>\"'`\\\\]*)?|mailto:[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}|tel:\\+?[0-9](?:[0-9 ./-]*[0-9])?)$"
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "url"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "website": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "phone": {
+                    "type": "string",
+                    "pattern": "^\\+?[0-9][0-9 ()/-]{3,}[0-9]$"
                   }
                 },
                 "required": [

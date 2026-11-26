@@ -39,7 +39,8 @@ describe('samples/instance (fictional sample)', () => {
         /^https:\/\/(?:example\.com\/|raw\.githubusercontent\.com\/martinhauk\/)/,
       );
     }
-    for (const email of text.match(/[^\s"@]+@[^\s"]+/g) ?? []) {
+    // Also inside inline links: [mail us](mailto:anna@example.com).
+    for (const email of text.match(/[^\s"@():[\]]+@[^\s"()]+/g) ?? []) {
       expect(email).toMatch(/@example\.com$/);
     }
     for (const year of text.match(/\b(?:19|20)\d\d-\d\d-\d\d/g) ?? []) {

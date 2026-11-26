@@ -62,8 +62,9 @@ fails while the committed files are out of date. Never edit them by hand.
   Text fields are `Localizable`: a string, or `{ <lang>: text }` with canonical BCP 47 keys.
 - `site-content.json` (the one-pager, [`src/schema/site-content.ts`](src/schema/site-content.ts)):
   `couple`, `event {start, timeZone}`, `tagline`, `place`, `rsvpDeadline?` (display date only; the
-  API enforces `instance.json`), `theme {colors {bg, paper, ink, muted, accent, accentDark, line},
-  fonts {heading, body}}`, `hero {image?}` and `sections[]`. A section is
+  API enforces `instance.json`), `theme {colors {bg, paper, ink, muted, accent, accentDark, line,
+  onAccent?, frame?}, fonts {heading, body}}`, `hero {image? | images? (at most 2, side by side)}`
+  and `sections[]`. A section is
   `{id, type, title?, nav?, visible?, data}` with `type` one of `story`, `schedule`, `locations`,
   `weddingParty`, `dresscode`, `music`, `text`, `faq`, `gifts` (text only, no bank details),
   `contact` and `rsvp`; the page renders them in this order. A section with `visible: false` is a
@@ -79,6 +80,16 @@ fails while the committed files are out of date. Never edit them by hand.
   `imprint?`. A missing `privacy` block or email is a warning (`W_PRIVACY_MISSING`,
   `W_PRIVACY_EMAIL`): fill both before RSVP goes live. The built-in notice text lives in the web
   app (`apps/web/src/site/privacy/`).
+- Story `items[] {heading?, text}` (e.g. a question and its answer); location cards take
+  `links[] {label, url}`, `website` and `phone`.
+- **Inline links** in any text: `[label](https://…)`, `[label](mailto:…)` or `[label](tel:…)`
+  (`parseInline` in the browser entry). Nothing else is markup: `validate` rejects other link
+  schemes (`E_LINK`) and raw HTML (`E_HTML`), and the page renders everything else as plain text.
+- **Dark themes** need no extra settings: `themeCss` derives `color-scheme`, the text color on
+  accent buttons (white or the theme's darkest color, whichever passes WCAG AA; or `onAccent`),
+  the hero's text and scrim colors and a readable error color from the theme. `frame` makes the
+  page a centered column on that color on wide screens. Each font sets its own body weight and
+  size (`bodyWeight`, `bodySize`): `eb-garamond` reads best for long text on dark backgrounds.
 - All three are strict (unknown keys are errors) and accept an optional `$schema`.
 
 The fictional sample lives in [`samples/instance/`](../../samples/instance). Its placeholder images

@@ -27,7 +27,7 @@ describe('validate: the sample instance', () => {
     const result = await validate(DEFAULT_INSTANCE_DIR);
     expect(result.instance?.sample).toBe(true);
     expect(result.site?.i18n).toEqual({ languages: ['de', 'en', 'es'], defaultLanguage: 'de' });
-    expect(result.media.map((m) => m.id)).toEqual(['hero.png', 'portrait.png']);
+    expect(result.media.map((m) => m.id)).toEqual(['garden.png', 'hero.png', 'portrait.png']);
     expect(result.siteContent?.sections.length).toBeGreaterThan(0);
   });
 
@@ -258,6 +258,7 @@ describe('validate: media', () => {
     expect(JSON.stringify(result.diagnostics)).not.toMatch(/pablo|broken/);
     expect(result.media.map((m) => [m.id, m.width, m.height])).toEqual([
       ['gallery/tiny.png', 4, 3],
+      ['garden.png', 800, 1000],
       ['hero.png', 1600, 900],
       ['portrait.png', 800, 1000],
     ]);

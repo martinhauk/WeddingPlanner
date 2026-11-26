@@ -1,4 +1,5 @@
 import { eventDate } from '../privacy.ts';
+import { inlineProblems } from '../inline-text.ts';
 import { collectLocalizedTexts, SITE_LANGUAGES } from '../schema/localizable.ts';
 import {
   RESERVED_SECTION_IDS,
@@ -27,7 +28,8 @@ export type SiteContentCheck = {
 
 /**
  * Validates the parsed JSON of `site-content.json`: the schema, then what the schema cannot express
- * (unique ids, schedule → location references, media that exist in `media/`) and translations that
+ * (one of hero image/images, unique ids, schedule → location references, media that exist in
+ * `media/`, inline links with an allowed scheme and no raw HTML in any text) and translations that
  * fall back to German (warnings only: English and Spanish are optional by design).
  *
  * `mediaIds` are the ids of the instance's media (paths relative to `media/`).
@@ -41,12 +43,14 @@ export function checkSiteContent(value: unknown, mediaIds: ReadonlySet<string>):
   }
   const content = parsed.data;
   const diagnostics = [
+    ...checkHero(content),
     ...checkIds(content),
     ...checkLocationReferences(content),
     ...checkMedia(content, mediaIds),
     ...checkPrivacy(content),
   ];
   for (const { path, text } of findLocalizedTexts(content, texts)) {
+    diagnostics.push(...checkInlineText(path, text));
     for (const language of SITE_LANGUAGES) {
       const translation = text[language];
       if (translation === undefined || translation.trim() === '') {
@@ -105,6 +109,48 @@ export function publishedSiteContent(content: SiteContent): SiteContent {
 export function publishedMedia(content: SiteContent, media: readonly MediaSource[]): MediaSource[] {
   const referenced = new Set(mediaReferences(content).map((ref) => ref.id));
   return media.filter((item) => referenced.has(item.id));
+}
+
+function checkHero(content: SiteContent): Diagnostic[] {
+  return content.hero.image !== undefined && content.hero.images !== undefined
+    ? [
+        error(
+          'E_HERO_IMAGES',
+          SITE_CONTENT_FILE,
+          jsonPath(['hero']),
+          'set either image or images, not both',
+        ),
+      ]
+    : [];
+}
+
+/** Links must use https, mailto: or tel:; raw HTML is never allowed (one finding per kind). */
+function checkInlineText(
+  path: PropertyKey[],
+  text: Record<string, string | undefined>,
+): Diagnostic[] {
+  const diagnostics: Diagnostic[] = [];
+  const reported = new Set<string>();
+  for (const [language, value] of Object.entries(text)) {
+    for (const problem of value === undefined ? [] : inlineProblems(value)) {
+      if (reported.has(problem)) {
+        continue;
+      }
+      reported.add(problem);
+      const at = jsonPath([...path, language]);
+      diagnostics.push(
+        problem === 'link'
+          ? error(
+              'E_LINK',
+              SITE_CONTENT_FILE,
+              at,
+              'links must be [text](https://…), mailto: or tel:',
+            )
+          : error('E_HTML', SITE_CONTENT_FILE, at, 'raw HTML is not allowed; write [text](url)'),
+      );
+    }
+  }
+  return diagnostics;
 }
 
 function checkIds(content: SiteContent): Diagnostic[] {
@@ -211,6 +257,9 @@ export function mediaReferences(content: SiteContent): Array<{ path: PropertyKey
   if (content.hero.image !== undefined) {
     refs.push({ path: ['hero', 'image'], id: content.hero.image });
   }
+  content.hero.images?.forEach((id, i) => {
+    refs.push({ path: ['hero', 'images', i], id });
+  });
   content.sections.forEach((section, index) => {
     const at = ['sections', index, 'data'];
     switch (section.type) {

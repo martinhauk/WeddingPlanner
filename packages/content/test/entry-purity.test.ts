@@ -53,7 +53,15 @@ describe('the browser entry (`@weddingplanner/content`)', () => {
 
   it('exports only pure helpers at runtime', async () => {
     const entry = await import('../src/index.ts');
-    expect(Object.keys(entry).sort()).toEqual(['eventDate', 'privacyDeleteBy', 'resolveText']);
+    expect(Object.keys(entry).sort()).toEqual([
+      'LINK_URL_PATTERN',
+      'eventDate',
+      'isAllowedLinkUrl',
+      'linkHref',
+      'parseInline',
+      'privacyDeleteBy',
+      'resolveText',
+    ]);
   });
 
   it('the checker itself sees zod and Node imports in the node entry', async () => {

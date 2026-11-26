@@ -19,13 +19,13 @@
       "paper": "#fffdf9",
       "ink": "#2f2b27",
       "muted": "#6f675f",
-      "accent": "#7d8e70",
+      "accent": "#66785a",
       "accentDark": "#5b6a51",
       "line": "#e7e0d6"
     },
     "fonts": { "heading": "cormorant-garamond", "body": "jost" }
   },
-  "hero": { "image": "hero.png" },
+  "hero": { "images": ["hero.png", "garden.png"] },
   "sections": [
     {
       "id": "story",
@@ -40,11 +40,65 @@
         },
         "images": [
           {
+            "src": "garden.png",
+            "alt": {
+              "de": "Platzhalterbild: ein goldener Ring",
+              "en": "Placeholder picture: a golden ring",
+              "es": "Imagen de ejemplo: un anillo dorado"
+            }
+          },
+          {
             "src": "portrait.png",
             "alt": {
               "de": "Platzhalterbild von Anna und Ben",
               "en": "Placeholder picture of Anna and Ben",
               "es": "Imagen de ejemplo de Anna y Ben"
+            }
+          },
+          {
+            "src": "hero.png",
+            "alt": {
+              "de": "Platzhalterbild: zwei Ringe",
+              "en": "Placeholder picture: two rings",
+              "es": "Imagen de ejemplo: dos anillos"
+            }
+          }
+        ],
+        "items": [
+          {
+            "heading": {
+              "de": "Wie habt ihr euch kennengelernt?",
+              "en": "How did you meet?",
+              "es": "¿Cómo os conocisteis?"
+            },
+            "text": {
+              "de": "Im Speisewagen gab es nur noch einen freien Platz – und eine letzte Tasse Kaffee.\n\nWir haben beides geteilt.",
+              "en": "There was only one free seat left in the dining car – and one last cup of coffee.\n\nWe shared both.",
+              "es": "En el vagón restaurante solo quedaba un asiento libre – y una última taza de café.\n\nCompartimos las dos cosas."
+            }
+          },
+          {
+            "heading": {
+              "de": "Wer hat den ersten Schritt gemacht?",
+              "en": "Who made the first move?",
+              "es": "¿Quién dio el primer paso?"
+            },
+            "text": {
+              "de": "Anna hat Ben nach seiner Handynummer gefragt – angeblich nur wegen der Verspätungsentschädigung.",
+              "en": "Anna asked Ben for his number – supposedly only for the delay compensation form.",
+              "es": "Anna le pidió a Ben su número – supuestamente solo por la indemnización del retraso."
+            }
+          },
+          {
+            "heading": {
+              "de": "Wohin geht die nächste Reise?",
+              "en": "Where are you travelling next?",
+              "es": "¿Adónde viajáis ahora?"
+            },
+            "text": {
+              "de": "Das verraten wir nach der Hochzeit. Tipps nehmen wir gerne per [E-Mail](mailto:anna@example.com) entgegen.",
+              "en": "We'll tell you after the wedding. Tips are welcome by [email](mailto:anna@example.com).",
+              "es": "Os lo contaremos después de la boda. Aceptamos consejos por [correo](mailto:anna@example.com)."
             }
           }
         ]
@@ -95,7 +149,32 @@
             "kind": { "de": "Trauung", "en": "Ceremony", "es": "Ceremonia" },
             "address": "Beispielweg 1, 99999 Musterstadt",
             "lat": 51.1657,
-            "lng": 10.4515
+            "lng": 10.4515,
+            "note": {
+              "de": "Bitte parkt nur auf diesen Parkplätzen:",
+              "en": "Please park only in these car parks:",
+              "es": "Por favor, aparcad solo en estos aparcamientos:"
+            },
+            "links": [
+              {
+                "label": {
+                  "de": "Parkplatz am Friedhof",
+                  "en": "Car park at the cemetery",
+                  "es": "Aparcamiento del cementerio"
+                },
+                "url": "https://example.com/parking-cemetery"
+              },
+              {
+                "label": {
+                  "de": "Parkplatz am Sportplatz",
+                  "en": "Car park at the sports ground",
+                  "es": "Aparcamiento del campo de deportes"
+                },
+                "url": "https://example.com/parking-sports-ground"
+              }
+            ],
+            "website": "https://example.com/chapel",
+            "phone": "+49 151 22222222"
           },
           {
             "id": "estate",
@@ -195,9 +274,17 @@
       "title": { "de": "Let's Dance", "en": "Let's Dance", "es": "Let's Dance" },
       "data": {
         "text": {
-          "de": "Nach dem Eröffnungstanz gehört die Tanzfläche euch. Wer mag, übt vorher einen Discofox.",
-          "en": "After the first dance the floor is yours. Feel free to practise a few steps beforehand.",
-          "es": "Después del primer baile, la pista es vuestra. Quien quiera puede ensayar antes unos pasos."
+          "de": "Nach dem Eröffnungstanz gehört die Tanzfläche euch. Wer mag, übt vorher ein paar Schritte:\n\n[Discofox-Grundschritt](https://example.com/discofox)\n[Walzer für Einsteiger](https://example.com/waltz)",
+          "en": "After the first dance the floor is yours. Feel free to practise a few steps beforehand:\n\n[Discofox basic step](https://example.com/discofox)\n[Waltz for beginners](https://example.com/waltz)",
+          "es": "Después del primer baile, la pista es vuestra. Quien quiera puede ensayar antes unos pasos:\n\n[Paso básico de discofox](https://example.com/discofox)\n[Vals para principiantes](https://example.com/waltz)"
+        },
+        "image": {
+          "src": "garden.png",
+          "alt": {
+            "de": "Platzhalterbild: ein goldener Ring",
+            "en": "Placeholder picture: a golden ring",
+            "es": "Imagen de ejemplo: un anillo dorado"
+          }
         }
       }
     },
