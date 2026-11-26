@@ -10,6 +10,11 @@
 # shellcheck disable=SC2016 # $variables and \(...) in the single-quoted jq filters are jq's
 set -euo pipefail
 
+# CI sets GITHUB_REPOSITORY, GITHUB_RUN_NUMBER and friends in every step. Clear them, and any
+# UPTIME_* the caller has exported, so each case sees exactly the environment it sets up itself.
+unset GITHUB_REPOSITORY GITHUB_RUN_NUMBER GITHUB_OUTPUT GITHUB_STEP_SUMMARY \
+  UPTIME_HOST_E2E UPTIME_HOST_TEST UPTIME_HOST_PRODUCTION UPTIME_TIMEOUT UPTIME_RETRY_SECONDS
+
 HERE=$(cd "$(dirname "$0")" && pwd)
 SCRIPTS=$(cd "$HERE/.." && pwd)
 WORK=$(mktemp -d)
