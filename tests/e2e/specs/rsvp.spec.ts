@@ -121,6 +121,59 @@ test.describe('RSVP', () => {
     expect(rsvpApi.writes()).toEqual([]);
   });
 
+  test('the name rules and a name given twice are reported before anything is sent', async ({
+    page,
+    rsvpApi,
+  }) => {
+    await page.goto(`/#${RSVP_ID}`);
+    const rsvp = page.locator(`#${RSVP_ID}`);
+    await rsvp.getByRole('button', { name: 'Ja, wir kommen' }).click();
+    await rsvp.getByRole('button', { name: '+ Begleitung hinzufügen' }).click();
+    await rsvp.getByRole('button', { name: '+ Begleitung hinzufügen' }).click();
+    const name = (group: string) =>
+      rsvp.getByRole('group', { name: group, exact: true }).getByLabel('Name', { exact: true });
+    await name('Du').fill('A');
+    await name('Begleitung 1').fill('Jürgen Müller');
+    await name('Begleitung 2').fill('jurgen muller');
+    await rsvp.getByRole('button', { name: 'Antwort speichern' }).click();
+
+    await expect(rsvp.getByRole('alert')).toHaveText('Bitte prüft die markierten Angaben.');
+    await expect(name('Du')).toHaveAccessibleDescription('Bitte gebt den vollständigen Namen ein.');
+    await expect(name('Begleitung 1')).not.toHaveAttribute('aria-invalid', 'true');
+    await expect(name('Begleitung 2')).toHaveAccessibleDescription(
+      'Dieser Name steht schon in eurer Antwort.',
+    );
+    await snap(page, 'rsvp-name-rules', { lang: 'de', target: rsvp });
+    expect(rsvpApi.writes()).toEqual([]);
+  });
+
+  test('a refused submission is reported without its reason', async ({ page, rsvpApi }) => {
+    // Registered after the fake API, so this route answers the POST first.
+    await page.route('**/api/rsvp', (route) =>
+      route.request().method() === 'POST'
+        ? route.fulfill({
+            status: 400,
+            contentType: 'application/problem+json',
+            body: JSON.stringify({ status: 400, code: 'submission_rejected' }),
+          })
+        : route.fallback(),
+    );
+    await page.goto(`/#${RSVP_ID}`);
+    const rsvp = page.locator(`#${RSVP_ID}`);
+    await rsvp.getByRole('button', { name: 'Leider nicht' }).click();
+    await rsvp
+      .getByRole('group', { name: 'Du', exact: true })
+      .getByLabel('Name', { exact: true })
+      .fill('Pablo Pérez');
+    await rsvp.getByRole('button', { name: 'Antwort speichern' }).click();
+
+    await expect(rsvp.getByRole('alert')).toHaveText(
+      'Die Antwort konnte nicht gesendet werden. Bitte prüft eure Angaben und versucht es gleich noch einmal.',
+    );
+    await snap(page, 'rsvp-rejected', { lang: 'de', target: rsvp });
+    expect(rsvpApi.stored()).toBeUndefined();
+  });
+
   test('a returning guest sees, changes and withdraws the reply', async ({
     page,
     context,
