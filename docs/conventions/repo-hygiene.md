@@ -45,8 +45,9 @@ Use only these fictional people and obviously fictional details:
 - **Guest-visible features ship dark** ([feature-flags.md](feature-flags.md)).
 - **Every app setting has a code default.**
 - **No dependency without a reason**, stated in the PR.
-- **The home page calls no API** except the `GET /api/health` keep-warm ping, which performs no
-  I/O.
+- **On page load the home page calls no API** except the `GET /api/health` keep-warm ping, which
+  performs no I/O and runs only while the RSVP feature is on. The RSVP section calls `/api/rsvp*`
+  only once it nears the viewport or the guest presses a button.
 
 ## Local environment
 

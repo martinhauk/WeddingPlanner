@@ -31,7 +31,7 @@ Three environments (`e2e`, `test`, `production`) of one deployment run in one su
 | Meter                                        | Normal month                 | Under attack                                                                                                                                                            | Guardrail                                                                                                                      |
 | -------------------------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | SWA Free static traffic                      | €0                           | **€0**. Past 100 GB per month (shared by the whole subscription) the sites are not served until the month resets                                                        | Images ≤300 KB, first load about 1 MB (roughly 100,000 first visits per 100 GB); `bytes-sent` alert; never upgrade to Standard |
-| Managed function executions                  | about €0, keep-warm included | Billed beyond the free grant, 429 responses included: about $0.5-2 per million requests (100 ms minimum, memory in 128 MB steps). 100 requests/s is roughly €5-15 a day | The home page calls only the keep-warm ping; `function-hits` alert; edge lockdown; rate limits before any I/O                  |
+| Managed function executions                  | about €0, keep-warm included | Billed beyond the free grant, 429 responses included: about $0.5-2 per million requests (100 ms minimum, memory in 128 MB steps). 100 requests/s is roughly €5-15 a day | On load the home page calls only the keep-warm ping; `function-hits` alert; edge lockdown; rate limits before any I/O          |
 | Table transactions and storage               | cents                        | cents                                                                                                                                                                   | Rate limiter before any storage I/O, at most 300 active RSVPs, request bodies ≤16 KB                                           |
 | Blob storage (backups)                       | cents                        | cents (not reachable from the public)                                                                                                                                   | Private container, no public blob access; images are served by SWA                                                             |
 | Log Analytics / Application Insights         | €0                           | about €0. Worst case, all three workspaces at their daily cap all month: 9.3 GB, 4.3 GB above the free 5 GB per billing account, about €10-15                           | Daily cap 0.1 GB per environment, Warning log level, sampling, no per-request logging of rejections                            |
@@ -116,12 +116,16 @@ answers 401/403 (lockdown). That is **at most about 15 executions per active vis
 thousand a month for a normal month and far **inside the free grant**
 ([architecture, section 10](architecture.md#10-keep-warm)).
 
-## The home page makes no API calls
+## The home page calls almost no API
 
-The home page calls **no API except that keep-warm ping**. Content is baked into the static build;
-RSVP status is fetched only on `/rsvp`, and admin data only in `/admin`. So a crowd of visitors, or a
-crawler, on the home page costs nothing beyond the keep-warm pings. The Playwright suite fails when
-the home page calls anything else.
+On page load the home page calls **no API except that keep-warm ping**, and the ping runs only while
+the RSVP feature is on. Content is baked into the static build, and admin data is loaded only in
+`/admin`. The RSVP section calls `/api/rsvp*` only once it nears the viewport or the guest presses a
+button: a visitor who reaches it adds **one or two function executions**, `GET /api/rsvp/status` for
+a new guest or `GET /api/rsvp/me` when the browser has a reply cookie (plus the status if that reply
+is gone). So a crowd of visitors, or a crawler, costs the keep-warm pings plus those one or two
+calls per visitor who reaches the RSVP section. The Playwright network guard fails on any other API
+call.
 
 ## Edge lockdown
 
