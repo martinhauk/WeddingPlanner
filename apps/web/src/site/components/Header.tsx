@@ -11,6 +11,8 @@ const LANGUAGE_NAMES: Readonly<Record<Lang, string>> = {
 
 export type HeaderProps = {
   readonly brand: string;
+  /** Where the names link to: the top of the page (default), or `/` from another page. */
+  readonly brandHref?: string;
   readonly nav: readonly NavItem[];
   /** Id of the RSVP section, highlighted in the navigation. */
   readonly rsvpId: string | undefined;
@@ -19,7 +21,14 @@ export type HeaderProps = {
 };
 
 /** Sticky header: names, section navigation (a menu on small screens) and the language switch. */
-export function Header({ brand, nav, rsvpId, lang, onLangChange }: HeaderProps) {
+export function Header({
+  brand,
+  brandHref = '#top',
+  nav,
+  rsvpId,
+  lang,
+  onLangChange,
+}: HeaderProps) {
   const [open, setOpen] = useState(false);
   const header = useRef<HTMLElement>(null);
 
@@ -48,7 +57,7 @@ export function Header({ brand, nav, rsvpId, lang, onLangChange }: HeaderProps) 
 
   return (
     <header className="nav" ref={header}>
-      <a className="brand" href="#top">
+      <a className="brand" href={brandHref}>
         {brand}
       </a>
       {nav.length > 0 && (

@@ -42,7 +42,8 @@ All of it is gitignored (root `.gitignore`); never commit it or edit it by hand.
 - `src/content/generated/site.json`: the validated `site.json` (without `$schema`).
 - `src/content/generated/media.json`: `MediaManifest`, one variant per image for now.
 - `src/content/generated/build.json`: `BuildInfo` = `{siteUrl, features, rsvpDeadline (UTC),
-  rsvpTimeZone}` for `DEPLOY_ENV`.
+  rsvpTimeZone, regions {app, data}}` for `DEPLOY_ENV` (the Azure regions are named in the
+  privacy notice).
 - `public/content/media/<hash>.<ext>`: media under content-hashed names (immutable caching).
 - `public/version.json`: `{sha, builtAt, contentHash, isSample}`, served as `/version.json` for the
   smoke tests.

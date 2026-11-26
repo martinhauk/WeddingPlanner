@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import type { Lang } from '../i18n.ts';
 
 /** The parts of the baked `build.json` the page uses. */
-export type SiteBuild = Pick<BuildInfo, 'features' | 'rsvpDeadline' | 'rsvpTimeZone'>;
+export type SiteBuild = Pick<BuildInfo, 'features' | 'rsvpDeadline' | 'rsvpTimeZone' | 'regions'>;
 
 /** What every section can read besides its own data. */
 export type SectionContext = {

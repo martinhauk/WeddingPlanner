@@ -6,7 +6,8 @@ export type Lang = SiteLanguage;
 export const LANGS: readonly Lang[] = ['de', 'en', 'es'];
 export const DEFAULT_LANG: Lang = 'de';
 
-const STORAGE_KEY = 'wp.lang';
+/** `localStorage` key of the chosen language (named in the privacy notice). */
+export const LANG_STORAGE_KEY = 'wp.lang';
 
 export function isLang(value: unknown): value is Lang {
   return typeof value === 'string' && (LANGS as readonly string[]).includes(value);
@@ -24,7 +25,7 @@ export function t(text: LocalizedText | undefined, lang: Lang): string {
 /** The remembered language, else the first supported browser language, else German. */
 export function initialLang(): Lang {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    const saved = localStorage.getItem(LANG_STORAGE_KEY);
     if (isLang(saved)) {
       return saved;
     }
@@ -43,7 +44,7 @@ export function initialLang(): Lang {
 
 export function rememberLang(lang: Lang): void {
   try {
-    localStorage.setItem(STORAGE_KEY, lang);
+    localStorage.setItem(LANG_STORAGE_KEY, lang);
   } catch {
     // Not remembering the language is fine.
   }

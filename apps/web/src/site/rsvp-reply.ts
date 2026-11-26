@@ -37,6 +37,11 @@ export type Reply = {
   readonly attending: boolean;
   readonly people: readonly ReplyPerson[];
   readonly message: string;
+  /**
+   * Explicit consent to store the dietary data (allergies can be health data, GDPR Art. 9). Asked
+   * for, and required, only while the reply has dietary data (`hasDietData`).
+   */
+  readonly dietConsent: boolean;
 };
 
 export const emptyPerson = (): ReplyPerson => ({ name: '', diet: [], dietNote: '' });
@@ -45,7 +50,16 @@ export const newReply = (attending: boolean): Reply => ({
   attending,
   people: [emptyPerson()],
   message: '',
+  dietConsent: false,
 });
+
+/** Whether the reply would send dietary data: a "yes" with a ticked diet or a note for anyone. */
+export function hasDietData(reply: Reply): boolean {
+  return (
+    reply.attending &&
+    reply.people.some((person) => person.diet.length > 0 || person.dietNote.trim() !== '')
+  );
+}
 
 export function isDiet(value: unknown): value is Diet {
   return (DIETS as readonly unknown[]).includes(value);
@@ -76,10 +90,14 @@ export function replyFromView(view: RsvpView): Reply {
       dietNote: person.dietary.note ?? '',
     })),
     message: view.message ?? '',
+    dietConsent: view.dietaryConsent === true,
   };
 }
 
-/** The request body: trimmed text, dietary data only for a "yes", person ids kept for an update. */
+/**
+ * The request body: trimmed text, dietary data only for a "yes", person ids kept for an update, and
+ * the dietary consent whenever dietary data is sent.
+ */
 export function toRequest(reply: Reply, language: string, website: string): RsvpRequest {
   const people = reply.people.map((person): RsvpRequestPerson => {
     const note = person.dietNote.trim();
@@ -103,6 +121,7 @@ export function toRequest(reply: Reply, language: string, website: string): Rsvp
     ...(message === '' ? {} : { message }),
     language,
     website,
+    ...(hasDietData(reply) ? { dietaryConsent: reply.dietConsent } : {}),
   };
 }
 
@@ -128,6 +147,9 @@ export function validateReply(reply: Reply, limits: RsvpLimits): FieldError[] {
   });
   if (reply.message.trim().length > limits.maxMessageLength) {
     errors.push({ field: 'message', code: 'too_long' });
+  }
+  if (hasDietData(reply) && !reply.dietConsent) {
+    errors.push({ field: 'dietaryConsent', code: 'required' });
   }
   return errors;
 }

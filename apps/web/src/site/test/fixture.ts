@@ -147,12 +147,23 @@ export const content: SiteContent = {
   },
   hero: { image: 'hero.png' },
   sections: Object.values(sections),
+  privacy: {
+    controllers: [{ name: 'Anna', address: 'Beispielweg 1\n99999 Musterstadt' }, { name: 'Ben' }],
+    email: 'anna@example.com',
+    extra: [
+      {
+        title: text('Fotos', 'Photos'),
+        text: text('Es wird fotografiert.', 'Photos will be taken.'),
+      },
+    ],
+  },
 };
 
 export const build: SiteBuild = {
   features: { rsvp: true, admin: true },
   rsvpDeadline: '2099-05-01T21:59:00.000Z',
   rsvpTimeZone: 'Europe/Berlin',
+  regions: { app: 'eastus2', data: 'germanywestcentral' },
 };
 
 export const buildWithoutRsvp: SiteBuild = { ...build, features: { rsvp: false, admin: false } };
