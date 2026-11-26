@@ -1,7 +1,10 @@
-# PR gate (S0-08). The single required check is `ci-ok` (.github/rulesets/main.json).
+# CI gate (S0-08). The single required check of a PR is `ci-ok` (.github/rulesets/main.json), and
+# deploy.yml calls this workflow (workflow_call, input `ref` = the commit it deploys) before any
+# environment, so a red CI stops every deploy, also of a commit that bypassed a PR.
 #
 # - changes:     decides which path-filtered jobs run (pull requests only; every other event runs
-#                everything) and reads the pinned Azurite image from docker-compose.yml.
+#                everything, and a workflow_call sees the caller's event, so a deploy never skips a
+#                job as "unchanged") and reads the pinned Azurite image from docker-compose.yml.
 # - web:         Biome, tsc, Vitest, strict validation of the sample instance, JSON Schema drift,
 #                build with the sample instance, size limit.
 # - api:         Azurite service container, dotnet format, Release build (warnings are errors),
@@ -33,8 +36,15 @@ on:
     branches:
       - main
   workflow_dispatch:
-  # deploy.yml runs the same gate on every main commit.
+  # deploy.yml runs the same gate on the commit it deploys (push, workflow_dispatch and
+  # repository_dispatch alike).
   workflow_call:
+    inputs:
+      ref:
+        description: Full commit SHA to test (default the commit of the calling event).
+        type: string
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -53,8 +63,9 @@ env:
   # The bake reads these. CI builds the fictional sample instance only: its artifacts are public.
   INSTANCE_DIR: samples/instance
   DEPLOY_ENV: e2e
-  # The commit under test: the PR head (not the temporary merge commit) on pull requests.
-  GIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+  # The commit under test: the caller's `ref` (deploy.yml), else the PR head (not the temporary
+  # merge commit) on pull requests, else the event's commit.
+  GIT_SHA: ${{ inputs.ref || github.event.pull_request.head.sha || github.sha }}
   # Tool versions; bump each together with its SHA-256 (from the release's checksums or a
   # download). Dependabot does not update these.
   ACTIONLINT_VERSION: 1.7.12
@@ -79,6 +90,8 @@ jobs:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # Empty (PRs, manual runs): the event's commit. From deploy.yml: the deployed commit.
+          ref: ${{ inputs.ref }}
           fetch-depth: 2
           persist-credentials: false
 
@@ -161,6 +174,7 @@ jobs:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.ref }}
           persist-credentials: false
 
       - name: Set up Node.js and pnpm
@@ -224,6 +238,7 @@ jobs:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.ref }}
           persist-credentials: false
 
       - name: Set up .NET
@@ -257,6 +272,7 @@ jobs:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.ref }}
           persist-credentials: false
 
       - name: Install Bicep ${{ env.BICEP_VERSION }}
@@ -338,6 +354,7 @@ jobs:
       - name: Check out (full history for gitleaks)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.ref }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -466,6 +483,7 @@ jobs:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.ref }}
           persist-credentials: false
 
       - name: Set up Node.js and pnpm
@@ -505,6 +523,7 @@ jobs:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.ref }}
           persist-credentials: false
 
       - name: Set up Node.js and pnpm
@@ -578,6 +597,7 @@ jobs:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.ref }}
           persist-credentials: false
 
       - name: Set up Node.js and pnpm
