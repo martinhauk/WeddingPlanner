@@ -1,6 +1,11 @@
 # Deploy: promotes one commit through e2e -> test -> production (ADR 0004).
 #
 # - plan:        decides which environments run for the event and resolves the commit to deploy.
+# - ci:          the full CI gate (ci.yml via workflow_call) on exactly that commit, for every
+#                trigger: no path filter, so Biome, tsc, Vitest, xUnit with Azurite, Bicep lint,
+#                hygiene and the Playwright device matrix all run. Every environment needs it to
+#                succeed, so a red CI stops the whole deploy; every deploy waits for the device
+#                matrix. The workflow files come from main, the code under test from the commit.
 # - e2e:         the fictional sample instance (samples/instance).
 # - test:        real content from the private instance repo (vars.INSTANCE_REPO, read-only deploy
 #                key); runs after e2e succeeded or was not selected.
@@ -26,8 +31,17 @@
 #                           branch (production: only commits on the instance repo's main).
 #
 # Hygiene (CLAUDE.md): no secrets in logs, hostnames and the deploy token are masked, `-o none` on
-# deployments, no environment.url, job summaries show only commit SHAs. Concurrency is per
-# environment, in _deploy-environment.yml.
+# deployments, no environment.url, job summaries show only commit SHAs.
+#
+# Concurrency (in _deploy-environment.yml): one deploy per environment; a newer run cancels the
+# older run's deploy of that environment, whether it is running or waiting for approval
+# (cancel-in-progress). Only the newest commit matters, so cancelling is deliberate, with one risk:
+# a deploy cancelled during a Bicep step leaves its ARM deployment running in Azure, and the next
+# run can fail with DeploymentActive. Recover by re-running the failed job once that ARM deployment
+# has finished (`az deployment group list -g <resource group> -o table`, or the Deployments page of
+# the resource group in the portal).
+# Runs are not ordered by commit: an older run whose ci finishes after a newer run's, or a re-run
+# of an older run, replaces the newer deploy. Re-run the newest run to restore it.
 name: deploy
 
 on:
@@ -178,9 +192,21 @@ jobs:
             echo "- environments: $envs"
           } >>"$GITHUB_STEP_SUMMARY"
 
+  ci:
+    name: ci
+    needs: plan
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ needs.plan.outputs.sha }}
+
   e2e:
     name: e2e
-    needs: plan
+    needs:
+      - plan
+      - ci
+    # Implicitly also requires plan and ci to have succeeded.
     if: needs.plan.outputs.e2e == 'true'
     permissions:
       contents: read
@@ -195,10 +221,12 @@ jobs:
     name: test
     needs:
       - plan
+      - ci
       - e2e
-    # After e2e succeeded, or when e2e was not selected (never after a failed or skipped e2e).
+    # After ci and e2e succeeded, or when e2e was not selected (never after a failed or skipped e2e).
     if: >-
-      ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.test == 'true'
+      ${{ !cancelled() && needs.plan.result == 'success' && needs.ci.result == 'success'
+      && needs.plan.outputs.test == 'true'
       && (needs.e2e.result == 'success' || (needs.e2e.result == 'skipped' && needs.plan.outputs.e2e != 'true')) }}
     permissions:
       contents: read
@@ -217,11 +245,13 @@ jobs:
     name: production
     needs:
       - plan
+      - ci
       - e2e
       - test
-    # After test succeeded, or when test was not selected; e2e likewise. Then the approval.
+    # After ci and test succeeded, or when test was not selected; e2e likewise. Then the approval.
     if: >-
-      ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.production == 'true'
+      ${{ !cancelled() && needs.plan.result == 'success' && needs.ci.result == 'success'
+      && needs.plan.outputs.production == 'true'
       && (needs.e2e.result == 'success' || (needs.e2e.result == 'skipped' && needs.plan.outputs.e2e != 'true'))
       && (needs.test.result == 'success' || (needs.test.result == 'skipped' && needs.plan.outputs.test != 'true')) }}
     permissions:
