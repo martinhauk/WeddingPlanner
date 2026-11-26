@@ -209,6 +209,13 @@ export default defineConfig({
       },
     },
   },
-  server: { port: 5173 },
+  // `/api` goes to the local Functions host (`pnpm dev:api`, `func start --port 7071`), so the page
+  // talks to the API same-origin, as behind Static Web Apps. `vite preview` inherits the proxy.
+  // DEV_API_URL points it elsewhere. Auth emulation (/.auth, x-ms-client-principal) needs the SWA
+  // CLI on http://localhost:4280 instead (`pnpm dev:swa`).
+  server: {
+    port: 5173,
+    proxy: { '/api': { target: process.env.DEV_API_URL ?? 'http://localhost:7071' } },
+  },
   preview: { port: 4173 },
 });
