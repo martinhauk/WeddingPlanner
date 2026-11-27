@@ -35,14 +35,15 @@ created, changed and deleted **until and including** the deadline.
 
 ## Endpoints
 
-| Method and route       | Function         | Success                                                   | Purpose                                       |
-| ---------------------- | ---------------- | --------------------------------------------------------- | --------------------------------------------- |
-| `GET /api/rsvp/status` | `RsvpStatus`     | 200 status                                                | Whether the form is open, deadline, limits    |
-| `POST /api/rsvp`       | `RsvpCreate`     | 201 `{rsvp, version, editToken}`, cookies, ETag, Location | Create this browser's reply                   |
-| `GET /api/rsvp/me`     | `RsvpGetMine`    | 200 `{rsvp, version, open, deadline}`, ETag               | Read the own reply (also after the deadline)  |
-| `PUT /api/rsvp/me`     | `RsvpUpdateMine` | 200 `{rsvp, version, open, deadline}`, ETag               | Replace the own reply (needs `If-Match`)      |
-| `DELETE /api/rsvp/me`  | `RsvpDeleteMine` | 204, cookies cleared                                      | Delete the own reply                          |
-| `POST /api/rsvp/claim` | `RsvpClaim`      | 200 `{rsvp, version, open, deadline}`, cookies, ETag      | Open a reply in this browser by its edit link |
+| Method and route       | Function         | Success                                                         | Purpose                                                 |
+| ---------------------- | ---------------- | --------------------------------------------------------------- | ------------------------------------------------------- |
+| `GET /api/rsvp/status` | `RsvpStatus`     | 200 status                                                      | Whether the form is open, deadline, limits              |
+| `POST /api/rsvp`       | `RsvpCreate`     | 201 `{rsvp, version, editToken}`, cookies, ETag, Location       | Create this browser's reply                             |
+| `GET /api/rsvp/me`     | `RsvpGetMine`    | 200 `{rsvp, version, open, deadline, editToken}`, ETag          | Read the own reply (also after the deadline)            |
+| `PUT /api/rsvp/me`     | `RsvpUpdateMine` | 200 `{rsvp, version, open, deadline, editToken}`, ETag          | Replace the own reply (needs `If-Match`)                |
+| `DELETE /api/rsvp/me`  | `RsvpDeleteMine` | 204, cookies cleared                                            | Delete the own reply                                    |
+| `POST /api/rsvp/claim` | `RsvpClaim`      | 200 `{rsvp, version, open, deadline, editToken}`, cookies, ETag | Open a reply in this browser by its edit link           |
+| `POST /api/rsvp/claim` | `RsvpClaim`      | with `"preview": true`: 200 `{names}`, no cookies               | Whose reply a link opens, before it replaces this one's |
 
 ### `GET /api/rsvp/status`
 
@@ -114,9 +115,12 @@ An unknown tag is `unknown_tag` per entry; more than 10 entries are one `too_man
 
 **Names** (domain rules, `PersonNames`): fewer than 2 characters (Unicode code points, after sanitising) is
 `too_short`; a name without a letter, with `@` (or the full-width `＠`), or with a web address is `invalid`.
-A web address is a scheme (`https://`), `www.`, or a label of three or more characters, a dot and a
-lower-case top-level domain (`example.com`, `bit.ly/x`); titles and initials such as `Dr.med.` or
-`J.R.R.` pass. A person whose name an earlier person of the same reply already has is `duplicate` on the
+A web address is `://` anywhere, `www.` at the start of a word, or a `label.tld` whose top-level domain
+is on a curated list of common ones (`com`, `net`, `org`, `io`, `co`, `me`, `shop`, `xyz`, `ly`, `de`,
+`es`, `uk`, …), all lower or all upper case, not followed by a letter or digit, with or without a path
+(`example.com`, `x.io`, `bit.ly/x`, `spam.shop`, `EXAMPLE.COM`). Titles typed without spaces and
+initials pass, because their endings are not on the list or are capitalised: `Dr.med.vet.`, `Prof.Dr.`,
+`Dr.in`, `Anna B.Sc.`, `J.R.R.`. A person whose name an earlier person of the same reply already has is `duplicate` on the
 later one; the comparison ignores case, diacritics and punctuation (`María-José García` =
 `maria jose GARCIA`), but does not transliterate (`Müller` ≠ `Mueller`). The rules apply to `POST`,
 `PUT` and the admin edit alike; the form checks the same rules before it sends.
@@ -174,17 +178,35 @@ device) never sees. The personal edit link moves a reply to another browser, so 
 there instead of answering twice.
 
 - **The credential is the cookie's:** the 201 of `POST /api/rsvp` carries `editToken: "<id>.<token>"`,
-  the same value as the `wp_rsvp` cookie (256-bit random token, only its SHA-256 hash stored). It is
-  returned **only** by the create, never by `GET`, `PUT` or the claim, and never logged. The page shows
-  it once on the success screen as `<site origin>/#edit=<editToken>` with a copy button.
+  the same value as the `wp_rsvp` cookie (256-bit random token, only its SHA-256 hash stored). Every
+  answer about the own reply returns it too (`GET` and `PUT /me`, the claim: the credential of the
+  request's own cookie, or of the claimed link), so a returning guest can see the link again (owner
+  decision). It is never logged, and these responses are `no-store`. The page shows it as
+  `<site origin>/#edit=<editToken>` with a copy button: at once on the success screen, and behind a
+  "show your personal link" button for a returning guest. The secret is therefore readable by scripts on
+  the page while the reply is shown; the strict CSP (no third-party scripts) keeps that risk low, and the
+  `wp_rsvp` cookie itself stays HttpOnly.
 - **A fragment, not a query:** browsers never send `#edit=…` to a server or in a `Referer`, so the token
   reaches neither the SWA edge, the Functions host logs nor a third party. The page reads it, scrolls to
   the RSVP section and calls the claim only once that section nears the viewport (the page-load rule:
   no API call except the keep-warm ping), then removes the fragment with `history.replaceState`.
 - **`POST /api/rsvp/claim`** with `{"editToken": "<id>.<token>"}` answers 200
-  `{rsvp, version, open, deadline}` with `ETag`, exactly like `GET /api/rsvp/me`, and sets both cookies
-  (replacing any this browser held for another reply). It works after the deadline too (`open: false`,
-  read-only), and needs only storage (503 `not_configured` without it).
+  `{rsvp, version, open, deadline, editToken}` with `ETag`, exactly like `GET /api/rsvp/me`, and sets both
+  cookies (replacing any this browser held for another reply). It works after the deadline too
+  (`open: false`, read-only), and needs only storage (503 `not_configured` without it).
+- **Preview:** with `{"editToken": "…", "preview": true}` a valid link answers 200
+  `{"names": ["…", …]}`: only the names of its reply's people, the guest first. No version, no reply
+  details, and **no cookie is set or cleared**. A browser that already holds a reply uses it to ask the
+  guest "Are you X or Y?" before a claim would replace that reply (see below). Every failure takes the
+  same path and gives the same 404 as a claim. `preview` is optional (omitted or `false`: a claim), so
+  older request bodies keep working; a `preview` that is not a boolean is 400 `invalid_json`.
+- **The page's flow when this browser already has a reply** (`wp_rsvp_state` present): once the section
+  nears the viewport it reads `GET /me`. A 404 (stale cookie) claims as without a reply; the same reply
+  id as the link's needs no claim (the page just shows it and removes the fragment); another reply makes
+  it preview the link and ask "Wer seid ihr? Seid ihr X oder Y?" (de/en/es, names joined with
+  `Intl.ListFormat`) with one button per answer. This browser's names keep its reply (no claim); the
+  link's names claim it. A preview 404 shows the friendly wrong-link message and keeps this browser's
+  reply.
 - **One answer for every failure:** a malformed token, an unknown id, a wrong token and a withdrawn
   (deleted) reply all answer the same 404 `not_found`, so the response never reveals whether an id
   exists. The token is hashed and compared in constant time, against a random decoy hash when the id is
@@ -247,7 +269,8 @@ In the worker pipeline, before any storage I/O (`apps/api/CLAUDE.md`, "Request p
 - **Submission guard** (`Features/Rsvp/RsvpSubmissionGuard`), right after the body is read and before
   validation or any storage I/O: a filled-in honeypot `website` (`POST` and `PUT`), or on `POST` an
   `elapsedMs` below `Rsvp__MinSubmitMs` or missing, answers 400 `submission_rejected` with no `errors`
-  and no hint at the reason, so a bot cannot tell the honeypot from the timer. Refusals are not logged.
+  and no hint at the reason, so a bot cannot tell the honeypot from the timer. Refusals are not logged
+  one by one, only counted (see "Logs" below).
   `Rsvp__MinSubmitMs` is 0 (off) to 60000; its code default is 2500, and a missing or invalid value keeps
   the default. The form measures the time from showing the form to sending it (it does not reset after a
   refusal, so pressing save again works). The value is client-supplied: it stops naive bots and scripts
@@ -263,11 +286,20 @@ In the worker pipeline, before any storage I/O (`apps/api/CLAUDE.md`, "Request p
   are logged by type only. Refusals are not logged per request: reaching the reply cap is a warning at
   most once per hour and worker instance, so spam at the cap cannot fill the daily Application Insights
   cap.
+- **Refused new replies are counted:** a create refused by the honeypot, the fill time or the name rules
+  (a name that is too short, has no letter, a web address or `@`) is counted per reason, and a warning
+  **`RsvpSubmissionsRejected`** (event id 2102) reports the counts at most once per hour and worker
+  instance: `RsvpSubmissionsRejected: <n> new replies refused since the last report (honeypot <a>, fill
+  time <b>, name rules <c>; …)`. Counts only: no names, bodies or addresses. The first refusal is
+  reported at once; the ones after it wait for the next refusal after the hour. Name-rule refusals still
+  answer 400 `validation_failed` with the field error (a real guest can fix a name), not
+  `submission_rejected`.
 - **Alert signal for the cap:** that warning has the event name **`RsvpCapacityReached`** (event id
   2101, `EventName` in the log record) and its message starts with `RsvpCapacityReached:`, followed by the
   cap (`MaxActiveRsvps`). An Application Insights log alert can match it with
   `traces | where message startswith "RsvpCapacityReached"` (or on `customDimensions.EventName` where the
-  exporter records it). There is no separate metric: the worker exports logs and traces only.
+  exporter records it). There is no separate metric: the worker exports logs and traces only. No alert
+  rule is deployed; adding one in Application Insights is an owner option.
 
 ## Storage
 

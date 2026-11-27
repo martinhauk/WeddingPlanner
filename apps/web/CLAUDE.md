@@ -107,6 +107,19 @@ never import admin code.
   /api/rsvp/status` for the limits and whether replies are accepted, `GET /api/rsvp/me` for a
   returning guest, then `POST`, `PUT` (with `If-Match`) or `DELETE`. A `412` reloads the reply and
   says so.
+- **Personal edit link:** the success screen shows `<origin>/#edit=<editToken>` (link box above the
+  change and withdraw buttons); a returning guest's reply offers "show your personal link" (the
+  `editToken` of `GET /me`), hidden until pressed; withdrawing drops it. Opening `/#edit=…`: `Site.tsx`
+  jumps to the RSVP section and `use-rsvp.ts` claims it once the section is near (`POST
+  /api/rsvp/claim`), then removes the fragment. A browser that already has a reply (`wp_rsvp_state`)
+  first reads `GET /me`: a 404 claims as usual, the same reply id needs no claim, another reply gets a
+  claim preview (`preview: true`, names only, no cookies) and the question "Wer seid ihr? Seid ihr X oder
+  Y?" (`components/RsvpWhoAreYou.tsx`, names joined with `Intl.ListFormat`). Keep its words plain: never
+  browser, cookie, token, session, claim or data. This browser's names keep its reply; the link's names
+  claim.
+- **Reply state outside the section:** the hero and the header's RSVP entry read only `wp_rsvp_state`
+  (`useRsvpState`, no API call) and show "you said yes/no"; after the baked deadline they offer to view
+  the reply instead of changing it.
 - **Flag off ("opens soon"):** with `features.rsvp` off the section is still shown (it is part of
   the invitation), with its intro, an "opens soon" note and the deadline. Nothing is called: no RSVP
   request and no keep-warm. The hero button and the highlighted RSVP nav entry appear only while the
