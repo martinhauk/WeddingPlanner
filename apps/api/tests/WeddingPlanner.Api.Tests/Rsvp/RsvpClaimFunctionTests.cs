@@ -80,10 +80,10 @@ public sealed class RsvpClaimFunctionTests
         response.Headers.CacheControl.ToString().ShouldBe("no-store");
         response.Headers.ETag.ToString().ShouldBe(created.Response.Headers.ETag.ToString());
         var body = TestHttp.ReadJson(claimed);
-        body.EnumerateObject().Select(property => property.Name).ShouldBe(["rsvp", "version", "open", "deadline"]);
+        body.EnumerateObject().Select(property => property.Name).ShouldBe(["rsvp", "version", "open", "deadline", "editToken"]);
         body.GetProperty("open").GetBoolean().ShouldBeTrue();
         body.GetProperty("rsvp").GetProperty("people")[0].GetProperty("name").GetString().ShouldBe("Pablo Pérez");
-        body.TryGetProperty("editToken", out _).ShouldBeFalse("the token is returned only once, by the create");
+        body.GetProperty("editToken").GetString().ShouldBe(RsvpHarness.EditToken(created), "the claimed browser can show the same link");
 
         TestHttp.SetCookie(claimed, "wp_rsvp").ShouldNotBeNull().ShouldMatch(CredentialPattern);
         TestHttp.SetCookie(claimed, "wp_rsvp_state").ShouldBe("wp_rsvp_state=yes; Max-Age=31536000; Path=/; Secure; SameSite=Lax");
@@ -231,6 +231,108 @@ public sealed class RsvpClaimFunctionTests
     }
 
     [Fact]
+    public async Task APreviewNamesTheLinksPeopleAndSetsNoCookie()
+    {
+        using var harness = new RsvpHarness();
+        var own = await harness.PostAsync(RsvpHarness.SampleBody(attending: false));
+        var other = await harness.PostAsync();
+
+        var preview = await harness.ClaimAsync(RsvpHarness.EditToken(other), cookie: TestHttp.CookieHeader(own), preview: true);
+
+        var response = preview.Response;
+        response.StatusCode.ShouldBe(StatusCodes.Status200OK);
+        response.Headers.CacheControl.ToString().ShouldBe("no-store");
+        response.Headers.ETag.ToString().ShouldBeEmpty();
+        var body = TestHttp.ReadJson(preview);
+        body.EnumerateObject().Select(property => property.Name).ShouldBe(["names"], "only the names, nothing else of the reply");
+        body.GetProperty("names").EnumerateArray().Select(name => name.GetString()).ShouldBe(["Pablo Pérez", "María-José García"]);
+        TestHttp.SetCookies(preview).ShouldBeEmpty("a preview must not replace this browser's reply");
+        (await harness.GetMineAsync(TestHttp.CookieHeader(own))).Response.StatusCode.ShouldBe(StatusCodes.Status200OK);
+    }
+
+    [Fact]
+    public async Task APreviewWithoutOwnCookiesSetsNoneEither()
+    {
+        using var harness = new RsvpHarness();
+        var created = await harness.PostAsync();
+
+        var preview = await harness.ClaimAsync(RsvpHarness.EditToken(created), preview: true);
+
+        preview.Response.StatusCode.ShouldBe(StatusCodes.Status200OK);
+        TestHttp.SetCookies(preview).ShouldBeEmpty();
+        TestHttp.ReadBody(preview).ShouldNotContain(RsvpHarness.EditToken(created).Split('.')[1]);
+    }
+
+    [Fact]
+    public async Task PreviewFalseClaimsAsWithoutIt()
+    {
+        using var harness = new RsvpHarness();
+        var created = await harness.PostAsync();
+
+        var claimed = await harness.ClaimAsync(null, rawBody: $$"""{"editToken":"{{RsvpHarness.EditToken(created)}}","preview":false}""");
+
+        claimed.Response.StatusCode.ShouldBe(StatusCodes.Status200OK);
+        TestHttp.SetCookie(claimed, "wp_rsvp").ShouldNotBeNull();
+        TestHttp.ReadJson(claimed).TryGetProperty("rsvp", out _).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task EveryFailedPreviewLooksLikeAFailedClaim()
+    {
+        using var harness = new RsvpHarness();
+        var own = TestHttp.CookieHeader(await harness.PostAsync());
+        var created = await harness.PostAsync();
+        var id = RsvpHarness.EditToken(created).Split('.')[0];
+        var withdrawn = RsvpHarness.EditToken(await harness.PostAsync());
+        await harness.DeleteMineAsync($"wp_rsvp={withdrawn}");
+        var claimFailure = await harness.ClaimAsync(UnknownToken);
+
+        var failures = new[]
+        {
+            await harness.ClaimAsync($"{id}.{new string('B', 43)}", cookie: own, preview: true),
+            await harness.ClaimAsync(UnknownToken, preview: true),
+            await harness.ClaimAsync("garbage", cookie: own, preview: true),
+            await harness.ClaimAsync(withdrawn, preview: true),
+        };
+
+        foreach (var failure in failures)
+        {
+            failure.Response.StatusCode.ShouldBe(StatusCodes.Status404NotFound);
+            failure.Response.ContentType.ShouldBe(claimFailure.Response.ContentType);
+            failure.Response.Headers.Keys.Order().ShouldBe(claimFailure.Response.Headers.Keys.Order());
+            TestHttp.ReadBody(failure).ShouldBe(TestHttp.ReadBody(claimFailure));
+            TestHttp.SetCookies(failure).ShouldBeEmpty();
+        }
+    }
+
+    [Theory]
+    [InlineData("{\"editToken\": \"a\", \"preview\": \"yes\"}")]
+    [InlineData("{\"editToken\": \"a\", \"preview\": true, \"preview\": false}")]
+    public async Task RejectsAMalformedPreviewFlagWithoutIo(string rawBody)
+    {
+        using var harness = new RsvpHarness();
+
+        var claimed = await harness.ClaimAsync(null, rawBody: rawBody);
+
+        claimed.Response.StatusCode.ShouldBe(StatusCodes.Status400BadRequest);
+        TestHttp.ReadJson(claimed).GetProperty("code").GetString().ShouldBe("invalid_json");
+        harness.Memory.Calls.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task APreviewWorksAfterTheDeadline()
+    {
+        using var harness = new RsvpHarness();
+        var created = await harness.PostAsync();
+        harness.Time.SetUtcNow(RsvpHarness.DeadlineUtc.AddDays(1));
+
+        var preview = await harness.ClaimAsync(RsvpHarness.EditToken(created), preview: true);
+
+        preview.Response.StatusCode.ShouldBe(StatusCodes.Status200OK);
+        TestHttp.SetCookies(preview).ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task AClaimWorksAfterTheDeadlineButReportsTheReplyReadOnly()
     {
         using var harness = new RsvpHarness();
@@ -320,14 +422,20 @@ public sealed class RsvpClaimFunctionTests
         var editToken = RsvpHarness.EditToken(created);
         var secret = editToken.Split('.')[1];
 
+        var cookie = TestHttp.CookieHeader(created);
         await harness.ClaimAsync(editToken);
+        await harness.ClaimAsync(editToken, preview: true);
         await harness.ClaimAsync(editToken.Split('.')[0] + "." + new string('C', 43));
         await harness.ClaimAsync(null, rawBody: "{\"editToken\": 5}");
+        await harness.GetMineAsync(cookie);
+        await harness.PutMineAsync(cookie, RsvpHarness.SampleBody(attending: false), "*");
 
         harness.Logs.Records.ShouldNotContain(record => record.Contains(secret, StringComparison.Ordinal));
-        new RsvpClaimRequest(editToken).ToString().ShouldNotContain(secret);
+        new RsvpClaimRequest(editToken, Preview: true).ToString().ShouldNotContain(secret);
         var view = harness.Memory.Items.Single();
         new RsvpCreatedResponse(RsvpView.From(view.Record), "\"v1\"", editToken).ToString().ShouldNotContain(secret);
+        new RsvpMineResponse(RsvpView.From(view.Record), "\"v1\"", true, null, editToken).ToString().ShouldNotContain(secret);
+        new RsvpClaimPreviewResponse(["Pablo Pérez"]).ToString().ShouldNotContain("Pablo");
     }
 
     private static RateLimitingOptions LimitOptions()

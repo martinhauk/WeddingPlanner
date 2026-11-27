@@ -38,12 +38,14 @@ public static class RsvpHttp
     }
 
     /// <summary>
-    /// 200 <c>{rsvp, version, open, deadline}</c> with <c>ETag</c> for the caller's own reply, and sets (or refreshes)
-    /// both RSVP cookies for <paramref name="credential"/>.
+    /// 200 <c>{rsvp, version, open, deadline, editToken}</c> with <c>ETag</c> for the caller's own reply, and sets (or
+    /// refreshes) both RSVP cookies for <paramref name="credential"/>. <c>editToken</c> is that credential, the secret of
+    /// the personal edit link: the response is <c>no-store</c>, and the token is never logged.
     /// </summary>
     public static ApiResult Mine(HttpResponse response, RsvpCredential credential, StoredRsvp stored, RsvpSettings settings, DateTimeOffset now)
     {
         ArgumentNullException.ThrowIfNull(response);
+        ArgumentNullException.ThrowIfNull(credential);
         ArgumentNullException.ThrowIfNull(stored);
         ArgumentNullException.ThrowIfNull(settings);
 
@@ -53,7 +55,7 @@ public static class RsvpHttp
 
         var deadline = settings.Deadline;
         var open = deadline?.IsOpenAt(now) ?? false;
-        return ApiResult.Json(StatusCodes.Status200OK, new RsvpMineResponse(RsvpView.From(stored.Record), version, open, deadline?.Utc.UtcDateTime));
+        return ApiResult.Json(StatusCodes.Status200OK, new RsvpMineResponse(RsvpView.From(stored.Record), version, open, deadline?.Utc.UtcDateTime, credential.CookieValue));
     }
 
     /// <summary>404 <c>not_found</c>; clears the RSVP cookies when the request carried any, so the browser forgets a stale reply.</summary>
