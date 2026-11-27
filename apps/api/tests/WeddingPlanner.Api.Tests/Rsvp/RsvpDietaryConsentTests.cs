@@ -52,6 +52,7 @@ public sealed class RsvpDietaryConsentTests
         stored.DietaryConsent.ShouldBeTrue();
         stored.DietaryConsentSource.ShouldBe(DietaryConsentSource.Guest);
         stored.DietaryConsentAt.ShouldBe(harness.Time.GetUtcNow());
+        stored.DietaryConsentGuestAt.ShouldBe(harness.Time.GetUtcNow());
     }
 
     [Theory]
@@ -111,6 +112,7 @@ public sealed class RsvpDietaryConsentTests
         stored.DietaryConsent.ShouldBeFalse();
         stored.DietaryConsentSource.ShouldBeNull();
         stored.DietaryConsentAt.ShouldBeNull();
+        stored.DietaryConsentGuestAt.ShouldBeNull();
     }
 
     [Fact]
@@ -146,15 +148,18 @@ public sealed class RsvpDietaryConsentTests
             DateTimeOffset.UnixEpoch,
             DietaryConsent: true,
             DietaryConsentSource: DietaryConsentSource.Admin,
-            DietaryConsentAt: DateTimeOffset.UnixEpoch);
+            DietaryConsentAt: DateTimeOffset.UnixEpoch.AddDays(2),
+            DietaryConsentGuestAt: DateTimeOffset.UnixEpoch);
 
         var entity = TableRsvpRepository.ToEntity(record);
         entity.GetBoolean("DietaryConsent").ShouldBe(true);
         entity.GetString("DietaryConsentSource").ShouldBe("admin");
+        entity.GetDateTimeOffset("DietaryConsentGuestAt").ShouldBe(DateTimeOffset.UnixEpoch);
         var read = TableRsvpRepository.ToRecord(entity);
         read.DietaryConsent.ShouldBeTrue();
         read.DietaryConsentSource.ShouldBe(DietaryConsentSource.Admin);
-        read.DietaryConsentAt.ShouldBe(DateTimeOffset.UnixEpoch);
+        read.DietaryConsentAt.ShouldBe(DateTimeOffset.UnixEpoch.AddDays(2));
+        read.DietaryConsentGuestAt.ShouldBe(DateTimeOffset.UnixEpoch);
         TableRsvpRepository.ToRecord(TableRsvpRepository.ToEntity(record with { DietaryConsentSource = DietaryConsentSource.Guest }))
             .DietaryConsentSource.ShouldBe(DietaryConsentSource.Guest);
 
@@ -162,10 +167,19 @@ public sealed class RsvpDietaryConsentTests
         older.Remove("DietaryConsent");
         older.Remove("DietaryConsentSource");
         older.Remove("DietaryConsentAt");
+        older.Remove("DietaryConsentGuestAt");
         var olderRecord = TableRsvpRepository.ToRecord(older);
         olderRecord.DietaryConsent.ShouldBeFalse();
         olderRecord.DietaryConsentSource.ShouldBeNull();
         olderRecord.DietaryConsentAt.ShouldBeNull();
+        olderRecord.DietaryConsentGuestAt.ShouldBeNull();
+
+        // A row written after the source column but before the guest's consent time stays readable.
+        var withoutGuestTime = new TableEntity(entity);
+        withoutGuestTime.Remove("DietaryConsentGuestAt");
+        var guestTimeMissing = TableRsvpRepository.ToRecord(withoutGuestTime);
+        guestTimeMissing.DietaryConsentSource.ShouldBe(DietaryConsentSource.Admin);
+        guestTimeMissing.DietaryConsentGuestAt.ShouldBeNull();
     }
 
     private static object YesWithDiet(bool? consent) => new

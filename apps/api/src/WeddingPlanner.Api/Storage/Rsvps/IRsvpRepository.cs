@@ -51,6 +51,13 @@ public interface IRsvpRepository
 /// consent, and on rows written before the source was stored (only guest writes set the flag then).
 /// </param>
 /// <param name="DietaryConsentAt">When the consent was recorded (UTC); <see langword="null"/> like the source.</param>
+/// <param name="DietaryConsentGuestAt">
+/// When the guest last consented in the reply form (UTC): set by every guest write that stores dietary data, kept when
+/// an admin's attestation replaces <paramref name="DietaryConsentSource"/> and <paramref name="DietaryConsentAt"/> (for
+/// example when a typo in a name is fixed), and cleared only when no dietary data is left. So the record shows both the
+/// guest's own consent and a later attestation. <see langword="null"/> when the guest never consented in the form, and
+/// on rows written before it was stored.
+/// </param>
 public sealed record RsvpRecord(
     string Id,
     RsvpAnswer Answer,
@@ -59,7 +66,8 @@ public sealed record RsvpRecord(
     DateTimeOffset UpdatedAt,
     bool DietaryConsent = false,
     DietaryConsentSource? DietaryConsentSource = null,
-    DateTimeOffset? DietaryConsentAt = null)
+    DateTimeOffset? DietaryConsentAt = null,
+    DateTimeOffset? DietaryConsentGuestAt = null)
 {
     /// <summary>Never prints the token hash or personal data (records print every member by default).</summary>
     public override string ToString() => $"RsvpRecord {{ Id = {Id} }}";

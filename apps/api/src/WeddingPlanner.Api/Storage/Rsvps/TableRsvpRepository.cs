@@ -13,7 +13,9 @@ namespace WeddingPlanner.Api.Storage.Rsvps;
 /// <c>AttendingCount</c> (people coming: <c>PersonCount</c> for a yes, 0 for a no), <c>Message</c>,
 /// <c>Language</c>, <c>DietaryConsent</c> (bool; missing on older entities, read as <see langword="false"/>),
 /// <c>DietaryConsentSource</c> (<c>guest</c> or <c>admin</c>) and <c>DietaryConsentAt</c> (both only while there is
-/// consent; missing on older entities, read as <see langword="null"/>), <c>TokenHash</c>, <c>CreatedAt</c>,
+/// consent; missing on older entities, read as <see langword="null"/>), <c>DietaryConsentGuestAt</c> (the guest's own
+/// consent in the form; only while there is dietary data the guest consented to; missing on older entities, read as
+/// <see langword="null"/>), <c>TokenHash</c>, <c>CreatedAt</c>,
 /// <c>UpdatedAt</c>, <c>SchemaVersion</c>. Columns added later are optional, so the schema version stays 1.
 /// </summary>
 public sealed class TableRsvpRepository(TableStorage storage) : IRsvpRepository
@@ -142,6 +144,7 @@ public sealed class TableRsvpRepository(TableStorage storage) : IRsvpRepository
             ["DietaryConsent"] = record.DietaryConsent,
             ["DietaryConsentSource"] = record.DietaryConsentSource is { } source ? SourceName(source) : null,
             ["DietaryConsentAt"] = record.DietaryConsentAt?.ToUniversalTime(),
+            ["DietaryConsentGuestAt"] = record.DietaryConsentGuestAt?.ToUniversalTime(),
             ["TokenHash"] = record.TokenHash,
             ["CreatedAt"] = record.CreatedAt.ToUniversalTime(),
             ["UpdatedAt"] = record.UpdatedAt.ToUniversalTime(),
@@ -166,7 +169,8 @@ public sealed class TableRsvpRepository(TableStorage storage) : IRsvpRepository
             entity.GetDateTimeOffset("UpdatedAt") ?? DateTimeOffset.MinValue,
             entity.GetBoolean("DietaryConsent") ?? false,
             ParseSource(entity.GetString("DietaryConsentSource")),
-            entity.GetDateTimeOffset("DietaryConsentAt"));
+            entity.GetDateTimeOffset("DietaryConsentAt"),
+            entity.GetDateTimeOffset("DietaryConsentGuestAt"));
     }
 
     private static string SourceName(DietaryConsentSource source) => source switch

@@ -59,9 +59,12 @@ Tick each item on `test` (open `/datenschutz` there in German, English and Spani
       diese Angaben zum Essen speichern." and `PUT /api/admin/rsvps/{id}` refuses the edit without it
       (400). The reply then records that and when an admin attested (`DietaryConsentSource`
       `admin`), but not which admin and not the guest's proof. To replace a companion, remove the
-      person and add the new one, so their dietary data does not move to someone else. Agree among
-      the admins: **tick it only with that guest's explicit consent, and
-      keep your own proof of it** (for example their email or message). The notice's "What data we
+      person and add the new one, so their dietary data does not move to someone else. Fixing a
+      typo in the name of a person with dietary data asks for the confirmation too (the system
+      cannot tell a typo from another person); the guest's own consent time from the form is kept
+      (`DietaryConsentGuestAt`), so the reply shows both. Agree among the admins: **tick it only
+      with that guest's explicit consent, and keep your own proof of it** (for example their email
+      or message). The notice's "What data we
       process" says so too: dietary details given another way (for example by email) are entered
       only with explicit consent, and the consent, its time and where it was given are recorded.
 - [ ] Dietary details go only to the kitchen or caterer, with names only (the notice's "purpose"

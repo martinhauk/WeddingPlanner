@@ -318,14 +318,20 @@ Table `Rsvps` (plus `Storage__TablePrefix`), partition `rsvp`, row key = reply i
 `Attending`, `People` (JSON `[{id, name, tags, note}]`), `PersonCount`, `AttendingCount` (people coming,
 0 for a no), `Message`, `Language`, `DietaryConsent` (missing on older rows: read as `false`),
 `DietaryConsentSource` (`guest` or `admin`) and `DietaryConsentAt` (UTC), both only while
-`DietaryConsent` is `true` and missing on rows written before they existed, `TokenHash`, `CreatedAt`,
-`UpdatedAt`, `SchemaVersion` (1; the consent columns are optional, so it stays 1). No IP addresses
-and no tokens are stored.
+`DietaryConsent` is `true` and missing on rows written before they existed, `DietaryConsentGuestAt`
+(UTC, the guest's own consent in the form; missing on rows written before it existed), `TokenHash`,
+`CreatedAt`, `UpdatedAt`, `SchemaVersion` (1; the consent columns are optional, so it stays 1). No
+IP addresses and no tokens are stored.
 
-**Consent record:** a guest write sets `DietaryConsent` `true`, source `guest` and the time when the
-reply has dietary data, and clears all three otherwise. An admin edit records source `admin` when it
-adds or changes dietary data with the attestation (see "Admin endpoints"), keeps the stored values
-when the dietary data is unchanged or only removed, and clears them when none is left.
+**Consent record:** `DietaryConsentSource` and `DietaryConsentAt` describe the latest consent (the
+guest's or an admin's attestation); `DietaryConsentGuestAt` keeps the guest's own. A guest write
+(`POST /api/rsvp`, `PUT /api/rsvp/me`) sets `DietaryConsent` `true`, source `guest` and the time,
+and `DietaryConsentGuestAt` to the same time, when the reply has dietary data, and clears all four
+otherwise. An admin edit records source `admin` and its time when it adds or changes dietary data
+with the attestation (see "Admin endpoints") and never changes `DietaryConsentGuestAt`; it keeps
+the stored values when the dietary data is unchanged or only removed, and clears all four when none
+is left. On a row written before `DietaryConsentGuestAt` existed, an admin edit takes the guest's
+time from a stored source `guest`, so an attestation does not lose it.
 
 ## Admin endpoints
 
@@ -357,9 +363,11 @@ someone else, for example when an admin types a new companion into an existing s
 (no or unknown `id`) with any dietary data. Removing tags, notes or people, renaming people without
 dietary data and changing the answer or message need no attestation. Results: attested additions or
 changes store `DietaryConsent` with source `admin` and the time (which admin is not stored;
-`UpdatedBy` is not implemented); unchanged or only removed data keeps the stored consent, source and
-time, and an attestation sent anyway is ignored (it never replaces a guest's own consent); a reply
-left without dietary data (all removed, or now a "no") has no consent. The check runs after
+`UpdatedBy` is not implemented), and keep the guest's own consent time (`DietaryConsentGuestAt`):
+fixing a typo in the name of a person with dietary data needs the attestation, but the record still
+shows when the guest consented in the form; unchanged or only removed data keeps the stored consent,
+source and time, and an attestation sent anyway is ignored (it never replaces a guest's own
+consent); a reply left without dietary data (all removed, or now a "no") has no consent. The check runs after
 `If-Match` (428 / 412 first). The admin editor asks for the attestation with a checkbox as soon as an
 edit adds or changes dietary data by the same rule (`addsOrChangesDietary`). When the API still asks
 for it, the checkbox stays required only while the answer and the people are the ones it refused; a
