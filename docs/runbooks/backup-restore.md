@@ -11,24 +11,28 @@ chats.
 
 ## At a glance
 
-| What                     | When                                              | Label     | Environments     |
-| ------------------------ | ------------------------------------------------- | --------- | ---------------- |
-| Pre-deploy backup        | every deploy, before anything changes             | `deploy`  | test, production |
-| Nightly backup           | daily 01:30 UTC (02:30 CET / 03:30 CEST)          | `nightly` | test, production |
-| Restore drill            | every e2e deploy, after the smoke test            | `drill`   | e2e              |
-| Manual backup or restore | when you need it (`scripts/ops/restore-table.sh`) | `manual`  | any              |
+| What                     | When                                              | Label     | Environments     | [Check](#checking-a-written-backup) of the written backup                   |
+| ------------------------ | ------------------------------------------------- | --------- | ---------------- | --------------------------------------------------------------------------- |
+| Pre-deploy backup        | every deploy, before anything changes             | `deploy`  | test, production | right after the export (deploy identity); a failure stops the deploy        |
+| Nightly backup           | daily 01:30 UTC (02:30 CET / 03:30 CEST)          | `nightly` | test, production | right after the export (backup identity); a failure fails the run           |
+| Restore drill            | every e2e deploy, after the smoke test            | `drill`   | e2e              | after the export, before the restore; a failure fails the e2e job           |
+| Manual backup or restore | when you need it (`scripts/ops/restore-table.sh`) | `manual`  | any              | by hand (`check --backup-id`); a restore checks every file before it writes |
 
 - **Pre-deploy:** [`_deploy-environment.yml`](../../.github/workflows/_deploy-environment.yml)
   first deploys the backup store ([`infra/app/backup.bicep`](../../infra/app/backup.bicep), which
-  touches neither the app nor the data), then exports every table, and only then deploys the app
-  infrastructure and uploads the site. **A failed backup fails the job**, so nothing is deployed;
-  production never runs after a failed test job. The first deploy of an environment has no data
-  account yet: it writes a backup with an empty manifest and succeeds. The job summary shows the
-  backup id.
+  touches neither the app nor the data), then exports every table, reads that backup back and
+  checks it against its manifest, and only then deploys the app infrastructure and uploads the
+  site. **A failed backup or a failed check fails the job**, so nothing is deployed; production
+  never runs after a failed test job. The first deploy of an environment has no data account yet:
+  it writes a backup with an empty manifest, which passes the check with 0 tables. The job summary
+  shows the backup id and `backup check: passed`.
 - **Nightly:** [`backup.yml`](../../.github/workflows/backup.yml) runs on a schedule (and by hand:
-  Actions → backup → Run workflow). GitHub disables schedules in public repositories after 60 days
-  without activity; re-enable the workflow then. A failed run is mailed to whoever last changed the
-  workflow file.
+  Actions → backup → Run workflow), exports every table and checks the new backup the same way. A
+  failed check fails the run. Until the owner has re-run the bootstrap after the backup identity
+  got blob read (see [Who can do what](#who-can-do-what)), the check is skipped with a notice and
+  the summary says `backup check: skipped`. GitHub disables schedules in public repositories after
+  60 days without activity; re-enable the workflow then. A failed run is mailed to whoever last
+  changed the workflow file.
 - **Restore drill:** see [The restore drill](#the-restore-drill).
 
 ## Where the backups are
@@ -45,8 +49,39 @@ group `rg-<slug>-<env>`, next to (never inside) the data account `st<slug><env><
 A backup id is `<UTC time>-<label>-<random>`, e.g. `20261126T013012Z-nightly-3fa9c2`. Every
 property keeps its type (`String`, `Boolean`, `Int32`, `Int64`, `Double`, `DateTime` with 100 ns
 precision, `Guid`, `Binary`). The manifest lists each table with its row count, the SHA-256 of its
-file and a content hash of its rows (independent of compression and server timestamps); a restore
-checks all three before it writes anything.
+file and a content hash of its rows (independent of compression and server timestamps); every
+restore and the check after every backup compare all three.
+
+## Checking a written backup
+
+`table-backup check` reads a written backup back and compares it with its own manifest. It touches
+no table and needs only blob read on the backups. It fails when:
+
+| Code                | Meaning                                                                             |
+| ------------------- | ----------------------------------------------------------------------------------- |
+| `manifest: missing` | no `manifest.json` in the folder: an incomplete backup, or no backup with this id   |
+| `manifest: invalid` | the manifest is not valid (format, hashes, totals, names, a foreign backup id)      |
+| `missing`           | the manifest lists a table file that is not in the folder                           |
+| `size`, `sha256`    | the stored file differs from the manifest (byte size, SHA-256)                      |
+| `gzip`              | the file does not gunzip                                                            |
+| `json`, `entity`    | a line is not JSON, or not a typed entity                                           |
+| `rows`, `content`   | the decoded rows differ from the manifest (row count, content hash of the rows)     |
+| `unlisted files: n` | the folder holds files the manifest does not list (only counted, names not printed) |
+
+All table-file checks run for every file, so `size, sha256` alone means "recompressed, same rows",
+while `content` means changed data. CI runs it with `--quiet`, which prints only
+`backup <id>: ok (<n> tables)` or `backup <id>: FAILED` with one line of codes per table, never
+row counts, row contents or account names. Exit codes: 0 ok, 1 a problem (or an error), 3 the
+identity may not read the backups (`AuthorizationPermissionMismatch`).
+
+By hand, with `az login` and Storage Blob Data Reader (or more) on the backup account, from the
+repository root (do not paste the account name anywhere):
+
+```sh
+BACKUP_ACCOUNT="$account" node tools/table-backup/src/cli.ts check --backup-id <id>
+```
+
+Without `--quiet` it also prints each table with its row count, for your terminal only.
 
 ## Retention and protection
 
@@ -118,7 +153,8 @@ page blobs or blobs in an immutable container" and "won't work with any blob in 
 container" (lifecycle policy structure, lifecycle overview: known issues). With the policy in
 place, the lifecycle rule could never delete a backup, and backups would outlive the promise. An
 unlocked policy also gives little protection: anyone who may change the account can shorten it.
-Soft delete (7 days), versioning, the write-only nightly identity and the delete lock remain.
+Soft delete (7 days), versioning, the nightly identity without delete rights and the delete lock
+remain.
 
 **One-time owner step: delete the old policy in every environment.** Removing the resource from the
 template does not remove it from Azure, and the delete lock blocks the delete, so for each of e2e,
@@ -184,30 +220,57 @@ tool never does that: every write is conditional (`If-None-Match: *`) and fails 
 
 ## Who can do what
 
-| Identity                                                       | Tables         | Backups                                       |
-| -------------------------------------------------------------- | -------------- | --------------------------------------------- |
-| Deploy identity `id-<slug>-<env>` (GitHub Environment `<env>`) | read (RBAC)    | read and write (Blob Data Contributor)        |
-| Backup identity `id-<slug>-<env>-backup` (`backup-<env>`)      | read           | **write new blobs only** (no read, no delete) |
-| Owner (you, `az login`)                                        | read and write | read and write                                |
+| Identity                                                       | Tables         | Backups                                                                              |
+| -------------------------------------------------------------- | -------------- | ------------------------------------------------------------------------------------ |
+| Deploy identity `id-<slug>-<env>` (GitHub Environment `<env>`) | read (RBAC)    | read and write (Blob Data Contributor)                                               |
+| Backup identity `id-<slug>-<env>-backup` (`backup-<env>`)      | read           | **write new blobs, read current versions in `table-backups`** (no delete, condition) |
+| Owner (you, `az login`)                                        | read and write | read and write                                                                       |
 
 The nightly job cannot use the `production` GitHub Environment: it waits for a reviewer, which a
 schedule cannot pass. [`scripts/bootstrap.sh`](../../scripts/bootstrap.sh) therefore creates, for
 test and production, a GitHub Environment `backup-<env>` (branch `main` only, no reviewer, no admin
 bypass) and an identity `id-<slug>-<env>-backup` that trusts only that environment, with Reader
 (to find the storage accounts), Storage Table Data Reader and the custom role **WeddingPlanner
-Backup Writer** (write new blobs only) on the app resource group. That identity can neither change
-guest data nor read or delete backups. The e2e drill writes temporary tables with the e2e data
-account's key, which the deploy identity (Contributor) reads at runtime and masks.
+Backup Writer** on the app resource group. The role may write new blobs and read blobs; its
+assignment carries a role assignment condition (ABAC, in
+[`app-rg-access.bicep`](../../infra/bootstrap/modules/app-rg-access.bicep)) that allows a blob
+read only for the **current version** of a blob in the container **`table-backups`**, and a blob
+listing only in that container. That identity can neither change guest data nor delete backups,
+and it cannot read previous blob versions (overwritten originals) or blobs in other containers.
+The e2e drill writes temporary tables with the e2e data account's key, which the deploy identity
+(Contributor) reads at runtime and masks.
 
-**One-time setup after this change:** re-run the bootstrap for test and production (idempotent):
+### Why the nightly identity may read backups
+
+The nightly check has to read back what the job just wrote. Two options were weighed:
+
+- **Blob read for the backup identity (chosen).** Only the read data action is added to the custom
+  role (still no delete, no table write), limited by the condition above. The cost: the identity
+  can also read the older backups that still exist (current versions, at most about 19 days old,
+  see [the arithmetic](#the-arithmetic-worst-case)). That is the same guest data it can already
+  read from the tables, plus replies withdrawn or erased since then. In test, the deploy identity
+  (no reviewer) can already read every backup. Only code on `main` can use the backup identity
+  (`backup-<env>` allows branch `main` only), so the new exposure is small: a change merged to
+  `main` could read production backups through the nightly job without the production reviewer,
+  where today it could read the production tables the same way.
+- **No read; check the newest nightly backups during the next pre-deploy run instead.** Rejected:
+  weeks without deploys would leave every nightly backup unchecked, exactly when they matter most
+  (the deploy backups get older with every quiet week).
+
+**One-time setup after this change:** re-run the bootstrap for test and production (idempotent;
+it updates the custom role and adds the condition to the existing assignment):
 
 ```sh
 scripts/bootstrap.sh --env test --instance <instance checkout>
 scripts/bootstrap.sh --env production --instance <instance checkout>
 ```
 
-Until then the nightly job skips with a notice; the pre-deploy backup and the drill need no
-bootstrap change.
+Until then the nightly job skips with a notice (a backup environment without Azure variables) or
+skips only the check with a notice (a backup identity whose role lacks blob read: the tool exits
+with 3 on `AuthorizationPermissionMismatch`). If the check notice stays after the re-run (allow a
+few minutes for RBAC to replicate), the role or its condition did not apply: look at the role
+assignment of `id-<slug>-<env>-backup` in the portal (Access control → Role assignments →
+Condition). The pre-deploy backup and check and the drill need no bootstrap change.
 
 ## Restore
 
@@ -257,21 +320,30 @@ data only):
 
 1. upsert two fixed canary rows covering every property type into `BackupDrillCanary`;
 2. export every table to the e2e backup account (label `drill`);
-3. restore that backup into a temporary prefix `drill<8 hex>` (`drill1a2b3c4dRsvps`, ...);
-4. compare every restored table with the manifest: row count and content hash;
-5. delete the temporary tables, also when a step failed.
+3. [check](#checking-a-written-backup) that backup against its manifest (a failed check ends the
+   drill before anything is restored);
+4. restore that backup into a temporary prefix `drill<8 hex>` (`drill1a2b3c4dRsvps`, ...);
+5. compare every restored table with the manifest: row count and content hash;
+6. delete the temporary tables, also when a step failed.
 
-Any mismatch or error fails the e2e job, which stops the promotion to test and production. Exports
-skip tables named `drill<8 hex>...`, so leftovers of an aborted drill never end up in a backup;
-delete such leftovers by hand.
+Any mismatch or error fails the e2e job, which stops the promotion to test and production. The
+check in step 3 is the same code the pre-deploy and nightly jobs run, so it also runs against real
+Azure Blob Storage before a change reaches test. Exports skip tables named `drill<8 hex>...`, so
+leftovers of an aborted drill never end up in a backup; delete such leftovers by hand.
 
 ## Tests
 
 - `pnpm --filter @weddingplanner/table-backup test`: unit tests (every property type round trip,
-  manifest and hashes, the non-empty target guard) and, with Azurite running (`pnpm storage:up`),
+  manifest and hashes, the non-empty target guard, `check` against an in-memory store: a good
+  backup, a corrupted gzip, a changed or removed row, a missing file, a missing or invalid
+  manifest, an extra file, no read access) and, with Azurite running (`pnpm storage:up`),
   integration tests: seed → export → wipe → restore → deep-equal, `--dry-run` changes nothing,
-  `--table-prefix` copy, the drill. Without Azurite they are skipped unless
-  `TABLE_BACKUP_REQUIRE_AZURITE=1`.
+  `--table-prefix` copy, the drill (also one whose backup fails the check), and `check` through the
+  CLI with `--quiet` against real blobs (the same failure cases). Without Azurite they are skipped
+  unless `TABLE_BACKUP_REQUIRE_AZURITE=1`.
 - `scripts/ops/tests/restore-table/run.sh`: the restore script against a fake `az` and `node`.
 - `infra/app/tests/run.sh`: the backup store template (`tests/backup.jq`).
+- `infra/bootstrap/tests/run.sh`: the custom role (write and read blobs, no delete, no table data)
+  and the condition on its assignment (`tests/access.jq`), checked against the container name of
+  `infra/app/backup.bicep`.
 - `scripts/tests/bootstrap/run.sh`: the backup environment and identity of the bootstrap.
