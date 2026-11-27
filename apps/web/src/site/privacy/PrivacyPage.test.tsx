@@ -83,7 +83,7 @@ describe('PrivacyPage', () => {
       'What data we process',
       'Cookies and local storage',
       [
-        /You can show it again later on the invitation page, with your reply, in the browser you used to reply or to open the link\./,
+        /You can show it again later in the reply section of the invitation page, in the browser you used to reply or to open the link\./,
         /Anyone who has the link can see, change and withdraw your reply, so please keep it to yourselves\./,
         /We only store a kind of fingerprint of it \(a so-called hash\)/,
         /after the “#”\. Browsers do not send this part to the server/,
@@ -92,14 +92,14 @@ describe('PrivacyPage', () => {
         /It is set when you send your reply or open your personal link; if this browser already has another reply/,
         /in this browser or with your personal link; apart from you \(and anyone who has your link\), only we as your hosts can change it\./,
       ],
-      /only we can change a saved reply|on this page|device/,
+      /only we can change a saved reply|on this page|device|with your reply,/,
     ],
     [
       'es',
       'Qué datos tratamos',
       'Cookies y almacenamiento local',
       [
-        /Más tarde podéis volver a mostrarlo en la página de la invitación, junto a vuestra respuesta, en el navegador con el que respondisteis o abristeis el enlace\./,
+        /Más tarde podéis volver a mostrarlo junto a vuestra respuesta en la página de la invitación, desde el navegador con el que respondisteis o abristeis el enlace\./,
         /Quien tenga el enlace puede ver, cambiar y retirar vuestra respuesta, así que no lo compartáis con nadie\./,
         /Solo guardamos una especie de huella de ella \(lo que se llama un hash\)/,
         /sigue a «#»\. Los navegadores no envían esa parte al servidor/,
@@ -215,15 +215,74 @@ describe('PrivacyPage', () => {
     expect(hosting.textContent).toMatch(/persönlichen Links, Cookies oder IP-Adressen/);
   });
 
-  it('has no transfer paragraph in the EU and the standard clauses elsewhere', () => {
-    const { unmount } = renderPage({ regions: { app: 'westeurope', data: 'germanywestcentral' } });
-    expect(block('Hosting und Dienstleister').textContent).not.toContain('Art. 46');
+  /** The paragraph after the hosting paragraph: the transfer outside the EU. */
+  const transferParagraph = (title: string) =>
+    block(title).querySelectorAll('p')[1]?.textContent ?? '';
+
+  it.each([
+    [
+      'de',
+      'Hosting und Dienstleister',
+      'Zum weltweiten Netz von Microsoft gehören auch Server außerhalb der EU, zum Beispiel in den USA. Eure Angaben können deshalb auch dorthin übermittelt werden. Microsoft ist nach dem EU-U.S. Data Privacy Framework zertifiziert, für das ein Angemessenheitsbeschluss der EU-Kommission besteht (Art. 45 DSGVO). Für jede Übermittlung in ein Land außerhalb der EU gelten außerdem die Standardvertragsklauseln der EU-Kommission (Art. 46 DSGVO).',
+    ],
+    [
+      'en',
+      'Hosting and service providers',
+      'Microsoft’s worldwide network also includes servers outside the EU, for example in the USA, so your details may be transferred there as well. Microsoft is certified under the EU-U.S. Data Privacy Framework, which is covered by an adequacy decision of the European Commission (Art. 45 GDPR). In addition, the European Commission’s standard contractual clauses apply to every transfer to a country outside the EU (Art. 46 GDPR).',
+    ],
+    [
+      'es',
+      'Alojamiento y proveedores',
+      'La red mundial de Microsoft incluye también servidores fuera de la UE, por ejemplo en EE. UU., así que vuestros datos también pueden transferirse allí. Microsoft está certificada conforme al Marco de Privacidad de Datos UE-EE. UU., cubierto por una decisión de adecuación de la Comisión Europea (art. 45 RGPD). Además, para cualquier transferencia a un país fuera de la UE se aplican las cláusulas contractuales tipo de la Comisión Europea (art. 46 RGPD).',
+    ],
+  ] as const)(
+    'always has the transfer paragraph, also with both regions in the EU (%s)',
+    (lang, title, paragraph) => {
+      renderPage({ regions: { app: 'westeurope', data: 'germanywestcentral' }, lang });
+      // The worldwide network delivers the pages from outside the EU too; no region is named.
+      expect(transferParagraph(title)).toBe(paragraph);
+    },
+  );
+
+  it.each([
+    [
+      'de',
+      'Hosting und Dienstleister',
+      'Auch die Azure-Region East US 2 (Virginia, USA) liegt außerhalb der EU; eure Antworten gehen also in jedem Fall dorthin. Microsoft ist nach dem EU-U.S. Data Privacy Framework zertifiziert',
+    ],
+    [
+      'en',
+      'Hosting and service providers',
+      'The Azure region East US 2 (Virginia, USA) is outside the EU, too, so your replies always go there. Microsoft is certified under the EU-U.S. Data Privacy Framework',
+    ],
+    [
+      'es',
+      'Alojamiento y proveedores',
+      'La región de Azure East US 2 (Virginia, EE. UU.) también está fuera de la UE, así que vuestras respuestas llegan allí en todo caso. Microsoft está certificada conforme al Marco de Privacidad de Datos UE-EE. UU.',
+    ],
+  ] as const)(
+    'names an API region in the USA in the transfer paragraph (%s)',
+    (lang, title, text) => {
+      renderPage({ regions: { app: 'eastus2', data: 'germanywestcentral' }, lang });
+      const paragraph = transferParagraph(title);
+      expect(paragraph).toContain(text);
+      expect(paragraph).toMatch(/(Art\.|art\.) 46/);
+      expect(paragraph).not.toContain('Germany West Central');
+    },
+  );
+
+  it('names every region outside the EU once', () => {
+    const { unmount } = renderPage({ regions: { app: 'eastasia', data: 'somewhere1' } });
+    expect(transferParagraph('Hosting und Dienstleister')).toContain(
+      'Auch die Azure-Regionen East Asia (Hongkong) und somewhere1 liegen außerhalb der EU;',
+    );
     unmount();
-    renderPage({ regions: { app: 'eastasia', data: 'somewhere1' } });
-    const hosting = block('Hosting und Dienstleister');
-    expect(hosting.textContent).toContain('somewhere1');
-    expect(hosting.textContent).toContain('Standardvertragsklauseln');
-    expect(hosting.textContent).not.toContain('Data Privacy Framework');
+    renderPage({ regions: { app: 'eastus2', data: 'eastus2' }, lang: 'en' });
+    const paragraph = transferParagraph('Hosting and service providers');
+    expect(paragraph).toContain(
+      'The Azure region East US 2 (Virginia, USA) is outside the EU, too',
+    );
+    expect(paragraph.match(/East US 2/g)).toHaveLength(1);
   });
 
   it('falls back to the couple and the contact section without privacy details', () => {

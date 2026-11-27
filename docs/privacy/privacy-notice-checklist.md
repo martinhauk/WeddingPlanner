@@ -87,10 +87,15 @@ reply, including dietary data, is **received and processed in the USA** for the 
 request before it is stored in Germany; telemetry and backups stay in Germany.
 
 - [ ] The "Hosting and service providers" section names both regions (filled from `instance.json`)
-      and shows the **US transfer clause**: servers in the USA are used, Microsoft is certified under
-      the **EU-U.S. Data Privacy Framework** (adequacy decision, Art. 45 GDPR) and the **standard
-      contractual clauses** apply as well (Art. 46 GDPR). The page shows this clause automatically
-      when a region is in the USA; check that it is there.
+      and is followed by the **transfer paragraph**, which the page always shows: Microsoft's
+      worldwide network (which delivers the pages) also includes servers outside the EU, for
+      example in the USA; Microsoft is certified under the **EU-U.S. Data Privacy Framework**
+      (adequacy decision, Art. 45 GDPR), and the **standard contractual clauses** apply to every
+      transfer outside the EU (Art. 46 GDPR). When `swaLocation` or `dataLocation` is outside the
+      EU, the paragraph also names that region and says that the replies always go there; check
+      that it names West US 2 (or your `swaLocation`). Lead decision in #95, revertible by the
+      owner: before, the paragraph appeared only when a region was outside the EU, although the
+      notice says the pages come from a worldwide network.
 - [ ] **Open question: should the dietary consent sentence mention the US processing?** The transfer
       itself rests on the adequacy decision and the clauses, not on consent, and the notice
       explains it. Mentioning it in the consent sentence too ("…processed on Microsoft servers,
