@@ -29,6 +29,9 @@ export const ui = {
   /** The hero's line when this browser has a reply (from the `wp_rsvp_state` cookie). */
   rsvpSaidYes: { de: 'Ihr habt zugesagt.', en: 'You said yes.', es: 'Habéis dicho que sí.' },
   rsvpSaidNo: { de: 'Ihr habt abgesagt.', en: 'You said no.', es: 'Habéis dicho que no.' },
+  /** The navigation's RSVP entry when this browser has a reply: short, it may sit in one line. */
+  navSaidYes: { de: 'Zugesagt', en: 'You said yes', es: 'Dijisteis que sí' },
+  navSaidNo: { de: 'Abgesagt', en: 'You said no', es: 'Dijisteis que no' },
   countdown: {
     label: { de: 'Countdown bis zur Hochzeit', en: 'Countdown to the wedding', es: 'Cuenta atrás' },
     days: { de: 'Tage', en: 'Days', es: 'Días' },
@@ -96,6 +99,8 @@ export const ui = {
       es: 'Qué pena – gracias por avisarnos.',
     },
     change: { de: 'Antwort ändern', en: 'Change reply', es: 'Cambiar respuesta' },
+    /** The hero's and the navigation's link to the own reply after the deadline (read-only). */
+    viewReply: { de: 'Antwort ansehen', en: 'View your reply', es: 'Ver vuestra respuesta' },
     who: { de: 'Wer kann nicht kommen?', en: "Who can't come?", es: '¿Quién no puede venir?' },
     person: { de: 'Person', en: 'Person', es: 'Persona' },
     attendance: { de: 'Eure Antwort', en: 'Your reply', es: 'Vuestra respuesta' },
@@ -173,6 +178,11 @@ export const ui = {
       en: "Keep this link safe: with it you can see and change your reply on any phone or browser. Please don't share it.",
       es: 'Guardad bien este enlace: con él podéis ver y cambiar vuestra respuesta desde cualquier móvil o navegador. No lo compartáis.',
     },
+    showLink: {
+      de: 'Euren persönlichen Link anzeigen',
+      en: 'Show your personal link',
+      es: 'Ver vuestro enlace personal',
+    },
     copyLink: { de: 'Link kopieren', en: 'Copy link', es: 'Copiar enlace' },
     linkCopied: { de: 'Link kopiert.', en: 'Link copied.', es: 'Enlace copiado.' },
     copyFailed: {
@@ -189,6 +199,16 @@ export const ui = {
       de: 'Eure Antwort ist jetzt auch in diesem Browser gespeichert. Ihr könnt sie hier ändern.',
       en: 'Your reply is now saved in this browser too. You can change it here.',
       es: 'Vuestra respuesta ahora también está guardada en este navegador. Podéis cambiarla aquí.',
+    },
+    /**
+     * The page has a reply and the opened link belongs to another one. Plain words only (no
+     * browser, link or saving): `{own}` and `{link}` are the names of the two replies.
+     */
+    whoTitle: { de: 'Wer seid ihr?', en: 'Who are you?', es: '¿Quiénes sois?' },
+    whoQuestion: {
+      de: 'Seid ihr {own} oder {link}?',
+      en: 'Are you {own} or {link}?',
+      es: '¿Sois {own} o {link}?',
     },
     linkInvalid: {
       de: 'Dieser Link funktioniert leider nicht. Vielleicht ist er unvollständig, oder die Antwort dazu wurde zurückgezogen.',

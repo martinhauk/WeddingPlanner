@@ -48,6 +48,22 @@ describe('Hero: the reply of this browser', () => {
     expect(screen.getByRole('link', { name: 'Zusagen' })).toBeInTheDocument();
   });
 
+  it.each([
+    ['de', 'Antwort ansehen'],
+    ['en', 'View your reply'],
+    ['es', 'Ver vuestra respuesta'],
+  ] as const)(
+    '%s: offers to view the reply, not to change it, after the deadline',
+    (lang, view) => {
+      const api = mockApi({});
+      setStateCookie('yes');
+      render(<Hero content={content} lang={lang} rsvpId="rsvp" rsvpClosed />);
+      expect(screen.getByRole('link', { name: view })).toHaveAttribute('href', '#rsvp');
+      expect(screen.getAllByRole('link')).toHaveLength(1);
+      expect(api.calls).toEqual([]);
+    },
+  );
+
   it('shows no reply state while RSVP is off', () => {
     setStateCookie('yes');
     render(<Hero content={content} lang="de" rsvpId={undefined} />);

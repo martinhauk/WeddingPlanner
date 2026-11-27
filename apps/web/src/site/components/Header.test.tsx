@@ -1,5 +1,7 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { RSVP_STATE_EVENT } from '../api/rsvp-client.ts';
+import { mockApi, setStateCookie } from '../test/fake-api.ts';
 import { Header, type HeaderProps } from './Header.tsx';
 
 const nav = [
@@ -111,5 +113,57 @@ describe('Header', () => {
     const overflowing = renderHeader();
     expect(overflowing.container.querySelector('header')).toHaveClass('collapsed');
     expect(screen.getByRole('button', { name: 'Menü' })).toHaveAttribute('aria-expanded', 'false');
+  });
+});
+
+describe('Header: the RSVP entry of a browser with a reply', () => {
+  afterEach(() => setStateCookie(null));
+
+  it.each([
+    ['de', 'yes', 'Zugesagt', 'Zugesagt, Antwort ändern'],
+    ['de', 'no', 'Abgesagt', 'Abgesagt, Antwort ändern'],
+    ['en', 'yes', 'You said yes', 'You said yes, Change reply'],
+    ['en', 'no', 'You said no', 'You said no, Change reply'],
+    ['es', 'yes', 'Dijisteis que sí', 'Dijisteis que sí, Cambiar respuesta'],
+    ['es', 'no', 'Dijisteis que no', 'Dijisteis que no, Cambiar respuesta'],
+  ] as const)('%s, %s: says so and links to the RSVP section', (lang, state, label, name) => {
+    const api = mockApi({});
+    setStateCookie(state);
+    renderHeader({ lang });
+    const entry = screen.getByRole('link', { name });
+    expect(entry).toHaveAttribute('href', '#rsvp');
+    expect(entry).toHaveClass('nav-rsvp');
+    expect(entry).toHaveTextContent(label);
+    expect(screen.queryByRole('link', { name: 'Zusagen' })).toBeNull();
+    expect(api.calls).toEqual([]);
+  });
+
+  it('offers to view the reply after the deadline', () => {
+    setStateCookie('no');
+    renderHeader({ rsvpClosed: true });
+    expect(screen.getByRole('link', { name: 'Abgesagt, Antwort ansehen' })).toHaveAttribute(
+      'href',
+      '#rsvp',
+    );
+  });
+
+  it('shows the plain entry without a reply and while RSVP is off', () => {
+    renderHeader();
+    expect(screen.getByRole('link', { name: 'Zusagen' })).toHaveClass('nav-rsvp');
+    cleanup();
+
+    setStateCookie('yes');
+    renderHeader({ rsvpId: undefined });
+    expect(screen.getByRole('link', { name: 'Zusagen' })).not.toHaveClass('nav-rsvp');
+    expect(screen.queryByText('Zugesagt')).toBeNull();
+  });
+
+  it('follows the state cookie when an RSVP call changes it', () => {
+    renderHeader();
+    setStateCookie('yes');
+    act(() => {
+      window.dispatchEvent(new Event(RSVP_STATE_EVENT));
+    });
+    expect(screen.getByRole('link', { name: 'Zugesagt, Antwort ändern' })).toBeInTheDocument();
   });
 });

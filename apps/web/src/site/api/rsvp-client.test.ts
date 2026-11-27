@@ -13,10 +13,12 @@ import {
   createRsvp,
   deleteRsvp,
   editLinkFor,
+  editTokenId,
   failureOf,
   getMine,
   getStatus,
   parseEditLink,
+  previewClaim,
   REQUEST_TIMEOUT_MS,
   RSVP_STATE_EVENT,
   readRsvpState,
@@ -89,6 +91,55 @@ describe('the personal edit link', () => {
     expect(api.calls[0]?.body).toEqual({ editToken: EDIT_TOKEN });
 
     const wrong = await claimRsvp(EDIT_TOKEN);
+    expect(wrong.ok === false && wrong.error.kind).toBe('notFound');
+  });
+
+  it('reads the edit token of the own reply, and only a well-formed one of that reply', async () => {
+    const other = `2c97fc9f604ca2d97f3e9e48e5fe604b.${'Ab3_-'.repeat(8)}xyz`;
+    mockApi({
+      'GET /api/rsvp/me': [
+        () => json(200, { ...mineBody(yesReply), editToken: EDIT_TOKEN }),
+        () => json(200, { ...mineBody(yesReply), editToken: other }),
+        () => json(200, { ...mineBody(yesReply), editToken: 42 }),
+      ],
+      'PUT /api/rsvp/me': () => json(200, { ...mineBody(yesReply, '"v2"'), editToken: EDIT_TOKEN }),
+    });
+    expect(await getMine()).toEqual({
+      ok: true,
+      value: { rsvp: yesReply, version: '"v1"', open: true, editToken: EDIT_TOKEN },
+    });
+    expect(await getMine()).toEqual({
+      ok: true,
+      value: { rsvp: yesReply, version: '"v1"', open: true },
+    });
+    expect(await getMine()).toEqual({
+      ok: true,
+      value: { rsvp: yesReply, version: '"v1"', open: true },
+    });
+    const updated = await updateRsvp(request, '"v1"');
+    expect(updated.ok && updated.value.editToken).toBe(EDIT_TOKEN);
+    expect(editTokenId(EDIT_TOKEN)).toBe(yesReply.id);
+  });
+
+  it('previews whose reply a link opens: the names only, without claiming it', async () => {
+    const api = mockApi({
+      'POST /api/rsvp/claim': [
+        () => json(200, { names: ['Jürgen Müller', 'Pablo Pérez'] }),
+        () => json(200, { names: [] }),
+        () => json(200, { names: ['Jürgen Müller', 7] }),
+        () => problem(404, 'not_found'),
+      ],
+    });
+    expect(await previewClaim(EDIT_TOKEN)).toEqual({
+      ok: true,
+      value: { names: ['Jürgen Müller', 'Pablo Pérez'] },
+    });
+    expect(api.calls[0]?.body).toEqual({ editToken: EDIT_TOKEN, preview: true });
+    for (let index = 0; index < 2; index += 1) {
+      const malformed = await previewClaim(EDIT_TOKEN);
+      expect(malformed.ok === false && malformed.error.kind).toBe('unavailable');
+    }
+    const wrong = await previewClaim(EDIT_TOKEN);
     expect(wrong.ok === false && wrong.error.kind).toBe('notFound');
   });
 

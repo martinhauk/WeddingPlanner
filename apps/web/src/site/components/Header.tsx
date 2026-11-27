@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { LANGS, type Lang, t } from '../i18n.ts';
 import type { NavItem } from '../sections/titles.ts';
 import { ui } from '../ui.ts';
+import { useRsvpState } from '../use-rsvp.ts';
 import { useActiveSection, useNavFit, useScrolled } from '../use-scroll.ts';
 
 const LANGUAGE_NAMES: Readonly<Record<Lang, string>> = {
@@ -15,8 +16,13 @@ export type HeaderProps = {
   /** Where the names link to: the top of the page (default), or `/` from another page. */
   readonly brandHref?: string;
   readonly nav: readonly NavItem[];
-  /** Id of the RSVP section, highlighted in the navigation. */
+  /**
+   * Id of the RSVP section, highlighted in the navigation; only while RSVP is on. The entry then
+   * shows "you said yes/no" when this browser has a reply (`wp_rsvp_state`, no API call).
+   */
   readonly rsvpId: string | undefined;
+  /** The RSVP deadline has passed: the own reply can only be viewed, not changed. */
+  readonly rsvpClosed?: boolean;
   readonly lang: Lang;
   readonly onLangChange: (lang: Lang) => void;
   /** The hero has a photo: at the top of the page the header lies transparent on top of it. */
@@ -32,6 +38,7 @@ export function Header({
   brandHref = '#top',
   nav,
   rsvpId,
+  rsvpClosed = false,
   lang,
   onLangChange,
   overHero = false,
@@ -42,7 +49,10 @@ export function Header({
   const ids = useMemo(() => nav.map((item) => item.id), [nav]);
   const active = useActiveSection(ids);
   const scrolled = useScrolled();
-  const fit = useNavFit(header, navRef, `${lang} ${ids.join(' ')}`);
+  const cookieState = useRsvpState();
+  const answered = rsvpId === undefined ? null : cookieState;
+  // The answered entry has another label: measure again whether the navigation fits.
+  const fit = useNavFit(header, navRef, `${lang} ${answered} ${ids.join(' ')}`);
   const inline = fit !== 'overflows';
   const transparent = overHero && !scrolled && !open;
 
@@ -114,7 +124,16 @@ export function Header({
             aria-current={item.id === active ? 'location' : undefined}
             onClick={() => setOpen(false)}
           >
-            {item.label}
+            {item.id === rsvpId && answered !== null ? (
+              <>
+                {t(answered === 'yes' ? ui.navSaidYes : ui.navSaidNo, lang)}
+                <span className="sr-only">
+                  {`, ${t(rsvpClosed ? ui.rsvp.viewReply : ui.rsvp.change, lang)}`}
+                </span>
+              </>
+            ) : (
+              item.label
+            )}
           </a>
         ))}
       </nav>

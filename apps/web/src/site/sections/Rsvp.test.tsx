@@ -760,6 +760,15 @@ describe('Rsvp: the personal edit link', () => {
   const createdWithLink = (call: RecordedCall) =>
     json(201, { rsvp: stored(call), version: '"v1"', editToken: TOKEN }, { ETag: '"v1"' });
 
+  /** This browser's own reply: another one than the link's (`yesReply`). */
+  const ownReply: RsvpView = {
+    id: '2c97fc9f604ca2d97f3e9e48e5fe604b',
+    attending: false,
+    people: [{ id: '7a0c1e55', name: 'María-José García', dietary: { tags: [] } }],
+    language: 'es',
+  };
+  const OWN_TOKEN = `${ownReply.id}.${'Zz9_-'.repeat(8)}abc`;
+
   /** Opens the page with `hash` in the address bar. */
   const openWith = (hash: string) => window.history.replaceState(null, '', `/${hash}`);
 
@@ -889,10 +898,10 @@ describe('Rsvp: the personal edit link', () => {
 
   it('keeps showing the own reply when a link fails in a browser that has one', async () => {
     openWith(`#edit=${TOKEN}`);
-    setStateCookie('yes');
+    setStateCookie('no');
     const api = mockApi({
+      [MINE]: () => json(200, mineBody(ownReply)),
       [CLAIM]: () => problem(404, 'not_found'),
-      [MINE]: () => json(200, mineBody(yesReply)),
     });
     renderRsvp({ lang: 'es' });
     io.reveal();
@@ -902,8 +911,68 @@ describe('Rsvp: the personal edit link', () => {
         'Lo sentimos, este enlace no funciona. Puede que esté incompleto o que su respuesta se haya retirado.',
       ),
     ).toBeInTheDocument();
-    expect(await screen.findByText('¡Gracias! Nos hace mucha ilusión.')).toBeInTheDocument();
-    expect(api.calls.map((call) => `${call.method} ${call.url}`)).toEqual([CLAIM, MINE]);
+    expect(await screen.findByText('Qué pena – gracias por avisarnos.')).toBeInTheDocument();
+    expect(screen.getByText('María-José García')).toBeInTheDocument();
+    expect(api.calls.map((call) => `${call.method} ${call.url}`)).toEqual([MINE, CLAIM]);
+    expect(api.callsTo(CLAIM)[0]?.body).toEqual({ editToken: TOKEN, preview: true });
+    expect(screen.queryByRole('heading', { name: '¿Quiénes sois?' })).toBeNull();
+    expect(window.location.hash).toBe('');
+  });
+
+  it('shows the personal link of a returning guest only on request', async () => {
+    const user = userEvent.setup();
+    const api = mockApi({ [MINE]: () => json(200, { ...mineBody(yesReply), editToken: TOKEN }) });
+    await showStoredReply();
+    expect(screen.queryByRole('textbox', { name: 'Euer persönlicher Link' })).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Euren persönlichen Link anzeigen' }));
+
+    const field = screen.getByRole('textbox', { name: 'Euer persönlicher Link' });
+    expect(field).toHaveValue(link());
+    expect(field).toHaveFocus();
+    expect(field).toHaveAccessibleDescription(/^Hebt diesen Link gut auf/);
+    expect(screen.queryByRole('button', { name: 'Euren persönlichen Link anzeigen' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Link kopieren' })).toBeInTheDocument();
+    // The link sits above the buttons to change or withdraw the reply.
+    expect(
+      field.compareDocumentPosition(screen.getByRole('button', { name: 'Antwort ändern' })),
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(api.calls.map((call) => `${call.method} ${call.url}`)).toEqual([MINE]);
+  });
+
+  it.each([
+    ['en', 'Show your personal link', 'Your personal link'],
+    ['es', 'Ver vuestro enlace personal', 'Vuestro enlace personal'],
+  ] as const)('offers the link in %s', async (lang, show, label) => {
+    const user = userEvent.setup();
+    mockApi({ [MINE]: () => json(200, { ...mineBody(yesReply), editToken: TOKEN }) });
+    setStateCookie('yes');
+    renderRsvp({ lang });
+    io.reveal();
+
+    await user.click(await screen.findByRole('button', { name: show }));
+    expect(screen.getByRole('textbox', { name: label })).toHaveValue(link());
+  });
+
+  it('offers the link after the deadline too, and never a link the API did not send', async () => {
+    const user = userEvent.setup();
+    setStateCookie('yes');
+    mockApi({
+      [MINE]: () => json(200, { ...mineBody(yesReply, '"v1"', false), editToken: TOKEN }),
+    });
+    const { unmount } = renderRsvp();
+    io.reveal();
+    await user.click(
+      await screen.findByRole('button', { name: 'Euren persönlichen Link anzeigen' }),
+    );
+    expect(screen.getByRole('textbox', { name: 'Euer persönlicher Link' })).toHaveValue(link());
+    unmount();
+
+    mockApi({ [MINE]: () => json(200, mineBody(yesReply)) });
+    renderRsvp();
+    io.reveal();
+    expect(await screen.findByText('Danke! Wir freuen uns auf euch.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Euren persönlichen Link anzeigen' })).toBeNull();
   });
 
   it('reports a malformed link at once and never sends it', async () => {
@@ -937,6 +1006,167 @@ describe('Rsvp: the personal edit link', () => {
     expect(await screen.findByText('Danke! Wir freuen uns auf euch.')).toBeInTheDocument();
     expect(api.callsTo(CLAIM)).toHaveLength(2);
     expect(window.location.hash).toBe('');
+  });
+
+  describe('a link to another reply than this browser has: "who are you?"', () => {
+    /** The claim route: names for a preview, else the link's reply (and its cookies). */
+    const claimRoute = (call: RecordedCall) =>
+      (call.body as { preview?: boolean }).preview === true
+        ? json(200, { names: yesReply.people.map((person) => person.name) })
+        : json(200, { ...mineBody(yesReply), editToken: TOKEN });
+
+    async function openLinkWithOwnReply(lang: Lang = 'de') {
+      openWith(`#edit=${TOKEN}`);
+      setStateCookie('no');
+      const api = mockApi({
+        [MINE]: () => json(200, { ...mineBody(ownReply), editToken: OWN_TOKEN }),
+        [CLAIM]: claimRoute,
+      });
+      renderRsvp({ lang });
+      expect(api.calls).toEqual([]);
+      io.reveal();
+      return api;
+    }
+
+    it('asks with both names, focuses the question and changes nothing yet', async () => {
+      const api = await openLinkWithOwnReply();
+
+      const heading = await screen.findByRole('heading', { name: 'Wer seid ihr?' });
+      expect(heading).toHaveFocus();
+      expect(
+        screen.getByText('Seid ihr María-José García oder Jürgen Müller und Pablo Pérez?'),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'María-José García' })).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: 'Jürgen Müller und Pablo Pérez' }),
+      ).toBeInTheDocument();
+      expect(api.calls.map((call) => `${call.method} ${call.url}`)).toEqual([MINE, CLAIM]);
+      expect(api.callsTo(CLAIM)[0]?.body).toEqual({ editToken: TOKEN, preview: true });
+      expect(window.location.hash).toBe(`#edit=${TOKEN}`);
+      expect(screen.queryByText('Danke! Wir freuen uns auf euch.')).toBeNull();
+    });
+
+    it('keeps this browser’s reply when the guest picks its names, without a claim', async () => {
+      const user = userEvent.setup();
+      const api = await openLinkWithOwnReply();
+
+      await user.click(await screen.findByRole('button', { name: 'María-José García' }));
+
+      const thanks = await screen.findByText('Schade – danke für eure Rückmeldung.');
+      expect(thanks).toHaveFocus();
+      expect(screen.getByText('María-José García')).toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: 'Wer seid ihr?' })).toBeNull();
+      expect(window.location.hash).toBe('');
+      expect(api.callsTo(CLAIM)).toHaveLength(1);
+      // The own reply's link, not the opened one.
+      await user.click(screen.getByRole('button', { name: 'Euren persönlichen Link anzeigen' }));
+      expect(screen.getByRole('textbox', { name: 'Euer persönlicher Link' })).toHaveValue(
+        `${window.location.origin}/#edit=${OWN_TOKEN}`,
+      );
+    });
+
+    it('takes the link’s reply when the guest picks the link’s names', async () => {
+      const user = userEvent.setup();
+      const api = await openLinkWithOwnReply();
+
+      await user.click(
+        await screen.findByRole('button', { name: 'Jürgen Müller und Pablo Pérez' }),
+      );
+
+      expect(await screen.findByText('Danke! Wir freuen uns auf euch.')).toHaveFocus();
+      expect(
+        screen.getByText(
+          'Eure Antwort ist jetzt auch in diesem Browser gespeichert. Ihr könnt sie hier ändern.',
+        ),
+      ).toBeInTheDocument();
+      expect(screen.getByText('Jürgen Müller')).toBeInTheDocument();
+      expect(api.calls.map((call) => `${call.method} ${call.url}`)).toEqual([MINE, CLAIM, CLAIM]);
+      expect(api.callsTo(CLAIM)[1]?.body).toEqual({ editToken: TOKEN });
+      expect(window.location.hash).toBe('');
+    });
+
+    it.each([
+      [
+        'en',
+        'Who are you?',
+        'Are you María-José García or Jürgen Müller and Pablo Pérez?',
+        'Jürgen Müller and Pablo Pérez',
+      ],
+      [
+        'es',
+        '¿Quiénes sois?',
+        '¿Sois María-José García o Jürgen Müller y Pablo Pérez?',
+        'Jürgen Müller y Pablo Pérez',
+      ],
+    ] as const)('asks in %s', async (lang, title, question, linkNames) => {
+      await openLinkWithOwnReply(lang);
+      expect(await screen.findByRole('heading', { name: title })).toBeInTheDocument();
+      expect(screen.getByText(question)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: linkNames })).toBeInTheDocument();
+    });
+
+    it.each(['de', 'en', 'es'] as const)('speaks only of people in %s', async (lang) => {
+      await openLinkWithOwnReply(lang);
+      const own = await screen.findByRole('button', { name: 'María-José García' });
+      const question = own.closest('.rsvp-who');
+      expect(question?.textContent).toMatch(/María-José García/);
+      expect(question?.textContent).not.toMatch(
+        /browser|navegador|cookie|token|session|sitzung|sesión|claim|daten|datos|data|speicher|storage|almacen|link|enlace/i,
+      );
+    });
+
+    it('shows the reply without asking or claiming when the link is this browser’s own', async () => {
+      openWith(`#edit=${OWN_TOKEN}`);
+      setStateCookie('no');
+      const api = mockApi({
+        [MINE]: () => json(200, { ...mineBody(ownReply), editToken: OWN_TOKEN }),
+      });
+      renderRsvp();
+      io.reveal();
+
+      expect(await screen.findByText('Schade – danke für eure Rückmeldung.')).toBeInTheDocument();
+      expect(api.calls.map((call) => `${call.method} ${call.url}`)).toEqual([MINE]);
+      expect(window.location.hash).toBe('');
+      expect(screen.queryByRole('heading', { name: 'Wer seid ihr?' })).toBeNull();
+    });
+
+    it('claims at once when the state cookie is stale (the own reply is gone)', async () => {
+      openWith(`#edit=${TOKEN}`);
+      setStateCookie('yes');
+      const api = mockApi({ [MINE]: () => problem(404, 'not_found'), [CLAIM]: claimRoute });
+      renderRsvp();
+      io.reveal();
+
+      expect(
+        await screen.findByText(
+          'Eure Antwort ist jetzt auch in diesem Browser gespeichert. Ihr könnt sie hier ändern.',
+        ),
+      ).toBeInTheDocument();
+      expect(api.calls.map((call) => `${call.method} ${call.url}`)).toEqual([MINE, CLAIM]);
+      expect(api.callsTo(CLAIM)[0]?.body).toEqual({ editToken: TOKEN });
+    });
+
+    it('asks again after a network error while asking', async () => {
+      const user = userEvent.setup();
+      openWith(`#edit=${TOKEN}`);
+      setStateCookie('no');
+      const api = mockApi({
+        [MINE]: () => json(200, mineBody(ownReply)),
+        [CLAIM]: [offline, claimRoute],
+      });
+      renderRsvp();
+      io.reveal();
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('Keine Verbindung.');
+      expect(window.location.hash).toBe(`#edit=${TOKEN}`);
+      await user.click(screen.getByRole('button', { name: 'Erneut versuchen' }));
+
+      expect(await screen.findByRole('heading', { name: 'Wer seid ihr?' })).toBeInTheDocument();
+      expect(api.callsTo(CLAIM).map((call) => call.body)).toEqual([
+        { editToken: TOKEN, preview: true },
+        { editToken: TOKEN, preview: true },
+      ]);
+    });
   });
 
   it('ignores an edit link while the feature is off', () => {

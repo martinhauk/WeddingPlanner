@@ -1322,6 +1322,37 @@ p {
   margin: 0;
 }
 
+/* "Who are you?": a link opened another reply than the one this page holds. */
+.rsvp-who {
+  max-width: 32rem;
+  margin: 2rem auto 0;
+}
+
+.rsvp-who h3 {
+  margin: 0 0 0.5rem;
+}
+
+.rsvp-who h3:focus {
+  outline: none;
+}
+
+.rsvp-who .lead {
+  margin: 0;
+}
+
+/* Names as they were typed (no capitals); long lists wrap inside their button. */
+.rsvp-who .btn {
+  max-width: 100%;
+  font-size: 1rem;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  white-space: normal;
+}
+
+.row.rsvp-show-link {
+  margin-top: 1.2rem;
+}
+
 /* Honeypot: kept out of sight and out of the tab order. */
 .hp {
   position: absolute;
@@ -1509,7 +1540,8 @@ footer::before {
 
   .gallery img,
   .party-person img,
-  .party-initial {
+  .party-initial,
+  .btn {
     transition: none;
   }
 }

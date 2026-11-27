@@ -6,6 +6,7 @@ import { RsvpAlert } from '../components/RsvpAlert.tsx';
 import { type ContactLink, RsvpContactHint } from '../components/RsvpContactHint.tsx';
 import { RsvpForm } from '../components/RsvpForm.tsx';
 import { RsvpSummary } from '../components/RsvpSummary.tsx';
+import { RsvpWhoAreYou } from '../components/RsvpWhoAreYou.tsx';
 import { SectionFrame } from '../components/SectionFrame.tsx';
 import { formatDeadline } from '../format.ts';
 import { type Lang, t } from '../i18n.ts';
@@ -136,6 +137,16 @@ export function Rsvp({ section, ctx }: SectionProps<'rsvp'>) {
             )}
           </div>
         );
+      case 'whoAreYou':
+        return (
+          <RsvpWhoAreYou
+            own={phase.own}
+            link={phase.link}
+            lang={lang}
+            onOwn={rsvp.keepOwnReply}
+            onLink={rsvp.takeLinkReply}
+          />
+        );
       case 'loadFailed':
         return (
           <div className="thanks">
@@ -176,6 +187,7 @@ export function Rsvp({ section, ctx }: SectionProps<'rsvp'>) {
                 busy={rsvp.busy}
                 focusOnMount={interacted}
                 editLink={rsvp.editLink}
+                editLinkShown={rsvp.editLinkShown}
                 onEdit={rsvp.edit}
                 onWithdraw={() => void rsvp.withdraw()}
               />
