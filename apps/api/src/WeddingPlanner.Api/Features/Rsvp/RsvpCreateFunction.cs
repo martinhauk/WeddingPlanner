@@ -11,8 +11,10 @@ using WeddingPlanner.Domain.Rsvp;
 namespace WeddingPlanner.Api.Features.Rsvp;
 
 /// <summary>
-/// <c>POST /api/rsvp</c>: creates the caller's reply and sets the RSVP cookies. Answers 201 <c>{rsvp, version}</c>
-/// with <c>ETag</c> (the same value as <c>version</c>) and <c>Location: /api/rsvp/me</c>.
+/// <c>POST /api/rsvp</c>: creates the caller's reply and sets the RSVP cookies. Answers 201
+/// <c>{rsvp, version, editToken}</c> with <c>ETag</c> (the same value as <c>version</c>) and
+/// <c>Location: /api/rsvp/me</c>. <c>editToken</c> is the secret of the personal edit link (see
+/// <see cref="RsvpCreatedResponse"/> and <see cref="RsvpClaimFunction"/>).
 /// </summary>
 /// <remarks>
 /// Order of checks (cheap ones first, I/O last): 503 <c>not_configured</c>, 403 <c>rsvp_closed</c>, body
@@ -118,7 +120,7 @@ public sealed partial class RsvpCreateFunction(
         var version = RsvpHttp.PublicETag(stored.ETag);
         response.Headers.ETag = version;
         response.Headers.Location = MineLocation;
-        return ApiResult.Json(StatusCodes.Status201Created, new RsvpCreatedResponse(RsvpView.From(stored.Record), version));
+        return ApiResult.Json(StatusCodes.Status201Created, new RsvpCreatedResponse(RsvpView.From(stored.Record), version, credential.CookieValue));
     }
 
     [LoggerMessage(

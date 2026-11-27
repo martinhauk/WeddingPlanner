@@ -2,6 +2,7 @@ import type { SiteContent } from '@weddingplanner/content';
 import { formatDate, mediaUrl } from '../format.ts';
 import { type Lang, t } from '../i18n.ts';
 import { ui } from '../ui.ts';
+import { useRsvpState } from '../use-rsvp.ts';
 import { Countdown } from './Countdown.tsx';
 
 /** The hero's background photos: `hero.images` (at most two), else `hero.image`, else none. */
@@ -13,7 +14,10 @@ export function heroImages(content: Pick<SiteContent, 'hero'>): readonly string[
 export type HeroProps = {
   readonly content: SiteContent;
   readonly lang: Lang;
-  /** Id of the shown RSVP section; without it there is no RSVP button. */
+  /**
+   * Id of the shown RSVP section while RSVP is on; without it there is no RSVP button (and the
+   * reply state is not shown).
+   */
   readonly rsvpId: string | undefined;
 };
 
@@ -48,12 +52,32 @@ export function Hero({ content, lang, rsvpId }: HeroProps) {
         </p>
         <p className="hero-place">{t(content.place, lang)}</p>
         <Countdown to={event.start} lang={lang} />
-        {rsvpId !== undefined && (
-          <a className="btn" href={`#${rsvpId}`}>
-            {t(ui.rsvpCta, lang)}
-          </a>
-        )}
+        {rsvpId !== undefined && <HeroRsvp rsvpId={rsvpId} lang={lang} />}
       </div>
     </section>
+  );
+}
+
+/**
+ * The hero's RSVP link: "RSVP" without a reply in this browser, else "you said yes/no" and a link to
+ * change it. Reads only the `wp_rsvp_state` cookie (no API call), and follows it when the RSVP
+ * section saves, claims or withdraws a reply.
+ */
+function HeroRsvp({ rsvpId, lang }: { readonly rsvpId: string; readonly lang: Lang }) {
+  const state = useRsvpState();
+  if (state === null) {
+    return (
+      <a className="btn" href={`#${rsvpId}`}>
+        {t(ui.rsvpCta, lang)}
+      </a>
+    );
+  }
+  return (
+    <>
+      <p className="hero-place">{t(state === 'yes' ? ui.rsvpSaidYes : ui.rsvpSaidNo, lang)}</p>
+      <a className="btn" href={`#${rsvpId}`}>
+        {t(ui.rsvp.change, lang)}
+      </a>
+    </>
   );
 }

@@ -9,15 +9,106 @@ import {
   yesReply,
 } from '../test/fake-api.ts';
 import {
+  claimRsvp,
   createRsvp,
   deleteRsvp,
+  editLinkFor,
   failureOf,
   getMine,
   getStatus,
+  parseEditLink,
   REQUEST_TIMEOUT_MS,
+  RSVP_STATE_EVENT,
   readRsvpState,
   updateRsvp,
 } from './rsvp-client.ts';
+
+/** A well-formed edit token as the API issues it (fictional). */
+const EDIT_TOKEN = `1b86eb8e593b91c86f2d8d37d4fd593a.${'Ab3_-'.repeat(8)}xyz`;
+
+describe('the personal edit link', () => {
+  it('reads the token of an edit link from the URL fragment', () => {
+    expect(parseEditLink(`#edit=${EDIT_TOKEN}`)).toEqual({ token: EDIT_TOKEN });
+    expect(parseEditLink('#rsvp')).toBeNull();
+    expect(parseEditLink('')).toBeNull();
+    expect(parseEditLink('#edit')).toBeNull();
+  });
+
+  it('ignores punctuation pasted after a complete token', () => {
+    expect(parseEditLink(`#edit=${EDIT_TOKEN}.`)).toEqual({ token: EDIT_TOKEN });
+    expect(parseEditLink(`#edit=${EDIT_TOKEN})`)).toEqual({ token: EDIT_TOKEN });
+  });
+
+  it.each([
+    '#edit=',
+    '#edit=not-a-token',
+    `#edit=${EDIT_TOKEN.slice(0, -1)}`,
+    `#edit=${EDIT_TOKEN}A`,
+    `#edit=${EDIT_TOKEN.toUpperCase()}`,
+    `#edit=${EDIT_TOKEN.split('.').join('%2E')}`,
+  ])('reports a malformed edit link (%s) without a token', (hash) => {
+    expect(parseEditLink(hash)).toEqual({ token: null });
+  });
+
+  it('builds the link on the start page of the site', () => {
+    expect(editLinkFor(EDIT_TOKEN, 'https://wedding.example.com')).toBe(
+      `https://wedding.example.com/#edit=${EDIT_TOKEN}`,
+    );
+    expect(parseEditLink(new URL(editLinkFor(EDIT_TOKEN)).hash)).toEqual({ token: EDIT_TOKEN });
+  });
+
+  it('takes the edit token from the create, and only a well-formed one', async () => {
+    mockApi({
+      'POST /api/rsvp': [
+        () => json(201, { rsvp: yesReply, version: '"v1"', editToken: EDIT_TOKEN }),
+        () => json(201, { rsvp: yesReply, version: '"v1"', editToken: 'nonsense' }),
+      ],
+    });
+    expect(await createRsvp(request)).toEqual({
+      ok: true,
+      value: { rsvp: yesReply, version: '"v1"', open: true, editToken: EDIT_TOKEN },
+    });
+    expect(await createRsvp(request)).toEqual({
+      ok: true,
+      value: { rsvp: yesReply, version: '"v1"', open: true },
+    });
+  });
+
+  it('claims a reply with the token and reads it like the own reply', async () => {
+    const api = mockApi({
+      'POST /api/rsvp/claim': [
+        () => json(200, mineBody(yesReply, '"v3"')),
+        () => problem(404, 'not_found'),
+      ],
+    });
+    expect(await claimRsvp(EDIT_TOKEN)).toEqual({
+      ok: true,
+      value: { rsvp: yesReply, version: '"v3"', open: true },
+    });
+    expect(api.calls[0]?.headers['content-type']).toBe('application/json');
+    expect(api.calls[0]?.body).toEqual({ editToken: EDIT_TOKEN });
+
+    const wrong = await claimRsvp(EDIT_TOKEN);
+    expect(wrong.ok === false && wrong.error.kind).toBe('notFound');
+  });
+
+  it('announces every answer that may change the cookies, but not the status', async () => {
+    mockApi({
+      'GET /api/rsvp/status': () => json(200, openStatus),
+      'POST /api/rsvp/claim': () => problem(404, 'not_found'),
+    });
+    const listener = vi.fn();
+    window.addEventListener(RSVP_STATE_EVENT, listener);
+    try {
+      await getStatus();
+      expect(listener).not.toHaveBeenCalled();
+      await claimRsvp(EDIT_TOKEN);
+      expect(listener).toHaveBeenCalledTimes(1);
+    } finally {
+      window.removeEventListener(RSVP_STATE_EVENT, listener);
+    }
+  });
+});
 
 afterEach(() => {
   vi.useRealTimers();

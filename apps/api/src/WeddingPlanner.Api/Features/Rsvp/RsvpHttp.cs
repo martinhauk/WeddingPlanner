@@ -13,17 +13,47 @@ public static class RsvpHttp
     /// Authenticates the request by its <c>wp_rsvp</c> cookie: the reply must exist and the token must match the
     /// stored hash. Returns <see langword="null"/> otherwise (no cookie, malformed, unknown id or wrong token).
     /// </summary>
-    public static async Task<RsvpSession?> AuthenticateAsync(IRsvpRepository repository, HttpRequest request, CancellationToken cancellationToken)
+    public static Task<RsvpSession?> AuthenticateAsync(IRsvpRepository repository, HttpRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(repository);
 
-        if (!RsvpCredential.TryParse(RsvpCookies.ReadCredential(request), out var credential))
-        {
-            return null;
-        }
+        return RsvpCredential.TryParse(RsvpCookies.ReadCredential(request), out var credential)
+            ? ResolveAsync(repository, credential, cancellationToken)
+            : Task.FromResult<RsvpSession?>(null);
+    }
+
+    /// <summary>
+    /// The reply that <paramref name="credential"/> unlocks, or <see langword="null"/> for an unknown id or a wrong
+    /// token. The token is hashed and compared in constant time in both cases (against a random decoy hash when the id
+    /// is unknown), so the work done does not depend on whether the id exists.
+    /// </summary>
+    public static async Task<RsvpSession?> ResolveAsync(IRsvpRepository repository, RsvpCredential credential, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(repository);
+        ArgumentNullException.ThrowIfNull(credential);
 
         var stored = await repository.GetAsync(credential.RsvpId, cancellationToken);
-        return stored is not null && credential.MatchesHash(stored.Record.TokenHash) ? new RsvpSession(credential, stored) : null;
+        var matches = credential.MatchesHash(stored?.Record.TokenHash ?? RsvpCredential.DecoyHash);
+        return stored is not null && matches ? new RsvpSession(credential, stored) : null;
+    }
+
+    /// <summary>
+    /// 200 <c>{rsvp, version, open, deadline}</c> with <c>ETag</c> for the caller's own reply, and sets (or refreshes)
+    /// both RSVP cookies for <paramref name="credential"/>.
+    /// </summary>
+    public static ApiResult Mine(HttpResponse response, RsvpCredential credential, StoredRsvp stored, RsvpSettings settings, DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+        ArgumentNullException.ThrowIfNull(stored);
+        ArgumentNullException.ThrowIfNull(settings);
+
+        RsvpCookies.Set(response, credential, stored.Record.Answer.Attending, settings.CookieLifetime);
+        var version = PublicETag(stored.ETag);
+        response.Headers.ETag = version;
+
+        var deadline = settings.Deadline;
+        var open = deadline?.IsOpenAt(now) ?? false;
+        return ApiResult.Json(StatusCodes.Status200OK, new RsvpMineResponse(RsvpView.From(stored.Record), version, open, deadline?.Utc.UtcDateTime));
     }
 
     /// <summary>404 <c>not_found</c>; clears the RSVP cookies when the request carried any, so the browser forgets a stale reply.</summary>

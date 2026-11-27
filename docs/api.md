@@ -35,13 +35,14 @@ created, changed and deleted **until and including** the deadline.
 
 ## Endpoints
 
-| Method and route       | Function         | Success                                        | Purpose                                      |
-| ---------------------- | ---------------- | ---------------------------------------------- | -------------------------------------------- |
-| `GET /api/rsvp/status` | `RsvpStatus`     | 200 status                                     | Whether the form is open, deadline, limits   |
-| `POST /api/rsvp`       | `RsvpCreate`     | 201 `{rsvp, version}`, cookies, ETag, Location | Create this browser's reply                  |
-| `GET /api/rsvp/me`     | `RsvpGetMine`    | 200 `{rsvp, version, open, deadline}`, ETag    | Read the own reply (also after the deadline) |
-| `PUT /api/rsvp/me`     | `RsvpUpdateMine` | 200 `{rsvp, version, open, deadline}`, ETag    | Replace the own reply (needs `If-Match`)     |
-| `DELETE /api/rsvp/me`  | `RsvpDeleteMine` | 204, cookies cleared                           | Delete the own reply                         |
+| Method and route       | Function         | Success                                                   | Purpose                                       |
+| ---------------------- | ---------------- | --------------------------------------------------------- | --------------------------------------------- |
+| `GET /api/rsvp/status` | `RsvpStatus`     | 200 status                                                | Whether the form is open, deadline, limits    |
+| `POST /api/rsvp`       | `RsvpCreate`     | 201 `{rsvp, version, editToken}`, cookies, ETag, Location | Create this browser's reply                   |
+| `GET /api/rsvp/me`     | `RsvpGetMine`    | 200 `{rsvp, version, open, deadline}`, ETag               | Read the own reply (also after the deadline)  |
+| `PUT /api/rsvp/me`     | `RsvpUpdateMine` | 200 `{rsvp, version, open, deadline}`, ETag               | Replace the own reply (needs `If-Match`)      |
+| `DELETE /api/rsvp/me`  | `RsvpDeleteMine` | 204, cookies cleared                                      | Delete the own reply                          |
+| `POST /api/rsvp/claim` | `RsvpClaim`      | 200 `{rsvp, version, open, deadline}`, cookies, ETag      | Open a reply in this browser by its edit link |
 
 ### `GET /api/rsvp/status`
 
@@ -166,6 +167,38 @@ wrong types or a non-object body are 400 `invalid_json`. Lengths count UTF-16 co
   tags, and a `W/` prefix is ignored. `DELETE` checks `If-Match` only when sent. Internally the tag is
   the Table Storage ETag without its `W/` prefix.
 
+## Personal edit link and `POST /api/rsvp/claim`
+
+Guests often reply in a messenger's in-app browser, whose cookies the phone's real browser (or another
+device) never sees. The personal edit link moves a reply to another browser, so the guest can change it
+there instead of answering twice.
+
+- **The credential is the cookie's:** the 201 of `POST /api/rsvp` carries `editToken: "<id>.<token>"`,
+  the same value as the `wp_rsvp` cookie (256-bit random token, only its SHA-256 hash stored). It is
+  returned **only** by the create, never by `GET`, `PUT` or the claim, and never logged. The page shows
+  it once on the success screen as `<site origin>/#edit=<editToken>` with a copy button.
+- **A fragment, not a query:** browsers never send `#edit=…` to a server or in a `Referer`, so the token
+  reaches neither the SWA edge, the Functions host logs nor a third party. The page reads it, scrolls to
+  the RSVP section and calls the claim only once that section nears the viewport (the page-load rule:
+  no API call except the keep-warm ping), then removes the fragment with `history.replaceState`.
+- **`POST /api/rsvp/claim`** with `{"editToken": "<id>.<token>"}` answers 200
+  `{rsvp, version, open, deadline}` with `ETag`, exactly like `GET /api/rsvp/me`, and sets both cookies
+  (replacing any this browser held for another reply). It works after the deadline too (`open: false`,
+  read-only), and needs only storage (503 `not_configured` without it).
+- **One answer for every failure:** a malformed token, an unknown id, a wrong token and a withdrawn
+  (deleted) reply all answer the same 404 `not_found`, so the response never reveals whether an id
+  exists. The token is hashed and compared in constant time, against a random decoy hash when the id is
+  unknown. A 404 leaves the browser's cookies untouched (a mistyped link must not make it forget its
+  own reply). A body that is not a JSON object, or an `editToken` that is not a string, is 400
+  `invalid_json`.
+- **Lifetime:** the link stays valid while the reply exists; changing the reply keeps it. Withdrawing
+  (`DELETE /me`) deletes the reply and so invalidates the link everywhere.
+- **Abuse:** the claim is a write for the pipeline (`Rsvp*`, `POST`): gated by `Features__Rsvp`,
+  rate-limited like every write (a wrong token costs the same permit as a right one), JSON only and
+  refused cross-site. Guessing a 256-bit token is not feasible within any rate limit.
+- **Deployed tests:** the WP3 write-path test on `e2e` will add a claim step (a second browser context
+  opens the link from the success screen).
+
 ## Errors
 
 | Status | `code`                   | When                                                                                                                              |
@@ -175,7 +208,7 @@ wrong types or a non-object body are 400 `invalid_json`. Lengths count UTF-16 co
 | 400    | `submission_rejected`    | `POST` or `PUT` refused as automated (honeypot, minimum fill time); never says which check failed                                 |
 | 403    | `cross_site_request`     | A write with `Sec-Fetch-Site: cross-site`                                                                                         |
 | 403    | `rsvp_closed`            | `POST`, `PUT` or `DELETE` after the deadline                                                                                      |
-| 404    | `not_found`              | Feature off, or no valid `wp_rsvp` cookie for `/me` (cookies cleared)                                                             |
+| 404    | `not_found`              | Feature off; no valid `wp_rsvp` cookie for `/me` (cookies cleared); a claim with a wrong, malformed or withdrawn edit token       |
 | 409    | `rsvp_exists`            | `POST` from a browser that already has a reply                                                                                    |
 | 412    | `precondition_failed`    | `If-Match` does not match the current reply                                                                                       |
 | 413    | `payload_too_large`      | Body above 16 KB (`maxBytes`), with or without `Content-Length`                                                                   |
@@ -277,6 +310,5 @@ stays `/api/admin/…` (verified with Core Tools 4.17; to be confirmed on the SW
 
 ## Not implemented yet
 
-From the architecture, still open: the personal edit link and `POST /api/rsvp/claim` (moving a reply to
-another device), and the admin `Settings` overrides (`deadlineOverride`, `closedManually`) in the open
-check.
+From the architecture, still open: the admin `Settings` overrides (`deadlineOverride`,
+`closedManually`) in the open check, and `UpdatedBy` (`guest`/`admin`) on stored replies.

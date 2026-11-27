@@ -26,6 +26,9 @@ export const ui = {
   navigation: { de: 'Hauptnavigation', en: 'Main navigation', es: 'Navegación principal' },
   language: { de: 'Sprache', en: 'Language', es: 'Idioma' },
   rsvpCta: { de: 'Zusagen', en: 'RSVP', es: 'Confirmar' },
+  /** The hero's line when this browser has a reply (from the `wp_rsvp_state` cookie). */
+  rsvpSaidYes: { de: 'Ihr habt zugesagt.', en: 'You said yes.', es: 'Habéis dicho que sí.' },
+  rsvpSaidNo: { de: 'Ihr habt abgesagt.', en: 'You said no.', es: 'Habéis dicho que no.' },
   countdown: {
     label: { de: 'Countdown bis zur Hochzeit', en: 'Countdown to the wedding', es: 'Cuenta atrás' },
     days: { de: 'Tage', en: 'Days', es: 'Días' },
@@ -159,6 +162,38 @@ export const ui = {
       de: 'Eure gespeicherte Antwort wurde nicht gefunden. Bitte sendet sie noch einmal.',
       en: "We couldn't find your saved reply. Please send it again.",
       es: 'No encontramos vuestra respuesta guardada. Por favor, enviadla de nuevo.',
+    },
+    editLinkTitle: {
+      de: 'Euer persönlicher Link',
+      en: 'Your personal link',
+      es: 'Vuestro enlace personal',
+    },
+    editLinkHint: {
+      de: 'Hebt diesen Link gut auf: Damit könnt ihr eure Antwort auf jedem Handy und in jedem Browser ansehen und ändern. Teilt ihn nicht mit anderen.',
+      en: "Keep this link safe: with it you can see and change your reply on any phone or browser. Please don't share it.",
+      es: 'Guardad bien este enlace: con él podéis ver y cambiar vuestra respuesta desde cualquier móvil o navegador. No lo compartáis.',
+    },
+    copyLink: { de: 'Link kopieren', en: 'Copy link', es: 'Copiar enlace' },
+    linkCopied: { de: 'Link kopiert.', en: 'Link copied.', es: 'Enlace copiado.' },
+    copyFailed: {
+      de: 'Kopieren hat nicht geklappt – bitte markiert den Link und kopiert ihn selbst.',
+      en: "Couldn't copy – please select the link and copy it yourself.",
+      es: 'No se pudo copiar – seleccionad el enlace y copiadlo vosotros.',
+    },
+    claiming: {
+      de: 'Eure Antwort wird über euren persönlichen Link geöffnet …',
+      en: 'Opening your reply from your personal link …',
+      es: 'Abriendo vuestra respuesta desde vuestro enlace personal …',
+    },
+    claimed: {
+      de: 'Eure Antwort ist jetzt auch in diesem Browser gespeichert. Ihr könnt sie hier ändern.',
+      en: 'Your reply is now saved in this browser too. You can change it here.',
+      es: 'Vuestra respuesta ahora también está guardada en este navegador. Podéis cambiarla aquí.',
+    },
+    linkInvalid: {
+      de: 'Dieser Link funktioniert leider nicht. Vielleicht ist er unvollständig, oder die Antwort dazu wurde zurückgezogen.',
+      en: "Sorry, this link doesn't work. It may be incomplete, or its reply was withdrawn.",
+      es: 'Lo sentimos, este enlace no funciona. Puede que esté incompleto o que su respuesta se haya retirado.',
     },
     contactHint: {
       de: 'Ihr könnt uns auch direkt Bescheid geben',
