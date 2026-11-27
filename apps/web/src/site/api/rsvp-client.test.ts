@@ -45,7 +45,7 @@ describe('the personal edit link', () => {
     `#edit=${EDIT_TOKEN.slice(0, -1)}`,
     `#edit=${EDIT_TOKEN}A`,
     `#edit=${EDIT_TOKEN.toUpperCase()}`,
-    `#edit=${EDIT_TOKEN.replace('.', '%2E')}`,
+    `#edit=${EDIT_TOKEN.split('.').join('%2E')}`,
   ])('reports a malformed edit link (%s) without a token', (hash) => {
     expect(parseEditLink(hash)).toEqual({ token: null });
   });
