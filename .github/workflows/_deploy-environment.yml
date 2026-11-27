@@ -331,11 +331,23 @@ jobs:
           # Contributor) and checks the manifest, sizes, SHA-256, gzip, every line, row counts and
           # content hashes, and that no file is missing or unlisted. No table is touched. --quiet
           # prints "backup <id>: ok (<n> tables)" or a failure code per table, never row counts.
-          # Any failure (exit 1, or 3 for no read access) fails the job: nothing is deployed.
-          [ -n "$BACKUP_ID" ] || { echo "::error::the backup step reported no backup id"; exit 1; }
+          # Any failure (exit 1, or 3 for no read access) fails the job: nothing is deployed. A
+          # failure also gets an error annotation and a FAILED line in the job summary, so it is
+          # visible without opening the step log (no account names, no contents).
+          failed() {
+            echo "::error title=Backup check failed::$1 Nothing was deployed. The failure codes are in the step log; see docs/runbooks/backup-restore.md (Checking a written backup)."
+            echo "- backup check: FAILED" >>"$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
+          [ -n "$BACKUP_ID" ] || failed "The backup step reported no backup id."
+          status=0
           node tools/table-backup/src/cli.ts check --quiet --backup-id "$BACKUP_ID" \
-            --backup-account "$BACKUP_ACCOUNT"
-          echo "- backup check: passed" >>"$GITHUB_STEP_SUMMARY"
+            --backup-account "$BACKUP_ACCOUNT" || status=$?
+          case $status in
+            0) echo "- backup check: passed" >>"$GITHUB_STEP_SUMMARY" ;;
+            3) failed "The deploy identity may not read the backups of $DEPLOY_ENV." ;;
+            *) failed "The backup just written for $DEPLOY_ENV does not match its manifest, or it could not be read back." ;;
+          esac
 
       - name: Deploy app infrastructure
         if: steps.gate.outputs.run == 'true'
