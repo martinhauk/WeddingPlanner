@@ -331,11 +331,11 @@ jobs:
           # Contributor) and checks the manifest, sizes, SHA-256, gzip, every line, row counts and
           # content hashes, and that no file is missing or unlisted. No table is touched. --quiet
           # prints "backup <id>: ok (<n> tables)" or a failure code per table, never row counts.
-          # Any failure (exit 1, or 3 for no read access) fails the job: nothing is deployed. A
+          # Any failure (exit 1, or 3 for no read access) fails the job before the app deploys. A
           # failure also gets an error annotation and a FAILED line in the job summary, so it is
           # visible without opening the step log (no account names, no contents).
           failed() {
-            echo "::error title=Backup check failed::$1 Nothing was deployed. The failure codes are in the step log; see docs/runbooks/backup-restore.md (Checking a written backup)."
+            echo "::error title=Backup check failed::$1 The app was not deployed. The failure codes are in the step log; see docs/runbooks/backup-restore.md (Checking a written backup)."
             echo "- backup check: FAILED" >>"$GITHUB_STEP_SUMMARY"
             exit 1
           }

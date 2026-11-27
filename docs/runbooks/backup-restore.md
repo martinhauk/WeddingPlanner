@@ -22,11 +22,12 @@ chats.
   first deploys the backup store ([`infra/app/backup.bicep`](../../infra/app/backup.bicep), which
   touches neither the app nor the data), then exports every table, reads that backup back and
   checks it against its manifest, and only then deploys the app infrastructure and uploads the
-  site. **A failed backup or a failed check fails the job**, so nothing is deployed; production
-  never runs after a failed test job. The first deploy of an environment has no data account yet:
-  it writes a backup with an empty manifest, which passes the check with 0 tables. The job summary
-  shows the backup id and `backup check: passed`, or `backup check: FAILED` next to an error
-  annotation "Backup check failed" on the run (the failure codes are in the step log).
+  site. **A failed backup or a failed check fails the job**, so the app is not deployed (only the
+  backup store may have been updated); production never runs after a failed test job. The first
+  deploy of an environment has no data account yet: it writes a backup with an empty manifest,
+  which passes the check with 0 tables. The job summary shows the backup id and
+  `backup check: passed`, or `backup check: FAILED` next to an error annotation "Backup check
+  failed" on the run (the failure codes are in the step log).
 - **Nightly:** [`backup.yml`](../../.github/workflows/backup.yml) runs on a schedule (and by hand:
   Actions → backup → Run workflow), exports every table and checks the new backup the same way. A
   failed check fails the run, with the same annotation and `backup check: FAILED` in the summary.
