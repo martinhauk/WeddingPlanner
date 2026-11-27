@@ -5,8 +5,8 @@ import type { ApiMocks, MockResponse } from './api-mocks.ts';
  * An in-memory RSVP API for the device suite (contract: docs/api.md): `GET /api/rsvp/status`,
  * `POST /api/rsvp` (with the edit token), `POST /api/rsvp/claim` (also its `preview`), and
  * `GET|PUT|DELETE /api/rsvp/me` for each browser's own reply (with its edit token). It keeps one
- * reply per browser context, checks `If-Match` like the API, and records every write. Fictional
- * data only.
+ * reply per browser context, checks `If-Match` like the API, refuses a name with a `.com` domain
+ * (`nameFindings`), and records every write. Fictional data only.
  */
 
 export type RsvpPerson = {
@@ -110,6 +110,31 @@ type RequestPerson = {
   readonly dietary?: { readonly tags?: unknown; readonly note?: unknown };
 };
 
+/**
+ * A stand-in for the API's web-address rule in names (`PersonNames`, docs/api.md): a label of three
+ * or more characters with the top-level domain `.com` (`example.com`). The real rule is broader; this
+ * is enough to exercise a name only the API refuses, since the form pre-checks just `@`, `://` and
+ * `www.`. No other name rule is mirrored.
+ */
+const COM_DOMAIN = /(?:^|[^\p{L}\p{N}-])[\p{L}\p{N}-]{3,}\.com(?![\p{L}\p{N}])/u;
+
+/** 400 `validation_failed` with an `invalid` finding per name the API would refuse, if any. */
+function nameFindings(body: unknown): MockResponse | undefined {
+  const people = (body as { readonly people?: unknown } | undefined)?.people;
+  const errors = (Array.isArray(people) ? (people as readonly RequestPerson[]) : []).flatMap(
+    (person, index) =>
+      typeof person?.name === 'string' && COM_DOMAIN.test(person.name)
+        ? [{ field: `people[${index}].name`, code: 'invalid' }]
+        : [],
+  );
+  if (errors.length === 0) return undefined;
+  return {
+    status: 400,
+    contentType: 'application/problem+json',
+    json: { type: 'about:blank', status: 400, code: 'validation_failed', errors },
+  };
+}
+
 /** The reply the API would store for a request body (ids are assigned, empty notes dropped). */
 export function replyFromRequest(body: unknown, id: string): RsvpView {
   const request = (body ?? {}) as {
@@ -202,6 +227,8 @@ export async function installFakeRsvpApi(api: ApiMocks): Promise<FakeRsvpApi> {
     await target.mock('POST', '/api/rsvp', (request) => {
       const body = record(request);
       if (!flags.open) return problem(403, 'rsvp_closed');
+      const refused = nameFindings(body);
+      if (refused !== undefined) return refused;
       if (own() !== undefined) return problem(409, 'rsvp_exists');
       const id = `e2e${String(created).padStart(25, '0')}beef`;
       created += 1;
@@ -238,6 +265,8 @@ export async function installFakeRsvpApi(api: ApiMocks): Promise<FakeRsvpApi> {
       const body = record(request);
       const entry = own();
       if (entry === undefined) return problem(404, 'not_found');
+      const refused = nameFindings(body);
+      if (refused !== undefined) return refused;
       if (request.headers()['if-match'] !== etag(entry)) return problem(412, 'version_mismatch');
       entry.reply = replyFromRequest(body, entry.reply.id);
       entry.version += 1;

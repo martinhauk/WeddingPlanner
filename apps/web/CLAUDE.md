@@ -107,6 +107,9 @@ never import admin code.
   /api/rsvp/status` for the limits and whether replies are accepted, `GET /api/rsvp/me` for a
   returning guest, then `POST`, `PUT` (with `If-Match`) or `DELETE`. A `412` reloads the reply and
   says so.
+- **Name rules:** the API (`PersonNames`) owns the web-address rule; `rsvp-reply.ts` pre-checks only
+  unambiguous cases (too short, no letter, `@`, `://`, `www.`) and never ports the domain rule. An API
+  finding (`people[i].name` + `invalid`) shows at that person's field like a pre-check finding.
 - **Personal edit link:** the success screen shows `<origin>/#edit=<editToken>` (link box above the
   change and withdraw buttons); a returning guest's reply offers "show your personal link" (the
   `editToken` of `GET /me`), hidden until pressed; withdrawing drops it. Opening `/#edit=…`: `Site.tsx`

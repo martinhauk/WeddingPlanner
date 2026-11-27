@@ -131,7 +131,10 @@ the list or are capitalised: `Dr.med.vet.`, `Prof.Dr.`, `Dr.in`, `Anna B.Sc.`, `
 name an earlier person of the same reply already has is `duplicate` on the
 later one; the comparison ignores case, diacritics and punctuation (`María-José García` =
 `maria jose GARCIA`), but does not transliterate (`Müller` ≠ `Mueller`). The rules apply to `POST`,
-`PUT` and the admin edit alike; the form checks the same rules before it sends.
+`PUT` and the admin edit alike. The API is the only authority for the web-address rule: before it
+sends, the form checks only the unambiguous cases (required, too long, too short, no letter, `@`, `://`,
+`www.` starting a word, `duplicate`) and leaves domains to the API, whose `invalid` finding it shows at
+that person's name field with the same message.
 
 For a "no", dietary data is dropped and never stored. Allergies and intolerances can be health data
 (GDPR Art. 9), so dietary data is stored only with explicit consent: a reply that still has a dietary

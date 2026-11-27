@@ -183,6 +183,38 @@ test.describe('RSVP', () => {
     expect(rsvpApi.writes()).toEqual([]);
   });
 
+  test('a name only the API refuses is shown at its person', async ({ page, rsvpApi }) => {
+    await page.goto(`/#${RSVP_ID}`);
+    const rsvp = page.locator(`#${RSVP_ID}`);
+    await rsvp.getByRole('button', { name: 'Leider nicht' }).click();
+    await rsvp.getByRole('button', { name: '+ Weitere Person' }).click();
+    const name = (group: string) =>
+      rsvp.getByRole('group', { name: group, exact: true }).getByLabel('Name', { exact: true });
+    // The form leaves domains to the API: a title typed without spaces is sent, so is a domain.
+    await name('Du').fill('Dr.rer.nat. Ben Example');
+    await name('Person 2').fill('example.com');
+    await rsvp.getByRole('button', { name: 'Antwort speichern' }).click();
+
+    await expect(rsvp.getByRole('alert')).toHaveText('Bitte prüft die markierten Angaben.');
+    await expect(name('Person 2')).toHaveAccessibleDescription(
+      'Bitte gebt nur einen Namen ein, ohne Links oder E-Mail-Adressen.',
+    );
+    await expect(name('Person 2')).toBeFocused();
+    await expect(name('Du')).not.toHaveAttribute('aria-invalid', 'true');
+    expect(rsvpApi.writes().map((write) => write.body)).toMatchObject([
+      { people: [{ name: 'Dr.rer.nat. Ben Example' }, { name: 'example.com' }] },
+    ]);
+    expect(rsvpApi.stored()).toBeUndefined();
+
+    await name('Person 2').fill('Mª.de los Ángeles');
+    await rsvp.getByRole('button', { name: 'Antwort speichern' }).click();
+    await expect(rsvp.getByText('Schade – danke für eure Rückmeldung.')).toBeVisible();
+    expect(rsvpApi.stored()?.people.map((person) => person.name)).toEqual([
+      'Dr.rer.nat. Ben Example',
+      'Mª.de los Ángeles',
+    ]);
+  });
+
   test('a refused submission is reported without its reason', async ({ page, rsvpApi }) => {
     // Registered after the fake API, so this route answers the POST first.
     await page.route('**/api/rsvp', (route) =>

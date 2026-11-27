@@ -314,6 +314,48 @@ describe('Rsvp', () => {
     expect(note).toHaveFocus();
   });
 
+  it('sends names the API decides on and shows a refused one at its person', async () => {
+    const user = userEvent.setup();
+    const api = mockApi({
+      [STATUS]: () => json(200, openStatus),
+      [CREATE]: (call) =>
+        (call.body as RsvpRequest).people.some((person) => person.name === 'example.com')
+          ? problem(400, 'validation_failed', {
+              errors: [{ field: 'people[1].name', code: 'invalid' }],
+            })
+          : created(call),
+    });
+    renderRsvp();
+    await user.click(screen.getByRole('button', { name: 'Leider nicht' }));
+    await user.click(screen.getByRole('button', { name: '+ Weitere Person' }));
+    const [first, second] = screen.getAllByRole('textbox', { name: 'Name' });
+    await user.type(first as HTMLElement, 'Mª.de los Ángeles');
+    await user.type(second as HTMLElement, 'example.com');
+    await user.click(screen.getByRole('button', { name: 'Antwort speichern' }));
+
+    await waitFor(() =>
+      expect(second).toHaveAccessibleDescription(
+        'Bitte gebt nur einen Namen ein, ohne Links oder E-Mail-Adressen.',
+      ),
+    );
+    expect(api.callsTo(CREATE)[0]?.body).toMatchObject({
+      people: [{ name: 'Mª.de los Ángeles' }, { name: 'example.com' }],
+    });
+    expect(second).toBeInvalid();
+    expect(second).toHaveFocus();
+    expect(first).toBeValid();
+    expect(screen.getByRole('alert')).toHaveTextContent('Bitte prüft die markierten Angaben.');
+
+    await user.clear(second as HTMLElement);
+    await user.type(second as HTMLElement, 'Dr.rer.nat. Ben Example');
+    await user.click(screen.getByRole('button', { name: 'Antwort speichern' }));
+
+    expect(await screen.findByText('Schade – danke für eure Rückmeldung.')).toBeVisible();
+    expect(api.callsTo(CREATE)[1]?.body).toMatchObject({
+      people: [{ name: 'Mª.de los Ángeles' }, { name: 'Dr.rer.nat. Ben Example' }],
+    });
+  });
+
   it('sends what a bot typed into the honeypot', async () => {
     const user = userEvent.setup();
     const api = mockApi({ [STATUS]: () => json(200, openStatus), [CREATE]: created });
