@@ -281,25 +281,79 @@ describe('AdminApp', () => {
     );
     const editor = screen.getByRole('form', { name: 'Antwort bearbeiten' });
     const first = within(editor).getByRole('group', { name: 'Person 1 (Gast)' });
+    const second = within(editor).getByRole('group', { name: 'Person 2' });
 
-    await userEvent.type(within(first).getByLabelText('Name'), ' García');
     await userEvent.click(within(first).getByLabelText('Glutenfrei'));
     await userEvent.clear(within(first).getByLabelText('Hinweis zum Essen'));
     // Ticking and unticking a tag again is no change either.
     await userEvent.click(within(first).getByLabelText('Vegan'));
     await userEvent.click(within(first).getByLabelText('Vegan'));
+    // Renaming a person without dietary data is no dietary change.
+    await userEvent.type(within(second).getByLabelText('Name'), ' Pérez');
     expect(within(editor).queryByRole('checkbox', { name: CONSENT })).not.toBeInTheDocument();
     await userEvent.click(within(editor).getByRole('button', { name: 'Speichern' }));
 
     expect(api.update).toHaveBeenCalledWith('a1', '"v1"', {
       attending: true,
       people: [
-        { id: 'p1', name: 'Pablo Pérez García', dietary: { tags: ['vegetarian'] } },
-        { id: 'p2', name: 'María-José García', dietary: { tags: [] } },
+        { id: 'p1', name: 'Pablo Pérez', dietary: { tags: ['vegetarian'] } },
+        { id: 'p2', name: 'María-José García Pérez', dietary: { tags: [] } },
       ],
       message: '¡Felicidades, Anna y Ben!',
       language: 'es',
     });
+  });
+
+  it('asks for the confirmation when a person who keeps dietary data is renamed', async () => {
+    const api = fakeApi();
+    renderApp(api);
+    await userEvent.click(
+      await screen.findByRole('button', {
+        name: 'Antwort von Pablo Pérez, María-José García bearbeiten',
+      }),
+    );
+    const editor = screen.getByRole('form', { name: 'Antwort bearbeiten' });
+    const first = within(editor).getByRole('group', { name: 'Person 1 (Gast)' });
+
+    // The slot now names someone else, who would take over Pablo's dietary data.
+    await userEvent.clear(within(first).getByLabelText('Name'));
+    await userEvent.type(within(first).getByLabelText('Name'), 'Jürgen Müller');
+    expect(within(editor).getByRole('checkbox', { name: CONSENT })).not.toBeChecked();
+
+    // Without any dietary data left, the rename moves nothing to anyone.
+    await userEvent.click(within(first).getByLabelText('Vegetarisch'));
+    await userEvent.click(within(first).getByLabelText('Glutenfrei'));
+    await userEvent.clear(within(first).getByLabelText('Hinweis zum Essen'));
+    expect(within(editor).queryByRole('checkbox', { name: CONSENT })).not.toBeInTheDocument();
+    await userEvent.click(within(editor).getByRole('button', { name: 'Speichern' }));
+    expect(api.update).toHaveBeenCalledWith(
+      'a1',
+      '"v1"',
+      expect.not.objectContaining({ dietaryConsent: true }),
+    );
+  });
+
+  it('unticks the confirmation when it hides, so it never comes back ticked', async () => {
+    const api = fakeApi();
+    renderApp(api);
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Antwort von Jürgen Müller bearbeiten' }),
+    );
+    const editor = screen.getByRole('form', { name: 'Antwort bearbeiten' });
+    await userEvent.click(within(editor).getByLabelText('Ja, kommt'));
+
+    await userEvent.click(within(editor).getByLabelText('Vegan'));
+    await userEvent.click(within(editor).getByRole('checkbox', { name: CONSENT }));
+    expect(within(editor).getByRole('checkbox', { name: CONSENT })).toBeChecked();
+    await userEvent.click(within(editor).getByLabelText('Vegan'));
+    expect(within(editor).queryByRole('checkbox', { name: CONSENT })).not.toBeInTheDocument();
+
+    await userEvent.type(within(editor).getByLabelText('Hinweis zum Essen'), 'Keine Nüsse');
+    const consent = within(editor).getByRole('checkbox', { name: CONSENT });
+    expect(consent).not.toBeChecked();
+    expect(consent).toHaveAttribute('aria-invalid', 'false');
+    await userEvent.click(within(editor).getByRole('button', { name: 'Speichern' }));
+    expect(api.update).not.toHaveBeenCalled();
   });
 
   it('shows the API’s request for the confirmation at the checkbox and resends with it', async () => {
@@ -332,6 +386,48 @@ describe('AdminApp', () => {
       '"v1"',
       expect.objectContaining({ dietaryConsent: true }),
     );
+    expect(await screen.findByText('Antwort gespeichert.')).toBeInTheDocument();
+  });
+
+  it('drops the API’s request once the answer or the people change', async () => {
+    const api = fakeApi();
+    api.update.mockResolvedValueOnce({
+      ok: false,
+      kind: 'invalid',
+      status: 400,
+      fields: ['dietaryConsent'],
+    });
+    renderApp(api);
+    await userEvent.click(
+      await screen.findByRole('button', {
+        name: 'Antwort von Pablo Pérez, María-José García bearbeiten',
+      }),
+    );
+    const editor = screen.getByRole('form', { name: 'Antwort bearbeiten' });
+    const first = within(editor).getByRole('group', { name: 'Person 1 (Gast)' });
+    await userEvent.click(within(editor).getByRole('button', { name: 'Speichern' }));
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+
+    // The message is not part of the rule: the request stays.
+    await userEvent.type(within(editor).getByLabelText('Nachricht an das Paar'), '!');
+    expect(within(editor).getByRole('checkbox', { name: CONSENT })).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    );
+
+    // Removing dietary data, as the error suggests, leaves the decision to the rule again.
+    await userEvent.clear(within(first).getByLabelText('Hinweis zum Essen'));
+    expect(within(editor).queryByRole('checkbox', { name: CONSENT })).not.toBeInTheDocument();
+    await userEvent.click(within(editor).getByRole('button', { name: 'Speichern' }));
+    expect(api.update).toHaveBeenLastCalledWith('a1', '"v1"', {
+      attending: true,
+      people: [
+        { id: 'p1', name: 'Pablo Pérez', dietary: { tags: ['vegetarian', 'glutenFree'] } },
+        { id: 'p2', name: 'María-José García', dietary: { tags: [] } },
+      ],
+      message: '¡Felicidades, Anna y Ben!!',
+      language: 'es',
+    });
     expect(await screen.findByText('Antwort gespeichert.')).toBeInTheDocument();
   });
 

@@ -22,9 +22,15 @@ const body = (...people: Person[]): AdminRsvpUpdate => ({
   people,
   language: 'es',
 });
-const person = (id: string | undefined, tags: string[] = [], note?: string): Person => ({
+/** A person as sent back, by default with the stored name of that id (a new person: Jürgen). */
+const person = (
+  id: string | undefined,
+  tags: string[] = [],
+  note?: string,
+  name = stored.people.find((p) => p.id === id)?.name ?? 'Jürgen Müller',
+): Person => ({
   ...(id === undefined ? {} : { id }),
-  name: 'X',
+  name,
   dietary: { tags, ...(note === undefined ? {} : { note }) },
 });
 
@@ -46,5 +52,24 @@ describe('addsOrChangesDietary (the API rule for the consent attestation)', () =
     );
     expect(addsOrChangesDietary(stored, body(person('p2', [], 'Sin lactosa')))).toBe(true);
     expect(addsOrChangesDietary(stored, body(person(undefined, ['vegetarian'])))).toBe(true);
+  });
+
+  it('is true for a renamed person who keeps any dietary data, as for the API', () => {
+    // The same slot now names someone else, who would take over Pablo's dietary data.
+    const renamed = person('p1', ['vegetarian'], 'Sin nueces', 'Jürgen Müller');
+    expect(addsOrChangesDietary(stored, body(renamed, person('p2')))).toBe(true);
+    expect(addsOrChangesDietary(stored, body(person('p1', [], 'Sin nueces', 'Pablo')))).toBe(true);
+    const caseOnly = person('p1', ['vegetarian'], undefined, 'pablo pérez');
+    expect(addsOrChangesDietary(stored, body(caseOnly))).toBe(true);
+  });
+
+  it('is false for a rename without dietary data or one that differs only in spaces', () => {
+    const removedAndRenamed = person('p1', [], undefined, 'Pablo Pérez García');
+    expect(addsOrChangesDietary(stored, body(removedAndRenamed))).toBe(false);
+    const companionRenamed = person('p2', [], undefined, 'María-José');
+    const pablo = person('p1', ['vegetarian'], 'Sin nueces');
+    expect(addsOrChangesDietary(stored, body(pablo, companionRenamed))).toBe(false);
+    const spaces = person('p1', ['vegetarian'], 'Sin nueces', ' Pablo  Pérez ');
+    expect(addsOrChangesDietary(stored, body(spaces))).toBe(false);
   });
 });

@@ -22,7 +22,8 @@ export type RsvpEditorProps = {
   readonly saving: boolean;
   /**
    * The API refused the last save because new or changed dietary data came without the consent
-   * attestation (`dietaryConsent`): the checkbox is shown with its error until it is ticked.
+   * attestation (`dietaryConsent`): the checkbox is shown with its error until it is ticked, or
+   * until the answer or the people (names, dietary data) differ from what was sent.
    */
   readonly consentError?: boolean;
   readonly onSave: (body: AdminRsvpUpdate) => void;
@@ -31,13 +32,14 @@ export type RsvpEditorProps = {
 
 let nextKey = 0;
 
-/** A note as the API compares it: NFC, whitespace runs collapsed, trimmed. */
-const normalNote = (note: string) => note.normalize('NFC').replace(/\s+/gu, ' ').trim();
+/** A name or note as the API compares it: NFC, whitespace runs collapsed, trimmed. */
+const normalText = (text: string) => text.normalize('NFC').replace(/\s+/gu, ' ').trim();
 
 /**
  * Whether `body` adds or changes dietary data compared with the stored reply, by the API's rule
  * (`AdminDietaryConsent.AddsOrChanges`): a person (matched by id) gets a tag they did not have or a
- * new or different note, or a new person comes with any dietary data. Removing data never counts.
+ * new or different note, a renamed person still has any dietary data (it may now belong to someone
+ * else), or a new person comes with any dietary data. Removing data never counts.
  */
 export function addsOrChangesDietary(stored: AdminRsvp, body: AdminRsvpUpdate): boolean {
   return body.people.some((person) => {
@@ -46,10 +48,16 @@ export function addsOrChangesDietary(stored: AdminRsvp, body: AdminRsvpUpdate): 
     const tagAdded = person.dietary.tags.some((tag) => !previous?.dietary.tags.includes(tag));
     const note = person.dietary.note;
     const noteChanged =
-      note !== undefined && normalNote(note) !== normalNote(previous?.dietary.note ?? '');
-    return tagAdded || noteChanged;
+      note !== undefined && normalText(note) !== normalText(previous?.dietary.note ?? '');
+    const hasData = person.dietary.tags.length > 0 || note !== undefined;
+    const renamedWithData =
+      previous !== undefined && hasData && normalText(person.name) !== normalText(previous.name);
+    return tagAdded || noteChanged || renamedWithData;
   });
 }
+
+/** What the consent rule looks at: the answer and the people with their dietary data. */
+const consentKey = (body: AdminRsvpUpdate) => JSON.stringify([body.attending, body.people]);
 
 /** Edits one reply: yes/no, people with dietary needs, and the message. */
 export function RsvpEditor({
@@ -74,6 +82,8 @@ export function RsvpEditor({
   const [message, setMessage] = useState(rsvp.message ?? '');
   const [consent, setConsent] = useState(false);
   const [consentMissing, setConsentMissing] = useState(false);
+  /** `consentKey` of the last body sent: the API's `consentError` is about exactly that data. */
+  const [sentKey, setSentKey] = useState<string | null>(null);
 
   const change = (key: string, update: Partial<PersonDraft>) =>
     setPeople((current) =>
@@ -104,9 +114,19 @@ export function RsvpEditor({
     ...(trimmedMessage === '' ? {} : { message: trimmedMessage }),
     language: rsvp.language,
   };
-  // The API decides; the checkbox also appears when it asked for the attestation.
-  const askConsent = consentError || addsOrChangesDietary(rsvp, body);
-  const showConsentError = askConsent && !consent && (consentError || consentMissing);
+  // The API decides: the checkbox also appears when it asked for the attestation, but only while
+  // the answer and the people are what it refused. Any change there (for example removing the new
+  // dietary data, as the error suggests) leaves the decision to the rule again.
+  const dataKey = consentKey(body);
+  const apiAsks = consentError && dataKey === sentKey;
+  const askConsent = apiAsks || addsOrChangesDietary(rsvp, body);
+  const showConsentError = askConsent && !consent && (apiAsks || consentMissing);
+
+  // A hidden checkbox forgets its state, so it never comes back already ticked for other data.
+  if (!askConsent && (consent || consentMissing)) {
+    setConsent(false);
+    setConsentMissing(false);
+  }
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -115,6 +135,7 @@ export function RsvpEditor({
       consentRef.current?.focus();
       return;
     }
+    setSentKey(dataKey);
     onSave(askConsent ? { ...body, dietaryConsent: true } : body);
   };
 
