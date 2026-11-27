@@ -39,6 +39,26 @@ describe('Locations', () => {
     );
   });
 
+  it.each([
+    ['de', /Karte anzeigen/, 'Datenschutzerklärung'],
+    ['en', /Show map/, 'privacy notice'],
+    ['es', /Mostrar mapa/, 'política de privacidad'],
+  ] as const)(
+    'says before the click (%s) that the OpenStreetMap Foundation gets the IP address and links the privacy notice',
+    async (lang, button, link) => {
+      const user = userEvent.setup();
+      render(<Locations section={sections.locations} ctx={{ ...ctx, lang }} />);
+      const show = screen.getByRole('button', { name: button });
+      expect(show).toHaveAccessibleName(button);
+      expect(show).toHaveAccessibleDescription(/OpenStreetMap Foundation/);
+      expect(show).toHaveAccessibleDescription(/\bIP\b/);
+      expect(screen.getByRole('link', { name: link })).toHaveAttribute('href', '/datenschutz');
+
+      await user.click(show);
+      expect(screen.queryByRole('link', { name: link })).not.toBeInTheDocument();
+    },
+  );
+
   it('shows the note with its inline links, further links, the website and the phone number', () => {
     const [card] = sections.locations.data.cards;
     const section = {

@@ -13,6 +13,12 @@ test.describe('locations map', () => {
     const card = page.locator(`#${travel.id} article.card`).first();
     const show = card.getByRole('button', { name: /Karte anzeigen/ });
     await expect(show).toBeVisible();
+    // The note says who gets the IP address after the click and links the privacy notice.
+    await expect(show).toHaveAccessibleDescription(/OpenStreetMap Foundation/);
+    await expect(card.getByRole('link', { name: 'Datenschutzerklärung' })).toHaveAttribute(
+      'href',
+      '/datenschutz',
+    );
     await expect(card.getByRole('link', { name: 'Route planen' })).toHaveAttribute(
       'href',
       /^https:\/\/www\.google\.com\/maps\/dir\/\?api=1&destination=-?\d+(\.\d+)?,-?\d+(\.\d+)?$/,
