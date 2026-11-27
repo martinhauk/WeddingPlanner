@@ -126,9 +126,9 @@ export function Header({
           >
             {item.id === rsvpId && answered !== null ? (
               <>
-                {t(answered === 'yes' ? ui.navSaidYes : ui.navSaidNo, lang)}
+                {t(answered === 'yes' ? ui.navSaidYes : ui.navSaidNo, lang)}{' '}
                 <span className="sr-only">
-                  {`, ${t(rsvpClosed ? ui.rsvp.viewReply : ui.rsvp.change, lang)}`}
+                  {`– ${t(rsvpClosed ? ui.rsvp.viewReply : ui.rsvp.change, lang)}`}
                 </span>
               </>
             ) : (

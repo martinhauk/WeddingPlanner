@@ -1,6 +1,9 @@
+import type { Browser, BrowserContext } from '@playwright/test';
 import { callsOtherThanKeepWarm, installApiMocks } from '../fixtures/api-mocks.ts';
-import { rsvpStateCookie, SAMPLE_YES_REPLY } from '../fixtures/rsvp-api.ts';
+import { expectAxeClean } from '../fixtures/axe.ts';
+import { type RsvpView, rsvpStateCookie, SAMPLE_YES_REPLY } from '../fixtures/rsvp-api.ts';
 import { sectionOfType } from '../fixtures/sample.ts';
+import { menuButton, siteNav } from '../fixtures/site.ts';
 import { expect, FIXED_NOW, test } from '../fixtures/test.ts';
 import { snap } from '../screenshots-tooling/snap.ts';
 
@@ -13,6 +16,31 @@ const RSVP_ID = sectionOfType('rsvp').id;
 
 /** The personal edit link as the success screen shows it. */
 const EDIT_LINK = /\/#edit=[0-9a-f]{32}\.[A-Za-z0-9_-]{43}$/;
+
+/** A "no" another browser holds (fictional). */
+const SAMPLE_NO_REPLY: RsvpView = {
+  id: 'e2e00000000000000000000000000002',
+  attending: false,
+  people: [{ id: 'e2e00003', name: 'Pablo Pérez', dietary: { tags: [] } }],
+  language: 'de',
+};
+
+/** Another browser on the same device type: its own cookies, the project's settings. */
+async function newDevice(browser: Browser, baseURL: string): Promise<BrowserContext> {
+  const { viewport, userAgent, deviceScaleFactor, isMobile, hasTouch } = test.info().project.use;
+  return browser.newContext({
+    baseURL,
+    viewport,
+    userAgent,
+    deviceScaleFactor,
+    isMobile,
+    hasTouch,
+    locale: 'de-DE',
+    timezoneId: 'Europe/Berlin',
+    reducedMotion: 'reduce',
+    serviceWorkers: 'block',
+  });
+}
 
 test.describe('RSVP', () => {
   test('yes: two guests with dietary needs and a message', async ({ page, rsvpApi }) => {
@@ -257,19 +285,7 @@ test.describe('RSVP', () => {
     expect(link.hash).toBe(`#edit=${rsvpApi.editToken()}`);
 
     // Another phone, or the real browser after a messenger's in-app browser: no cookies at all.
-    const { viewport, userAgent, deviceScaleFactor, isMobile, hasTouch } = test.info().project.use;
-    const fresh = await browser.newContext({
-      baseURL,
-      viewport,
-      userAgent,
-      deviceScaleFactor,
-      isMobile,
-      hasTouch,
-      locale: 'de-DE',
-      timezoneId: 'Europe/Berlin',
-      reducedMotion: 'reduce',
-      serviceWorkers: 'block',
-    });
+    const fresh = await newDevice(browser, baseURL);
     try {
       const freshApi = await installApiMocks(fresh, link.origin);
       await rsvpApi.attach(freshApi);
@@ -316,6 +332,126 @@ test.describe('RSVP', () => {
     expect(rsvpApi.writes().map((write) => `${write.method} ${write.path}`)).toEqual([
       'POST /api/rsvp/claim',
     ]);
+  });
+
+  test('a returning guest can see the personal link again', async ({
+    page,
+    context,
+    baseURL,
+    rsvpApi,
+  }) => {
+    if (baseURL === undefined) throw new Error('no baseURL');
+    const origin = new URL(baseURL).origin;
+    rsvpApi.seed(SAMPLE_YES_REPLY);
+    await context.addCookies([rsvpStateCookie(origin, 'yes')]);
+    await page.goto(`/#${RSVP_ID}`);
+    const rsvp = page.locator(`#${RSVP_ID}`);
+    await expect(rsvp.locator('.rsvp-summary')).toContainText('Jürgen Müller');
+    const field = rsvp.getByRole('textbox', { name: 'Euer persönlicher Link' });
+    await expect(field).toHaveCount(0);
+
+    await rsvp.getByRole('button', { name: 'Euren persönlichen Link anzeigen' }).click();
+    await expect(field).toBeFocused();
+    await expect(field).toHaveValue(`${origin}/#edit=${rsvpApi.editToken()}`);
+    await expect(rsvp.getByRole('button', { name: 'Link kopieren' })).toBeVisible();
+    await snap(page, 'rsvp-show-link', { lang: 'de', target: rsvp });
+    await expectAxeClean(page, { include: [`#${RSVP_ID}`] });
+    expect(rsvpApi.writes()).toEqual([]);
+  });
+
+  test('a link to another reply asks "who are you?" in a browser that has one', async ({
+    browser,
+    baseURL,
+    rsvpApi,
+  }) => {
+    if (baseURL === undefined) throw new Error('no baseURL');
+    const origin = new URL(baseURL).origin;
+    // The link of a "yes" sent on another phone, opened where Pablo Pérez's "no" is saved.
+    rsvpApi.seed(SAMPLE_YES_REPLY);
+    const editToken = rsvpApi.editToken();
+    const fresh = await newDevice(browser, baseURL);
+    try {
+      const freshApi = await installApiMocks(fresh, origin);
+      await rsvpApi.attach(freshApi, { own: SAMPLE_NO_REPLY });
+      await fresh.addCookies([rsvpStateCookie(origin, 'no')]);
+      const other = await fresh.newPage();
+      await other.clock.setFixedTime(FIXED_NOW);
+      const hash = () => other.evaluate(() => window.location.hash);
+      await other.goto(`/#edit=${editToken}`);
+      const section = other.locator(`#${RSVP_ID}`);
+
+      await expect(section.getByRole('heading', { name: 'Wer seid ihr?' })).toBeFocused();
+      await expect(
+        section.getByText('Seid ihr Pablo Pérez oder Jürgen Müller und María-José García?'),
+      ).toBeVisible();
+      const linkNames = section.getByRole('button', {
+        name: 'Jürgen Müller und María-José García',
+      });
+      await expect(linkNames).toBeVisible();
+      await snap(other, 'rsvp-who-are-you', { lang: 'de', target: section });
+      await expectAxeClean(other, { include: [`#${RSVP_ID}`] });
+
+      // This browser's names: its own reply stays, nothing is claimed.
+      await section.getByRole('button', { name: 'Pablo Pérez', exact: true }).click();
+      await expect(section.locator('.rsvp-summary')).toContainText('Pablo Pérez');
+      await expect.poll(hash).toBe('');
+
+      // The link opened again; this time the guest is who the link names.
+      await other.goto('about:blank');
+      await other.goto(`/#edit=${editToken}`);
+      await linkNames.click();
+      await expect(
+        section.getByText(
+          'Eure Antwort ist jetzt auch in diesem Browser gespeichert. Ihr könnt sie hier ändern.',
+        ),
+      ).toBeVisible();
+      await expect(section.locator('.rsvp-summary')).toContainText('María-José García');
+      await expect.poll(hash).toBe('');
+      expect(callsOtherThanKeepWarm(freshApi.calls())).toEqual([
+        'GET /api/rsvp/me',
+        'POST /api/rsvp/claim',
+        'GET /api/rsvp/me',
+        'POST /api/rsvp/claim',
+        'POST /api/rsvp/claim',
+      ]);
+      expect(freshApi.takeUnmocked()).toEqual([]);
+    } finally {
+      await fresh.close();
+    }
+    expect(rsvpApi.writes().map((write) => write.body)).toEqual([
+      { editToken, preview: true },
+      { editToken, preview: true },
+      { editToken },
+    ]);
+  });
+
+  test('the navigation shows the reply of this browser without calling the API', async ({
+    page,
+    context,
+    baseURL,
+    rsvpApi,
+    expectOnlyKeepWarmCalls,
+  }) => {
+    if (baseURL === undefined) throw new Error('no baseURL');
+    rsvpApi.seed(SAMPLE_YES_REPLY);
+    await context.addCookies([rsvpStateCookie(new URL(baseURL).origin, 'yes')]);
+    await page.goto('/');
+    const small = await menuButton(page).isVisible();
+    if (small) await menuButton(page).click();
+    const entry = siteNav(page).getByRole('link', { name: 'Zugesagt – Antwort ändern' });
+    await expect(entry).toBeVisible();
+    await expect(entry).toHaveAttribute('href', `#${RSVP_ID}`);
+    await expect(siteNav(page).getByRole('link', { name: 'Zusagen' })).toHaveCount(0);
+    await expectOnlyKeepWarmCalls();
+    await snap(
+      page,
+      'rsvp-nav-answered',
+      small ? { lang: 'de', fullPage: false } : { lang: 'de', target: page.locator('header') },
+    );
+    await expectAxeClean(page, { include: ['header'] });
+
+    await entry.click();
+    await expect(page.locator(`#${RSVP_ID} .rsvp-summary`)).toContainText('Jürgen Müller');
   });
 
   test('the hero shows the reply of this browser without calling the API', async ({

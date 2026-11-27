@@ -120,12 +120,12 @@ describe('Header: the RSVP entry of a browser with a reply', () => {
   afterEach(() => setStateCookie(null));
 
   it.each([
-    ['de', 'yes', 'Zugesagt', 'Zugesagt, Antwort ändern'],
-    ['de', 'no', 'Abgesagt', 'Abgesagt, Antwort ändern'],
-    ['en', 'yes', 'You said yes', 'You said yes, Change reply'],
-    ['en', 'no', 'You said no', 'You said no, Change reply'],
-    ['es', 'yes', 'Dijisteis que sí', 'Dijisteis que sí, Cambiar respuesta'],
-    ['es', 'no', 'Dijisteis que no', 'Dijisteis que no, Cambiar respuesta'],
+    ['de', 'yes', 'Zugesagt', 'Zugesagt – Antwort ändern'],
+    ['de', 'no', 'Abgesagt', 'Abgesagt – Antwort ändern'],
+    ['en', 'yes', 'You said yes', 'You said yes – Change reply'],
+    ['en', 'no', 'You said no', 'You said no – Change reply'],
+    ['es', 'yes', 'Dijisteis que sí', 'Dijisteis que sí – Cambiar respuesta'],
+    ['es', 'no', 'Dijisteis que no', 'Dijisteis que no – Cambiar respuesta'],
   ] as const)('%s, %s: says so and links to the RSVP section', (lang, state, label, name) => {
     const api = mockApi({});
     setStateCookie(state);
@@ -141,7 +141,7 @@ describe('Header: the RSVP entry of a browser with a reply', () => {
   it('offers to view the reply after the deadline', () => {
     setStateCookie('no');
     renderHeader({ rsvpClosed: true });
-    expect(screen.getByRole('link', { name: 'Abgesagt, Antwort ansehen' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Abgesagt – Antwort ansehen' })).toHaveAttribute(
       'href',
       '#rsvp',
     );
@@ -164,6 +164,6 @@ describe('Header: the RSVP entry of a browser with a reply', () => {
     act(() => {
       window.dispatchEvent(new Event(RSVP_STATE_EVENT));
     });
-    expect(screen.getByRole('link', { name: 'Zugesagt, Antwort ändern' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Zugesagt – Antwort ändern' })).toBeInTheDocument();
   });
 });
