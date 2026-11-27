@@ -21,6 +21,8 @@ const NOTICES = {
   alreadyAnswered: r.alreadyAnswered,
   conflict: r.conflict,
   replyGone: r.replyGone,
+  claimed: r.claimed,
+  linkInvalid: r.linkInvalid,
 } as const satisfies Record<RsvpNotice, unknown>;
 
 function failureText(failure: ApiFailure, lang: Lang): string {
@@ -120,10 +122,24 @@ export function Rsvp({ section, ctx }: SectionProps<'rsvp'>) {
             )}
           </div>
         );
+      case 'claiming':
+        return (
+          <div className="thanks">
+            {rsvp.active ? (
+              <p className="muted" role="status">
+                {t(r.claiming, lang)}
+              </p>
+            ) : (
+              <button type="button" className="btn ghost" onClick={rsvp.reveal}>
+                {t(r.showReply, lang)}
+              </button>
+            )}
+          </div>
+        );
       case 'loadFailed':
         return (
           <div className="thanks">
-            <p className="lead">{answered}</p>
+            {rsvp.stored !== null && <p className="lead">{answered}</p>}
             <RsvpAlert
               message={failureText(phase.error, lang)}
               lang={lang}
@@ -159,6 +175,7 @@ export function Rsvp({ section, ctx }: SectionProps<'rsvp'>) {
                 readOnly={closed}
                 busy={rsvp.busy}
                 focusOnMount={interacted}
+                editLink={rsvp.editLink}
                 onEdit={rsvp.edit}
                 onWithdraw={() => void rsvp.withdraw()}
               />

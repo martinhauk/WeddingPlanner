@@ -750,3 +750,201 @@ describe('Rsvp', () => {
     expect(screen.getByText('Bis bald!')).toBeInTheDocument();
   });
 });
+
+describe('Rsvp: the personal edit link', () => {
+  const CLAIM = 'POST /api/rsvp/claim';
+  /** A well-formed edit token (fictional). */
+  const TOKEN = `1b86eb8e593b91c86f2d8d37d4fd593a.${'Ab3_-'.repeat(8)}xyz`;
+  const link = () => `${window.location.origin}/#edit=${TOKEN}`;
+
+  const createdWithLink = (call: RecordedCall) =>
+    json(201, { rsvp: stored(call), version: '"v1"', editToken: TOKEN }, { ETag: '"v1"' });
+
+  /** Opens the page with `hash` in the address bar. */
+  const openWith = (hash: string) => window.history.replaceState(null, '', `/${hash}`);
+
+  afterEach(() => window.history.replaceState(null, '', '/'));
+
+  const labels = {
+    de: { no: 'Leider nicht', save: 'Antwort speichern' },
+    en: { no: "Sadly we can't", save: 'Save reply' },
+    es: { no: 'Lamentablemente no', save: 'Guardar respuesta' },
+  } as const;
+
+  async function sendANo(user: ReturnType<typeof userEvent.setup>, lang: Lang = 'de') {
+    renderRsvp({ lang });
+    await user.click(screen.getByRole('button', { name: labels[lang].no }));
+    const [name] = screen.getAllByRole('textbox');
+    if (name === undefined) throw new Error('no name field');
+    await user.type(name, 'Pablo Pérez');
+    await user.click(screen.getByRole('button', { name: labels[lang].save }));
+  }
+
+  it('shows the link of a new reply with a copy button and a hint to keep it', async () => {
+    const user = userEvent.setup();
+    mockApi({ [STATUS]: () => json(200, openStatus), [CREATE]: createdWithLink });
+    await sendANo(user);
+
+    const field = await screen.findByRole('textbox', { name: 'Euer persönlicher Link' });
+    expect(field).toHaveValue(link());
+    expect(field).toHaveAttribute('readonly');
+    expect(field).toHaveAccessibleDescription(/^Hebt diesen Link gut auf/);
+    await user.click(screen.getByRole('button', { name: 'Link kopieren' }));
+    expect(await screen.findByText('Link kopiert.')).toHaveAttribute('role', 'status');
+    expect(await navigator.clipboard.readText()).toBe(link());
+  });
+
+  it('selects the link for copying by hand when the clipboard refuses', async () => {
+    const user = userEvent.setup();
+    mockApi({ [STATUS]: () => json(200, openStatus), [CREATE]: createdWithLink });
+    await sendANo(user);
+    vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValue(new Error('denied'));
+
+    await user.click(await screen.findByRole('button', { name: 'Link kopieren' }));
+
+    expect(
+      await screen.findByText(
+        'Kopieren hat nicht geklappt – bitte markiert den Link und kopiert ihn selbst.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Euer persönlicher Link' })).toHaveFocus();
+  });
+
+  it.each([
+    ['en', 'Your personal link', 'Copy link', /^Keep this link safe/],
+    ['es', 'Vuestro enlace personal', 'Copiar enlace', /^Guardad bien este enlace/],
+  ] as const)('shows the link in %s', async (lang, label, copy, hint) => {
+    const user = userEvent.setup();
+    mockApi({ [STATUS]: () => json(200, openStatus), [CREATE]: createdWithLink });
+    await sendANo(user, lang);
+
+    expect(await screen.findByRole('textbox', { name: label })).toHaveAccessibleDescription(hint);
+    expect(screen.getByRole('button', { name: copy })).toBeInTheDocument();
+  });
+
+  it('shows no link when the API sends none', async () => {
+    const user = userEvent.setup();
+    mockApi({ [STATUS]: () => json(200, openStatus), [CREATE]: created });
+    await sendANo(user);
+    expect(await screen.findByText('Schade – danke für eure Rückmeldung.')).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Euer persönlicher Link' })).toBeNull();
+  });
+
+  it('drops the link once the reply is withdrawn', async () => {
+    const user = userEvent.setup();
+    mockApi({
+      [STATUS]: () => json(200, openStatus),
+      [CREATE]: createdWithLink,
+      [DELETE]: () => new Response(null, { status: 204 }),
+    });
+    await sendANo(user);
+    expect(await screen.findByRole('textbox', { name: 'Euer persönlicher Link' })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Antwort zurückziehen' }));
+    await user.click(screen.getByRole('button', { name: 'Ja, zurückziehen' }));
+    expect(await screen.findByText('Eure Antwort wurde zurückgezogen.')).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Euer persönlicher Link' })).toBeNull();
+  });
+
+  it('claims the reply of an edit link once the section is in view, then forgets the link', async () => {
+    openWith(`#edit=${TOKEN}`);
+    const api = mockApi({ [CLAIM]: () => json(200, mineBody(yesReply)) });
+    renderRsvp();
+    expect(api.calls).toEqual([]);
+    expect(screen.getByRole('button', { name: 'Antwort anzeigen' })).toBeInTheDocument();
+
+    io.reveal();
+    expect(await screen.findByText('Danke! Wir freuen uns auf euch.')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Eure Antwort ist jetzt auch in diesem Browser gespeichert. Ihr könnt sie hier ändern.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Jürgen Müller')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Antwort ändern' })).toBeInTheDocument();
+    expect(api.calls.map((call) => `${call.method} ${call.url}`)).toEqual([CLAIM]);
+    expect(api.callsTo(CLAIM)[0]?.body).toEqual({ editToken: TOKEN });
+    expect(window.location.hash).toBe('');
+    expect(window.location.pathname).toBe('/');
+    expect(screen.queryByRole('textbox', { name: 'Euer persönlicher Link' })).toBeNull();
+  });
+
+  it('says that a wrong or withdrawn link does not work, without saying which', async () => {
+    openWith(`#edit=${TOKEN}`);
+    const api = mockApi({
+      [CLAIM]: () => problem(404, 'not_found'),
+      [STATUS]: () => json(200, openStatus),
+    });
+    renderRsvp({ lang: 'en' });
+    io.reveal();
+
+    expect(
+      await screen.findByText(
+        "Sorry, this link doesn't work. It may be incomplete, or its reply was withdrawn.",
+      ),
+    ).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: "Yes, we'll be there" })).toBeInTheDocument();
+    expect(window.location.hash).toBe('');
+    expect(api.callsTo(CLAIM)).toHaveLength(1);
+  });
+
+  it('keeps showing the own reply when a link fails in a browser that has one', async () => {
+    openWith(`#edit=${TOKEN}`);
+    setStateCookie('yes');
+    const api = mockApi({
+      [CLAIM]: () => problem(404, 'not_found'),
+      [MINE]: () => json(200, mineBody(yesReply)),
+    });
+    renderRsvp({ lang: 'es' });
+    io.reveal();
+
+    expect(
+      await screen.findByText(
+        'Lo sentimos, este enlace no funciona. Puede que esté incompleto o que su respuesta se haya retirado.',
+      ),
+    ).toBeInTheDocument();
+    expect(await screen.findByText('¡Gracias! Nos hace mucha ilusión.')).toBeInTheDocument();
+    expect(api.calls.map((call) => `${call.method} ${call.url}`)).toEqual([CLAIM, MINE]);
+  });
+
+  it('reports a malformed link at once and never sends it', async () => {
+    openWith('#edit=1b86eb8e.abc');
+    const api = mockApi({ [STATUS]: () => json(200, openStatus) });
+    renderRsvp();
+    expect(
+      screen.getByText(
+        'Dieser Link funktioniert leider nicht. Vielleicht ist er unvollständig, oder die Antwort dazu wurde zurückgezogen.',
+      ),
+    ).toBeInTheDocument();
+    expect(window.location.hash).toBe('');
+
+    io.reveal();
+    await waitFor(() => expect(api.callsTo(STATUS)).toHaveLength(1));
+    expect(api.callsTo(CLAIM)).toEqual([]);
+  });
+
+  it('keeps the link and claims again after a network error', async () => {
+    const user = userEvent.setup();
+    openWith(`#edit=${TOKEN}`);
+    const api = mockApi({ [CLAIM]: [offline, () => json(200, mineBody(yesReply))] });
+    renderRsvp();
+    io.reveal();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Keine Verbindung.');
+    expect(screen.queryByText('Ihr habt bereits zugesagt.')).toBeNull();
+    expect(window.location.hash).toBe(`#edit=${TOKEN}`);
+    await user.click(screen.getByRole('button', { name: 'Erneut versuchen' }));
+
+    expect(await screen.findByText('Danke! Wir freuen uns auf euch.')).toBeInTheDocument();
+    expect(api.callsTo(CLAIM)).toHaveLength(2);
+    expect(window.location.hash).toBe('');
+  });
+
+  it('ignores an edit link while the feature is off', () => {
+    openWith(`#edit=${TOKEN}`);
+    const api = mockApi({});
+    renderRsvp({ build: { ...build, features: { rsvp: false, admin: false } } });
+    io.reveal();
+    expect(api.calls).toEqual([]);
+    expect(window.location.hash).toBe(`#edit=${TOKEN}`);
+  });
+});

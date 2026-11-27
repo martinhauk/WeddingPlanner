@@ -4,6 +4,10 @@
  * `wp_rsvp_state` cookie (yes|no, no personal data) tells the page that this browser has a reply
  * without calling the API.
  *
+ * The personal edit link `<origin>/#edit=<editToken>` carries the same credential (`<id>.<token>`):
+ * the create returns it once, and `claimRsvp` turns it into the cookies of another browser. It is a
+ * URL fragment, so it never reaches a server or a `Referer`.
+ *
  * Every call resolves to an `ApiResult` instead of throwing. Responses are checked with small type
  * guards: the browser bundle has no zod.
  */
@@ -16,8 +20,20 @@ export const RSVP_CREDENTIAL_COOKIE = 'wp_rsvp';
 /** Name of the readable state cookie the API sets next to the credential. */
 export const RSVP_STATE_COOKIE = 'wp_rsvp_state';
 
+/**
+ * Dispatched on `window` after every answer of an RSVP call that may set or clear the cookies, so
+ * parts of the page outside the RSVP section (the hero) can re-read `wp_rsvp_state`.
+ */
+export const RSVP_STATE_EVENT = 'wp-rsvp-state';
+
 /** A request that has not finished after this long counts as a network failure. */
 export const REQUEST_TIMEOUT_MS = 20_000;
+
+/** The fragment of a personal edit link: `#edit=<id>.<token>`. */
+export const EDIT_FRAGMENT = '#edit=';
+
+/** `<id>.<token>`: 16 bytes of hex and 32 bytes of base64url, as the API issues them. */
+const EDIT_TOKEN = /^[0-9a-f]{32}\.[A-Za-z0-9_-]{43}$/;
 
 export type RsvpState = 'yes' | 'no';
 
@@ -44,6 +60,9 @@ export type RsvpMine = {
   readonly version: string;
   readonly open: boolean;
 };
+
+/** A new reply, with the secret of its personal edit link (absent if the API sent none). */
+export type RsvpCreated = RsvpMine & { readonly editToken?: string };
 
 export type RsvpLimits = {
   readonly maxPeople: number;
@@ -134,6 +153,26 @@ export function readRsvpState(
   return null;
 }
 
+/**
+ * The edit link in a URL fragment: `null` when the fragment is no edit link, `{ token: null }` when
+ * it is one with a malformed token. Characters after a complete token that cannot belong to it
+ * (a full stop or bracket pasted along) are ignored.
+ */
+export function parseEditLink(hash: string): { readonly token: string | null } | null {
+  if (!hash.startsWith(EDIT_FRAGMENT)) {
+    return null;
+  }
+  const rest = hash.slice(EDIT_FRAGMENT.length);
+  const token = rest.slice(0, 76);
+  const next = rest.charAt(76);
+  return { token: EDIT_TOKEN.test(token) && !/[A-Za-z0-9_-]/.test(next) ? token : null };
+}
+
+/** The personal edit link for `editToken`, on the site's start page. */
+export function editLinkFor(editToken: string, origin: string = window.location.origin): string {
+  return `${origin}/${EDIT_FRAGMENT}${editToken}`;
+}
+
 export function getStatus(signal?: AbortSignal): Promise<ApiResult<RsvpStatus>> {
   return send({ method: 'GET', path: '/status', signal }, 200, parseStatus);
 }
@@ -142,14 +181,29 @@ export function getMine(signal?: AbortSignal): Promise<ApiResult<RsvpMine>> {
   return send({ method: 'GET', path: '/me', signal }, 200, parseMine);
 }
 
-/** Creates this browser's reply; the API sets the cookies. */
-export function createRsvp(body: RsvpRequest, signal?: AbortSignal): Promise<ApiResult<RsvpMine>> {
+/** Creates this browser's reply; the API sets the cookies and returns the edit link's secret. */
+export function createRsvp(
+  body: RsvpRequest,
+  signal?: AbortSignal,
+): Promise<ApiResult<RsvpCreated>> {
   return send({ method: 'POST', path: '', body, signal }, 201, (data, response) => {
     const version = versionOf(data, response);
-    return isRecord(data) && isRsvpView(data.rsvp) && version !== undefined
-      ? { rsvp: data.rsvp, version, open: true }
-      : undefined;
+    if (!isRecord(data) || !isRsvpView(data.rsvp) || version === undefined) {
+      return undefined;
+    }
+    const mine = { rsvp: data.rsvp, version, open: true };
+    return typeof data.editToken === 'string' && EDIT_TOKEN.test(data.editToken)
+      ? { ...mine, editToken: data.editToken }
+      : mine;
   });
+}
+
+/**
+ * Claims the reply of a personal edit link for this browser: the API sets the cookies and returns
+ * the reply like `getMine`. A wrong, malformed or withdrawn link is a `notFound`.
+ */
+export function claimRsvp(editToken: string, signal?: AbortSignal): Promise<ApiResult<RsvpMine>> {
+  return send({ method: 'POST', path: '/claim', body: { editToken }, signal }, 200, parseMine);
 }
 
 /** Replaces the own reply; `version` is the one from the last read (`If-Match`). */
@@ -169,7 +223,7 @@ export function deleteRsvp(version?: string, signal?: AbortSignal): Promise<ApiR
 type Call = {
   readonly method: 'GET' | 'POST' | 'PUT' | 'DELETE';
   readonly path: string;
-  readonly body?: RsvpRequest;
+  readonly body?: RsvpRequest | { readonly editToken: string };
   readonly ifMatch?: string | undefined;
   readonly signal?: AbortSignal | undefined;
 };
@@ -203,6 +257,10 @@ async function send<T>(call: Call, expected: number, parse: Parser<T>): Promise<
       signal: controller.signal,
     });
     const data = await readJson(response);
+    if (call.path !== '/status' && typeof window !== 'undefined') {
+      // The answer may have set or cleared the RSVP cookies.
+      window.dispatchEvent(new Event(RSVP_STATE_EVENT));
+    }
     if (response.status === expected) {
       const value = parse(data, response);
       return value === undefined ? fail('unavailable', response.status) : { ok: true, value };

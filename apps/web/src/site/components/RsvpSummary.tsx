@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { type FormEvent, useEffect, useId, useRef, useState } from 'react';
 import type { RsvpView } from '../api/rsvp-client.ts';
 import { type Lang, t } from '../i18n.ts';
 import { isDiet } from '../rsvp-reply.ts';
@@ -14,6 +14,8 @@ export type RsvpSummaryProps = {
   readonly busy: boolean;
   /** Moves focus to the thank-you line when shown after a guest's action (never on page load). */
   readonly focusOnMount: boolean;
+  /** The personal edit link, right after the reply was created; shown with a copy button. */
+  readonly editLink?: string | null;
   readonly onEdit: () => void;
   readonly onWithdraw: () => void;
 };
@@ -24,9 +26,58 @@ function dietaryText(person: RsvpView['people'][number], lang: Lang): string {
   return [tags.join(', '), person.dietary.note ?? ''].filter((part) => part !== '').join(' · ');
 }
 
+/**
+ * The personal edit link: a read-only field, a copy button and a hint to keep it. Without the
+ * Clipboard API (older in-app browsers) or when copying fails, the link is selected for the guest to
+ * copy by hand.
+ */
+export function RsvpEditLink({ link, lang }: { readonly link: string; readonly lang: Lang }) {
+  const id = useId();
+  const field = useRef<HTMLInputElement>(null);
+  const [copied, setCopied] = useState<boolean | null>(null);
+
+  const copy = async (event: FormEvent) => {
+    event.preventDefault();
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+    } catch {
+      field.current?.focus();
+      field.current?.select();
+      setCopied(false);
+    }
+  };
+
+  return (
+    <form className="rsvp-link" onSubmit={(event) => void copy(event)}>
+      <label htmlFor={id}>{t(r.editLinkTitle, lang)}</label>
+      <input
+        id={id}
+        ref={field}
+        type="text"
+        readOnly
+        value={link}
+        aria-describedby={`${id}-hint`}
+        onFocus={(event) => event.currentTarget.select()}
+      />
+      <p className="rsvp-privacy" id={`${id}-hint`}>
+        {t(r.editLinkHint, lang)}
+      </p>
+      <div>
+        <button type="submit" className="btn small">
+          {t(r.copyLink, lang)}
+        </button>
+      </div>
+      <p className="rsvp-privacy" role="status">
+        {copied === null ? '' : t(copied ? r.linkCopied : r.copyFailed, lang)}
+      </p>
+    </form>
+  );
+}
+
 /** The thank-you after a reply: who comes (or not), dietary needs, the message, change/withdraw. */
 export function RsvpSummary(props: RsvpSummaryProps) {
-  const { rsvp, lang, readOnly, busy, focusOnMount, onEdit, onWithdraw } = props;
+  const { rsvp, lang, readOnly, busy, focusOnMount, editLink, onEdit, onWithdraw } = props;
   const [confirming, setConfirming] = useState(false);
   const thanks = useRef<HTMLParagraphElement>(null);
   const cancel = useRef<HTMLButtonElement>(null);
@@ -113,6 +164,7 @@ export function RsvpSummary(props: RsvpSummaryProps) {
             </button>
           </div>
         ))}
+      {editLink !== undefined && editLink !== null && <RsvpEditLink link={editLink} lang={lang} />}
     </div>
   );
 }
