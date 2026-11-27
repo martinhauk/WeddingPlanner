@@ -67,10 +67,25 @@ public static partial class PersonNames
     }
 
     /// <summary>
-    /// A URL scheme (<c>https://</c>), <c>www.</c>, or a domain: a label of three or more characters, a dot and a
-    /// lower-case top-level domain (<c>spam.com</c>, <c>bit.ly/x</c>). Two-letter labels and capitalised words after
-    /// the dot are left alone, so <c>Dr.med.</c> or <c>J.R.R.</c> are no web address.
+    /// Top-level domains common in spam and in the guests' countries. Deliberately curated: words that end academic
+    /// titles typed without spaces (<c>Dr.med.vet.</c>, <c>Dr.in</c>, <c>B.Sc.</c>, <c>Dr.-Ing.</c>, <c>Mag.art.</c>)
+    /// are left out, even where they are real top-level domains (<c>.vet</c>, <c>.in</c>, <c>.sc</c>, <c>.ing</c>,
+    /// <c>.art</c>, <c>.med</c>).
     /// </summary>
-    [GeneratedRegex(@"(?i:[a-z][a-z0-9+.-]*://|(?<![\p{L}\p{N}])www\.)|(?<![\p{L}\p{N}-])[\p{L}\p{N}-]{3,}\.[a-z]{2,24}(?![\p{L}\p{N}])", RegexOptions.CultureInvariant)]
+    private const string TopLevelDomains =
+        "com|net|org|info|biz|io|co|me|app|dev|xyz|top|shop|store|online|site|website|link|click|ly|gg|tv|cc|ws|ai|"
+        + "pro|club|live|life|blog|news|page|email|space|tech|cloud|fun|icu|vip|win|bid|buzz|rest|cyou|sbs|cfd|tk|ml|ga|cf|"
+        + "gq|mobi|name|asia|de|at|ch|li|lu|es|eu|uk|fr|it|nl|be|pl|pt|se|dk|fi|cz|sk|hu|ro|gr|tr|ua|ru|cn|jp|kr|us|ca|au|"
+        + "nz|za|br|mx|ar|cl|ie";
+
+    /// <summary>
+    /// A web address: <c>://</c> anywhere, <c>www.</c> starting a word, or a domain, which is a <c>label.tld</c> with a
+    /// top-level domain from <see cref="TopLevelDomains"/> that is not followed by a letter or digit (<c>spam.shop</c>,
+    /// <c>x.io</c>, <c>bit.ly/x</c>, <c>mail.example.co.uk</c>). The top-level domain must be all lower or all upper
+    /// case, so a capitalised word after a dot (<c>Prof.Dr.</c>, <c>Lic.De la Cruz</c>) is no domain.
+    /// </summary>
+    [GeneratedRegex(
+        @"://|(?<![\p{L}\p{N}])(?i:www)\.|(?<![\p{L}\p{N}-])[\p{L}\p{N}-]+\.(?:(?:" + TopLevelDomains + @")|(?i:(?:" + TopLevelDomains + @"))(?<=\.\p{Lu}+))(?![\p{L}\p{N}])",
+        RegexOptions.CultureInvariant)]
     private static partial Regex WebAddress();
 }

@@ -30,6 +30,17 @@ public sealed class PersonNamesTests
     [InlineData("李明")]
     [InlineData("Ελένη")]
     [InlineData("Анна")]
+    [InlineData("Dr.med.vet.")]
+    [InlineData("Dr.med.vet. Anna Example")]
+    [InlineData("Dr. med. dent. Anna Example")]
+    [InlineData("Prof.Dr. Ben Example")]
+    [InlineData("Anna B.Sc.")]
+    [InlineData("Dr.in Anna Example")]
+    [InlineData("Dr.-Ing. Ben Example")]
+    [InlineData("Dr.rer.nat. Ben Example")]
+    [InlineData("Mag.art. Anna Example")]
+    [InlineData("Lic.De la Cruz")]
+    [InlineData("Ana M.De la Cruz")]
     public void AcceptsRealNames(string name)
     {
         PersonNames.Check(name).ShouldBeNull();
@@ -71,6 +82,16 @@ public sealed class PersonNamesTests
     [InlineData("bit.ly")]
     [InlineData("mail.example.co.uk")]
     [InlineData("Anna example.xyz?ref=1")]
+    [InlineData("bit.ly/x")]
+    [InlineData("www.example.de")]
+    [InlineData("spam.shop")]
+    [InlineData("x.io")]
+    [InlineData("http://a")]
+    [InlineData("EXAMPLE.COM")]
+    [InlineData("Anna example.de/")]
+    [InlineData("Ben ab.cd.example.es")]
+    [InlineData("Anna x-y.online")]
+    [InlineData("Anna ://")]
     public void RejectsWebAddressesAndAtSigns(string name)
     {
         PersonNames.Check(name).ShouldBe(RsvpValidationCodes.Invalid);
