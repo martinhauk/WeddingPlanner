@@ -1,10 +1,10 @@
 # `@weddingplanner/table-backup`
 
-Typed backups of the Azure Table Storage tables of one environment: `export`, `restore`, `verify`,
-`list` and the restore `drill`. Used by the deploy workflow (pre-deploy backup, e2e drill), the
-nightly [`backup.yml`](../../.github/workflows/backup.yml) and the owner-run
-[`scripts/ops/restore-table.sh`](../../scripts/ops/restore-table.sh). Operations, retention and
-restores: [docs/runbooks/backup-restore.md](../../docs/runbooks/backup-restore.md).
+Typed backups of the Azure Table Storage tables of one environment: `export`, `check`, `restore`,
+`verify`, `list` and the restore `drill`. Used by the deploy workflow (pre-deploy backup and check,
+e2e drill), the nightly [`backup.yml`](../../.github/workflows/backup.yml) (backup and check) and
+the owner-run [`scripts/ops/restore-table.sh`](../../scripts/ops/restore-table.sh). Operations,
+retention and restores: [docs/runbooks/backup-restore.md](../../docs/runbooks/backup-restore.md).
 
 ```sh
 node tools/table-backup/src/cli.ts --help
@@ -19,6 +19,13 @@ node tools/table-backup/src/cli.ts --help
   the service's 100 ns ISO string, Double as a number (also when whole: the reader annotates
   number literals with a decimal point, which the SDK would otherwise read as Int32), NaN and
   infinities as strings.
+- **Check:** `check --backup-id ID` reads a written backup back without touching any table and
+  compares it with its own manifest: the manifest exists and is valid, every listed file exists
+  and matches its byte size and SHA-256, gunzips, parses line by line, and matches the row count
+  and content hash, and no unlisted file is in the folder. It needs only blob read on the backups.
+  `--quiet` prints `backup <id>: ok (<n> tables)` or `FAILED` with a failure code per table
+  (codes: [runbook](../../docs/runbooks/backup-restore.md#checking-a-written-backup)); exit 1 on
+  a problem, 3 when the identity may not read the backups. The drill runs it after its export.
 - **Restore safety:** every file is checked against the manifest before anything is written;
   target tables that already hold rows are refused unless `--force`; `--dry-run` writes nothing;
   `--table-prefix` restores a copy next to the live tables.

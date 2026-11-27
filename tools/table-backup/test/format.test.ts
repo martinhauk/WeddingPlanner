@@ -1,4 +1,4 @@
-import { gzipSync } from 'node:zlib';
+import { gunzipSync as gunzip, gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { type BackupEntity, BackupFormatError } from '../src/edm.ts';
 import {
@@ -7,11 +7,13 @@ import {
   createManifest,
   decodeTable,
   encodeTable,
+  inspectTableFile,
   type Manifest,
   newBackupId,
   parseManifest,
   readTableFile,
   sha256Hex,
+  TableFileError,
   tableFile,
 } from '../src/format.ts';
 
@@ -20,6 +22,8 @@ const row = (pk: string, rk: string, extra: BackupEntity['properties'] = {}): Ba
   rowKey: rk,
   properties: { Name: { type: 'String', value: `${pk}/${rk}` }, ...extra },
 });
+
+const codes = (result: { problems: { code: string }[] }) => result.problems.map((p) => p.code);
 
 const rows = [
   row('b', '1'),
@@ -118,6 +122,35 @@ describe('table files', () => {
     expect(() =>
       readTableFile({ ...table, bytes: changed.length, sha256: sha256Hex(changed) }, changed),
     ).toThrow(/content hash/);
+  });
+
+  it('inspectTableFile reports every problem with a code, and readTableFile the first', () => {
+    const table = manifestFor(rows).tables[0] as Manifest['tables'][number];
+    const gzip = encodeTable(rows).gzip;
+    expect(inspectTableFile(table, gzip).problems).toEqual([]);
+
+    // Recompressed, same rows: only the stored bytes differ.
+    const recompressed = gzipSync(gunzip(gzip), { level: 0 });
+    expect(codes(inspectTableFile(table, recompressed))).toEqual(['size', 'sha256']);
+    // Other rows in a file that matches size and SHA-256: the manifest itself is wrong.
+    const other = encodeTable(rows.slice(1)).gzip;
+    const resigned = { ...table, bytes: other.length, sha256: sha256Hex(other) };
+    expect(codes(inspectTableFile(resigned, other))).toEqual(['rows', 'content']);
+    expect(codes(inspectTableFile(table, Buffer.from('plain')))).toEqual([
+      'size',
+      'sha256',
+      'gzip',
+    ]);
+
+    let error: unknown;
+    try {
+      readTableFile(resigned, other);
+    } catch (e) {
+      error = e;
+    }
+    expect(error).toBeInstanceOf(TableFileError);
+    expect(error).toBeInstanceOf(BackupFormatError);
+    expect((error as TableFileError).code).toBe('rows');
   });
 
   it('report broken files by line, never by content', () => {

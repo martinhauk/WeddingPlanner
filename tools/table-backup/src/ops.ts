@@ -1,4 +1,4 @@
-// The commands: export, restore, verify, list and the restore drill.
+// The commands: export, check, restore, verify, list and the restore drill.
 import { randomBytes } from 'node:crypto';
 import { type BackupEntity, BackupFormatError } from './edm.ts';
 import {
@@ -6,12 +6,14 @@ import {
   contentHash,
   createManifest,
   encodeTable,
+  inspectTableFile,
   MANIFEST_FILE,
   type Manifest,
   type ManifestTable,
   newBackupId,
   parseManifest,
   readTableFile,
+  type TableFileProblemCode,
   tableFile,
 } from './format.ts';
 import {
@@ -104,13 +106,132 @@ export async function exportBackup(
 }
 
 // ---------------------------------------------------------------------------------------------
-// restore and verify
+// check: read a written backup back and compare it with its own manifest (no table access)
 
 export async function readManifest(store: BackupStore, backupId: string): Promise<Manifest> {
   checkBackupId(backupId);
   const text = (await store.get(`${backupId}/${MANIFEST_FILE}`)).toString('utf8');
   return parseManifest(text, backupId);
 }
+
+/** The identity may not read the backup store (403 AuthorizationPermissionMismatch). */
+export class ReadDeniedError extends Error {
+  override name = 'ReadDeniedError';
+}
+
+function isPermissionMismatch(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const e = error as { statusCode?: unknown; code?: unknown };
+  return e.statusCode === 403 && e.code === 'AuthorizationPermissionMismatch';
+}
+
+/** Per table: what `check` found. `missing`: the manifest lists the file, the folder lacks it. */
+export type CheckProblemCode = TableFileProblemCode | 'missing';
+
+export interface CheckResult {
+  backupId: string;
+  ok: boolean;
+  /** `missing`: no manifest.json (an incomplete backup, or no backup with this id at all). */
+  manifest: 'ok' | 'missing' | 'invalid';
+  /** Every table of the manifest; never row contents or row counts. */
+  tables: { name: string; ok: boolean; problems: CheckProblemCode[] }[];
+  /** Files in the backup folder that the manifest does not list (paths inside the folder). */
+  unlisted: string[];
+}
+
+/**
+ * Reads a written backup back and checks it against its own manifest, without touching any table:
+ * the manifest must exist and be valid; every listed file must exist and match its byte size and
+ * SHA-256, gunzip, parse line by line into typed entities, and match the row count and content
+ * hash; no other file may be in the folder. Needs only blob read (list and get) on the backups.
+ * The log may name tables and row counts (local use); the result never holds counts.
+ */
+export async function checkBackup(
+  store: BackupStore,
+  options: { backupId: string },
+  log: Log,
+): Promise<CheckResult> {
+  const { backupId } = options;
+  checkBackupId(backupId);
+  const result: CheckResult = {
+    backupId,
+    ok: false,
+    manifest: 'missing',
+    tables: [],
+    unlisted: [],
+  };
+  try {
+    const folder = `${backupId}/`;
+    const present = new Set(
+      (await store.list(folder)).map((blob) => blob.name.slice(folder.length)),
+    );
+    if (!present.has(MANIFEST_FILE)) {
+      log(present.size === 0 ? 'no backup with this id' : 'no manifest: the backup is incomplete');
+      return result;
+    }
+    let manifest: Manifest;
+    try {
+      manifest = await readManifest(store, backupId);
+    } catch (error) {
+      if (!(error instanceof BackupFormatError)) throw error;
+      result.manifest = 'invalid';
+      log(error.message);
+      return result;
+    }
+    result.manifest = 'ok';
+    const expected = new Set<string>([MANIFEST_FILE]);
+    for (const table of manifest.tables) {
+      expected.add(table.file);
+      let problems: CheckProblemCode[] = ['missing'];
+      if (present.has(table.file)) problems = await checkTableFile(store, backupId, table, log);
+      else log(`  ${table.name}: the file is missing`);
+      result.tables.push({ name: table.name, ok: problems.length === 0, problems });
+    }
+    result.unlisted = [...present].filter((path) => !expected.has(path)).sort();
+    for (const path of result.unlisted) log(`  unlisted file ${JSON.stringify(path)}`);
+    result.ok = result.tables.every((t) => t.ok) && result.unlisted.length === 0;
+    return result;
+  } catch (error) {
+    if (isPermissionMismatch(error)) {
+      throw new ReadDeniedError('this identity may not read the backups (blob read is missing)');
+    }
+    throw error;
+  }
+}
+
+async function checkTableFile(
+  store: BackupStore,
+  backupId: string,
+  table: ManifestTable,
+  log: Log,
+): Promise<CheckProblemCode[]> {
+  const { problems } = inspectTableFile(table, await store.get(`${backupId}/${table.file}`));
+  if (problems.length === 0) log(`  ${table.name}: ok, ${table.rows} row(s)`);
+  for (const problem of problems) log(`  ${problem.message}`);
+  return problems.map((problem) => problem.code);
+}
+
+/**
+ * The lines `check --quiet` prints: "backup <id>: ok (<n> tables)", or FAILED with one failure
+ * code per table. Table names come from the validated manifest (letters and digits only);
+ * unlisted files are only counted, their names are not printed.
+ */
+export function checkSummary(result: CheckResult): string[] {
+  if (result.ok) {
+    const n = result.tables.length;
+    return [`backup ${result.backupId}: ok (${n} ${n === 1 ? 'table' : 'tables'})`];
+  }
+  const lines = [`backup ${result.backupId}: FAILED`];
+  if (result.manifest !== 'ok') lines.push(`  manifest: ${result.manifest}`);
+  for (const table of result.tables) {
+    if (!table.ok) lines.push(`  ${table.name}: ${table.problems.join(', ')}`);
+  }
+  if (result.unlisted.length > 0) lines.push(`  unlisted files: ${result.unlisted.length}`);
+  return lines;
+}
+
+// ---------------------------------------------------------------------------------------------
+// restore and verify
 
 export interface RestoreOptions extends PlanOptions {
   backupId: string;
@@ -286,8 +407,9 @@ export interface DrillResult {
 }
 
 /**
- * Export -> restore into a temporary table prefix -> compare row counts and content hashes ->
- * delete the temporary tables (also when a step fails).
+ * Export -> check the written backup against its manifest -> restore into a temporary table
+ * prefix -> compare row counts and content hashes -> delete the temporary tables (also when a
+ * step fails). A failed check ends the drill before anything is restored.
  */
 export async function runDrill(
   tables: TableStore,
@@ -308,6 +430,16 @@ export async function runDrill(
     { label: 'drill', tablePrefix: sourcePrefix },
     log,
   );
+  const check = await checkBackup(store, { backupId: manifest.backupId }, log);
+  for (const line of checkSummary(check)) log(line);
+  if (!check.ok) {
+    return {
+      backupId: manifest.backupId,
+      tables: manifest.totals.tables,
+      rows: manifest.totals.rows,
+      ok: false,
+    };
+  }
   const drillPrefix = `drill${randomBytes(4).toString('hex')}`;
   let plan: RestorePlanItem[] = [];
   let result: DrillResult;

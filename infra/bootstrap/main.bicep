@@ -7,15 +7,18 @@
 //                         GitHub Environment <env> (no pull_request or branch credential)
 //     id-<slug>-<env>-backup  test/production only: nightly backup identity with one federated
 //                         credential for the GitHub Environment backup-<env> (no reviewer, so a
-//                         scheduled workflow can use it; it can only read and append backups)
+//                         scheduled workflow can use it; it can read tables, add backups and read
+//                         them back, never delete them)
 //     ag-<slug>-<env>     action group (emails from instance.json) for the app's metric alerts
 //   custom role "WeddingPlanner Backup Writer" (test/production, one per subscription): write new
-//                         blobs only, no read, no delete
+//                         blobs and read blobs (to check a backup after writing it), no delete
 //
 // RBAC (least privilege):
 //   deploy identity: Contributor, Storage Blob Data Contributor and Storage Table Data Reader on
 //                    the app RG; Monitoring Reader on the action group only (to attach alerts)
-//   backup identity: Reader, Storage Table Data Reader and Backup Writer on the app RG
+//   backup identity: Reader, Storage Table Data Reader and Backup Writer on the app RG; the
+//                    Backup Writer assignment carries a condition that allows blob reads only of
+//                    current versions in the table-backups container (modules/app-rg-access.bicep)
 //   signed-in owner: Storage Blob Data Contributor and Storage Table Data Contributor on the app RG
 //
 // The names are a contract with infra/app (S0-04) and scripts/bootstrap-cost.sh (S0-06). Module
@@ -132,13 +135,16 @@ module backupIdentity 'modules/deploy-identity.bicep' = if (backupEnabled) {
   }
 }
 
-// Write-only access to blobs: a backup identity can add backups but never read or delete them.
-// One definition per subscription (stable name), shared by all environments that use it.
+// Blob access of the nightly backup identity: add backups and read them back (the nightly check
+// of .github/workflows/backup.yml compares a new backup with its manifest), never delete them.
+// Read is limited further by a condition on the role assignment (modules/app-rg-access.bicep):
+// current versions in the table-backups container only. One definition per subscription (stable
+// name), shared by all environments that use it; the name stays "Backup Writer" for continuity.
 resource backupWriterRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' = if (backupEnabled) {
   name: guid(subscription().id, 'weddingplanner-backup-writer')
   properties: {
     roleName: 'WeddingPlanner Backup Writer ${take(uniqueString(subscription().id), 8)}'
-    description: 'Write new blobs (table backups) without read or delete rights. Managed by scripts/bootstrap.sh.'
+    description: 'Write new blobs (table backups) and read them back, without delete rights. Managed by scripts/bootstrap.sh.'
     type: 'CustomRole'
     permissions: [
       {
@@ -147,6 +153,7 @@ resource backupWriterRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' =
         dataActions: [
           'Microsoft.Storage/storageAccounts/blobServices/containers/blobs/write'
           'Microsoft.Storage/storageAccounts/blobServices/containers/blobs/add/action'
+          'Microsoft.Storage/storageAccounts/blobServices/containers/blobs/read'
         ]
         notDataActions: []
       }
