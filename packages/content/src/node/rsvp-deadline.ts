@@ -143,7 +143,7 @@ const DATE_PATTERNS: ReadonlyArray<{
   // 1. Mai 2099, 1 May 2099, 1st of May, 1 de mayo de 2099
   {
     pattern: new RegExp(
-      `(?<![\\p{L}\\p{N}])(\\d{1,2})(?:\\.|st|nd|rd|th|º)?\\s*(?:de\\s+|of\\s+)?(${MONTH})(?![\\p{L}])(?:,?\\s*(?:del?\\s+)?(\\d{4})(?!\\d))?`,
+      `(?<![\\p{L}\\p{N}])(\\d{1,2})(?:\\.|st|nd|rd|th|º)?\\s{0,3}(?:de\\s{1,3}|of\\s{1,3})?(${MONTH})(?![\\p{L}])(?:,?\\s{0,3}(?:del?\\s{1,3})?(\\d{4})(?!\\d))?`,
       'giu',
     ),
     read: (m) => named(m[1], m[2], m[3]),
@@ -151,7 +151,7 @@ const DATE_PATTERNS: ReadonlyArray<{
   // May 1, 2099, May 1st
   {
     pattern: new RegExp(
-      `(?<![\\p{L}])(${MONTH})\\s+(\\d{1,2})(?:st|nd|rd|th)?(?!\\d)(?:,?\\s+(\\d{4})(?!\\d))?`,
+      `(?<![\\p{L}])(${MONTH})\\s{1,3}(\\d{1,2})(?:st|nd|rd|th)?(?!\\d)(?:,?\\s{1,3}(\\d{4})(?!\\d))?`,
       'giu',
     ),
     read: (m) => named(m[2], m[1], m[3]),

@@ -93,6 +93,18 @@ describe('containsBankDetails', () => {
   ])('finds nothing in %j', (text) => {
     expect(containsBankDetails(text)).toBe(false);
   });
+
+  it('stays fast on long runs of spaces and digits (no polynomial backtracking)', () => {
+    const started = performance.now();
+    for (const text of [
+      `BIC${' '.repeat(50_000)}!`,
+      `SWIFT -${' '.repeat(50_000)}code`,
+      `DE89 ${'1 '.repeat(50_000)}`,
+    ]) {
+      expect(containsBankDetails(text)).toBe(false);
+    }
+    expect(performance.now() - started).toBeLessThan(2000);
+  });
 });
 
 const brief = (d: Diagnostic) => `${d.severity} ${d.code} ${d.file} ${d.path}`;

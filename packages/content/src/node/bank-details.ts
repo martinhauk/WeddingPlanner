@@ -110,8 +110,10 @@ function ibanCharacters(text: string, start: number): string {
 // "BIC", "SWIFT", "SWIFT-Code", "BIC/SWIFT", "SWIFT (BIC)", "Código SWIFT", … then an optional
 // colon, then a code: 4 letters (bank), 2 letters (country), 2 letters or digits (location) and an
 // optional 3-character branch. The label is matched in any case, the code must be in capitals.
+// Whitespace runs are bounded ({0,3}), so the pattern cannot backtrack polynomially on long runs of
+// spaces (texts come from the instance, and the Vite plugin runs this on every build).
 const LABELLED_BIC =
-  /(?<![\p{L}\p{N}])(?:BIC|SWIFT)(?:\s*[/(-]?\s*(?:BIC|SWIFT|code|kode)\)?)?\s*:?\s*([A-Za-z]{6}[A-Za-z0-9]{2}(?:[A-Za-z0-9]{3})?)(?![\p{L}\p{N}])/giu;
+  /(?<![\p{L}\p{N}])(?:BIC|SWIFT)(?:\s{0,3}[/(-]?\s{0,3}(?:BIC|SWIFT|code|kode)\)?)?\s{0,3}:?\s{0,3}([A-Za-z]{6}[A-Za-z0-9]{2}(?:[A-Za-z0-9]{3})?)(?![\p{L}\p{N}])/giu;
 
 /** Whether `text` contains a BIC that is labelled as one (see the module comment). */
 export function containsLabelledBic(text: string): boolean {
