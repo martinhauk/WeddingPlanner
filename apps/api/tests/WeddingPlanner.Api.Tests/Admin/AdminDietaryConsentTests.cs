@@ -84,8 +84,8 @@ public sealed class AdminDietaryConsentTests
         var (id, version, people) = await First(harness);
         harness.Time.Advance(TimeSpan.FromDays(1));
 
-        // A new name, a new message and a companion without dietary data; the dietary data itself is the same.
-        var edit = Reply(Person("Pablo Pérez García", people[0], ["vegetarian", "glutenFree"], "Sin nueces"), Person("María-José García")) with
+        // A new message and a companion without dietary data; Pablo and his dietary data stay the same.
+        var edit = Reply(Person("Pablo Pérez", people[0], ["vegetarian", "glutenFree"], "Sin nueces"), Person("María-José García")) with
         {
             Message = "¡Hasta pronto!",
         };
@@ -93,10 +93,58 @@ public sealed class AdminDietaryConsentTests
 
         httpContext.Response.StatusCode.ShouldBe(StatusCodes.Status200OK);
         var stored = Stored(harness);
-        stored.Answer.People.Select(person => person.Name).ShouldBe(["Pablo Pérez García", "María-José García"]);
+        stored.Answer.People.Select(person => person.Name).ShouldBe(["Pablo Pérez", "María-José García"]);
         stored.DietaryConsent.ShouldBeTrue();
         stored.DietaryConsentSource.ShouldBe(DietaryConsentSource.Guest);
         stored.DietaryConsentAt.ShouldBe(consentedAt);
+    }
+
+    [Fact]
+    public async Task RenamingAPersonWhoKeepsDietaryDataNeedsTheAttestation()
+    {
+        using var harness = new RsvpHarness();
+        await harness.PostAsync(Reply(Person("Pablo Pérez", tags: ["vegetarian"], note: "Sin nueces"), Person("Jürgen Müller")) with { DietaryConsent = true });
+        var (id, version, people) = await First(harness);
+        harness.Time.Advance(TimeSpan.FromDays(1));
+
+        // The same slot now names someone else, who would take over Pablo's dietary data.
+        var renamed = Reply(Person("María-José García", people[0], ["vegetarian"], "Sin nueces"), Person("Jürgen Müller", people[1]));
+        Errors(await harness.AdminPutAsync(id, renamed, version)).ShouldBe(["dietaryConsent:required"]);
+        Stored(harness).Answer.People[0].Name.ShouldBe("Pablo Pérez");
+
+        var attested = await harness.AdminPutAsync(id, renamed with { DietaryConsent = true }, version);
+
+        attested.Response.StatusCode.ShouldBe(StatusCodes.Status200OK);
+        var stored = Stored(harness);
+        stored.Answer.People[0].Name.ShouldBe("María-José García");
+        stored.DietaryConsentSource.ShouldBe(DietaryConsentSource.Admin);
+        stored.DietaryConsentAt.ShouldBe(harness.Time.GetUtcNow());
+    }
+
+    [Fact]
+    public async Task RenamingAPersonWithoutDietaryDataNeedsNoAttestation()
+    {
+        using var harness = new RsvpHarness();
+        var consentedAt = harness.Time.GetUtcNow();
+        await harness.PostAsync(Reply(Person("Pablo Pérez", tags: ["vegan"]), Person("Jürgen Müller")) with { DietaryConsent = true });
+        var (id, version, people) = await First(harness);
+        harness.Time.Advance(TimeSpan.FromDays(1));
+
+        // Jürgen has no dietary data: renaming him keeps Pablo's consent as it is.
+        var renameJuergen = await harness.AdminPutAsync(id, Reply(Person("Pablo Pérez", people[0], ["vegan"]), Person("María-José García", people[1])), version);
+
+        renameJuergen.Response.StatusCode.ShouldBe(StatusCodes.Status200OK);
+        Stored(harness).DietaryConsentSource.ShouldBe(DietaryConsentSource.Guest);
+        Stored(harness).DietaryConsentAt.ShouldBe(consentedAt);
+
+        // Renaming Pablo in the same edit that removes his dietary data moves nothing to anyone.
+        var newVersion = TestHttp.ReadJson(renameJuergen).GetProperty("rsvp").GetProperty("version").GetString();
+        var renamePablo = await harness.AdminPutAsync(id, Reply(Person("Pablo Pérez García", people[0]), Person("María-José García", people[1])), newVersion);
+
+        renamePablo.Response.StatusCode.ShouldBe(StatusCodes.Status200OK);
+        var stored = Stored(harness);
+        stored.Answer.People.Select(person => person.Name).ShouldBe(["Pablo Pérez García", "María-José García"]);
+        stored.DietaryConsent.ShouldBeFalse();
     }
 
     [Fact]
@@ -180,7 +228,10 @@ public sealed class AdminDietaryConsentTests
         var stored = A(P("p1", "Pablo Pérez", "Sin nueces", DietaryTags.Vegetarian, DietaryTags.GlutenFree), P("p2", "María-José García"));
 
         AdminDietaryConsent.AddsOrChanges(stored, stored).ShouldBeFalse();
-        AdminDietaryConsent.AddsOrChanges(stored, A(P("p1", "Pablo", null, DietaryTags.GlutenFree))).ShouldBeFalse("only removed");
+        AdminDietaryConsent.AddsOrChanges(stored, A(P("p1", "Pablo Pérez", null, DietaryTags.GlutenFree))).ShouldBeFalse("only removed");
+        AdminDietaryConsent.AddsOrChanges(stored, A(P("p1", "Pablo"), P("p2", "María-José"))).ShouldBeFalse("renamed without dietary data");
+        AdminDietaryConsent.AddsOrChanges(stored, A(P("p1", "Pablo", null, DietaryTags.GlutenFree))).ShouldBeTrue("renamed, keeps a tag");
+        AdminDietaryConsent.AddsOrChanges(stored, A(P("p1", "pablo pérez", "Sin nueces"))).ShouldBeTrue("renamed (only the case), keeps the note");
         AdminDietaryConsent.AddsOrChanges(stored, A(P("p2", "María-José García"), P("p1", "Pablo Pérez", "Sin nueces", DietaryTags.Vegetarian))).ShouldBeFalse("reordered");
         AdminDietaryConsent.AddsOrChanges(stored, A(P("p1", "Pablo Pérez", "Sin nueces", DietaryTags.Vegan))).ShouldBeTrue("a new tag");
         AdminDietaryConsent.AddsOrChanges(stored, A(P("p1", "Pablo Pérez", "sin nueces"))).ShouldBeTrue("a changed note");

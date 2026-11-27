@@ -26,8 +26,10 @@ public static class AdminDietaryConsent
     /// Whether <paramref name="updated"/> adds or changes dietary data compared with <paramref name="stored"/>. People
     /// are matched by id, so <paramref name="updated"/> must have its ids assigned (<see cref="PersonIds.Assign"/>). A
     /// person adds or changes dietary data with a tag that the same person did not have, or with a note that is new
-    /// or different; a new person (an id that was not stored) with any dietary data adds some. Removing tags, notes
-    /// or people, renaming people and changing the other answers add nothing.
+    /// or different; a new person (an id that was not stored) with any dietary data adds some. A renamed person (a
+    /// different name, compared after sanitising) who still has any dietary data counts too: the data may now
+    /// belong to someone else, for example when an admin types a new companion into an existing slot. Removing tags,
+    /// notes or people, renaming people without dietary data and changing the other answers add nothing.
     /// </summary>
     public static bool AddsOrChanges(RsvpAnswer stored, RsvpAnswer updated)
     {
@@ -48,7 +50,10 @@ public static class AdminDietaryConsent
             var previous = person.Id is { } id ? before.GetValueOrDefault(id) : null;
             var tagAdded = person.DietaryTags.Any(tag => previous is null || !previous.DietaryTags.Contains(tag, StringComparer.Ordinal));
             var noteAddedOrChanged = person.DietaryNote is { } note && !string.Equals(note, previous?.DietaryNote, StringComparison.Ordinal);
-            return tagAdded || noteAddedOrChanged;
+            var renamedWithData = previous is not null
+                && !string.Equals(person.Name, previous.Name, StringComparison.Ordinal)
+                && (person.DietaryTags.Count > 0 || person.DietaryNote is not null);
+            return tagAdded || noteAddedOrChanged || renamedWithData;
         });
     }
 
