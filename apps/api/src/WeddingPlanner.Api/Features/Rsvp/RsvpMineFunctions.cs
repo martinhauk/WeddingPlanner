@@ -122,12 +122,9 @@ public sealed class RsvpMineFunctions(IRsvpRepository repository, RsvpSettings s
 
         var current = session.Stored.Record;
         var existingIds = current.Answer.People.Select(person => person.Id).OfType<string>();
-        var record = current with
-        {
-            Answer = PersonIds.Assign(answer, existingIds),
-            UpdatedAt = now,
-            DietaryConsent = RsvpDietaryConsent.HasDietaryData(answer),
-        };
+        var record = RsvpDietaryConsent.RecordGuestConsent(
+            current with { Answer = PersonIds.Assign(answer, existingIds), UpdatedAt = now },
+            now);
 
         StoredRsvp? replaced;
         try

@@ -96,6 +96,7 @@ public sealed class AdminRsvpsFunctionsTests
             message = (string?)null,
             language = "es",
             website = "ignored for admins",
+            dietaryConsent = true, // Pablo's tags change: the admin attests the guest's consent
         };
         var updated = await harness.AdminPutAsync(id, body, version);
 

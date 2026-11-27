@@ -13,7 +13,7 @@ using Xunit;
 
 namespace WeddingPlanner.Api.Tests.Rsvp;
 
-/// <summary>Dietary data (possibly health data, GDPR Art. 9) is stored only with explicit consent, and the flag is kept.</summary>
+/// <summary>Dietary data (possibly health data, GDPR Art. 9) is stored only with explicit consent, and the consent is recorded.</summary>
 public sealed class RsvpDietaryConsentTests
 {
     [Theory]
@@ -48,7 +48,10 @@ public sealed class RsvpDietaryConsentTests
 
         httpContext.Response.StatusCode.ShouldBe(StatusCodes.Status201Created);
         TestHttp.ReadJson(httpContext).GetProperty("rsvp").GetProperty("dietaryConsent").GetBoolean().ShouldBeTrue();
-        harness.Memory.Items.ShouldHaveSingleItem().Record.DietaryConsent.ShouldBeTrue();
+        var stored = harness.Memory.Items.ShouldHaveSingleItem().Record;
+        stored.DietaryConsent.ShouldBeTrue();
+        stored.DietaryConsentSource.ShouldBe(DietaryConsentSource.Guest);
+        stored.DietaryConsentAt.ShouldBe(harness.Time.GetUtcNow());
     }
 
     [Theory]
@@ -104,7 +107,10 @@ public sealed class RsvpDietaryConsentTests
 
         httpContext.Response.StatusCode.ShouldBe(StatusCodes.Status200OK);
         TestHttp.ReadJson(httpContext).GetProperty("rsvp").GetProperty("dietaryConsent").GetBoolean().ShouldBeFalse();
-        harness.Memory.Items.ShouldHaveSingleItem().Record.DietaryConsent.ShouldBeFalse();
+        var stored = harness.Memory.Items.ShouldHaveSingleItem().Record;
+        stored.DietaryConsent.ShouldBeFalse();
+        stored.DietaryConsentSource.ShouldBeNull();
+        stored.DietaryConsentAt.ShouldBeNull();
     }
 
     [Fact]
@@ -138,15 +144,28 @@ public sealed class RsvpDietaryConsentTests
             new string('a', 64),
             DateTimeOffset.UnixEpoch,
             DateTimeOffset.UnixEpoch,
-            DietaryConsent: true);
+            DietaryConsent: true,
+            DietaryConsentSource: DietaryConsentSource.Admin,
+            DietaryConsentAt: DateTimeOffset.UnixEpoch);
 
         var entity = TableRsvpRepository.ToEntity(record);
         entity.GetBoolean("DietaryConsent").ShouldBe(true);
-        TableRsvpRepository.ToRecord(entity).DietaryConsent.ShouldBeTrue();
+        entity.GetString("DietaryConsentSource").ShouldBe("admin");
+        var read = TableRsvpRepository.ToRecord(entity);
+        read.DietaryConsent.ShouldBeTrue();
+        read.DietaryConsentSource.ShouldBe(DietaryConsentSource.Admin);
+        read.DietaryConsentAt.ShouldBe(DateTimeOffset.UnixEpoch);
+        TableRsvpRepository.ToRecord(TableRsvpRepository.ToEntity(record with { DietaryConsentSource = DietaryConsentSource.Guest }))
+            .DietaryConsentSource.ShouldBe(DietaryConsentSource.Guest);
 
         var older = new TableEntity(entity);
         older.Remove("DietaryConsent");
-        TableRsvpRepository.ToRecord(older).DietaryConsent.ShouldBeFalse();
+        older.Remove("DietaryConsentSource");
+        older.Remove("DietaryConsentAt");
+        var olderRecord = TableRsvpRepository.ToRecord(older);
+        olderRecord.DietaryConsent.ShouldBeFalse();
+        olderRecord.DietaryConsentSource.ShouldBeNull();
+        olderRecord.DietaryConsentAt.ShouldBeNull();
     }
 
     private static object YesWithDiet(bool? consent) => new

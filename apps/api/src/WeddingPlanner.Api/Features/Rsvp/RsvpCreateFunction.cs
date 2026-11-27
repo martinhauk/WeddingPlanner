@@ -123,13 +123,9 @@ public sealed partial class RsvpCreateFunction(
         }
 
         var credential = RsvpCredential.CreateNew();
-        var record = new RsvpRecord(
-            credential.RsvpId,
-            PersonIds.Assign(answer, []),
-            credential.TokenHash,
-            now,
-            now,
-            RsvpDietaryConsent.HasDietaryData(answer));
+        var record = RsvpDietaryConsent.RecordGuestConsent(
+            new RsvpRecord(credential.RsvpId, PersonIds.Assign(answer, []), credential.TokenHash, now, now),
+            now);
         var stored = await repository.AddAsync(record, cancellationToken);
 
         RsvpCookies.Set(response, credential, answer.Attending, settings.CookieLifetime);
