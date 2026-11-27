@@ -3,14 +3,16 @@
 // reachable, unless TABLE_BACKUP_REQUIRE_AZURITE=1 (then a missing Azurite fails the suite).
 import { randomBytes } from 'node:crypto';
 import { connect } from 'node:net';
+import { gunzipSync, gzipSync } from 'node:zlib';
 import { TableClient, type TableEntity, TableServiceClient } from '@azure/data-tables';
 import { BlobServiceClient } from '@azure/storage-blob';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { main } from '../src/cli.ts';
 import type { BackupEntity } from '../src/edm.ts';
 import {
   CANARY_TABLE,
   canaryEntities,
+  checkBackup,
   exportBackup,
   GuardError,
   listBackups,
@@ -234,6 +236,8 @@ describe.skipIf(!available)('table-backup against Azurite', () => {
       lines.push(l),
     );
     expect(result).toMatchObject({ ok: true, tables: 4, rows: ROWS + 2 + canaryEntities().length });
+    // The drill checks the written backup against its manifest before it restores anything.
+    expect(lines).toContain(`backup ${result.backupId}: ok (4 tables)`);
     const targets = lines.flatMap((l) => /-> (drill[0-9a-f]{8}\w+):/.exec(l)?.[1] ?? []);
     expect(targets).toHaveLength(4);
     for (const target of targets) expect(await tables.state(target)).toBe('missing');
@@ -263,6 +267,26 @@ describe.skipIf(!available)('table-backup against Azurite', () => {
     expect(targets.length).toBeGreaterThan(0);
     expect(lines.filter((l) => l.startsWith('could not delete'))).toHaveLength(targets.length);
     for (const target of targets) expect(await tables.state(target)).toBe('missing');
+  });
+
+  it('a drill whose backup fails the check restores nothing', async () => {
+    class Corrupting extends BackupStore {
+      override async put(path: string, data: Buffer, contentType: string) {
+        const stored = path.includes('/tables/') ? Buffer.concat([data, Buffer.from('x')]) : data;
+        await super.put(path, stored, contentType);
+      }
+    }
+    const lines: string[] = [];
+    const result = await runDrill(
+      tables,
+      new Corrupting({ connectionString: CONNECTION }, containerName),
+      { tablePrefix: prefix },
+      (l) => lines.push(l),
+    );
+    expect(result.ok).toBe(false);
+    expect(lines).toContain(`backup ${result.backupId}: FAILED`);
+    expect(lines.filter((l) => / -> drill/.test(l))).toEqual([]);
+    expect((await ownTables()).filter((name) => name.startsWith('drill'))).toEqual([]);
   });
 
   it('an environment without a data account gets an empty backup', async () => {
@@ -296,5 +320,142 @@ describe.skipIf(!available)('table-backup against Azurite', () => {
     expect(await main(['restore', '--backup-id', '../etc', ...common.slice(0, 2)], env)).toBe(1);
     expect(await main(['bogus'], env)).toBe(2);
     expect(await main(['export'], {})).toBe(2);
+  });
+});
+
+describe.skipIf(!available)('check against Azurite (read a written backup back)', () => {
+  const prefix = `k${hex()}`;
+  const containerName = `tb-${hex()}`;
+  const tables = new TableStore({ connectionString: CONNECTION });
+  const store = new BackupStore({ connectionString: CONNECTION }, containerName);
+  const container =
+    BlobServiceClient.fromConnectionString(CONNECTION).getContainerClient(containerName);
+  const service = TableServiceClient.fromConnectionString(CONNECTION, {
+    allowInsecureConnection: true,
+  });
+  const client = (name: string) =>
+    TableClient.fromConnectionString(CONNECTION, name, { allowInsecureConnection: true });
+  const rsvps = `${prefix}Rsvps`;
+  const guests = `${prefix}Guests`;
+  const env = { BACKUP_CONNECTION_STRING: CONNECTION };
+  let printed: string[] = [];
+
+  /** `check --quiet` through the CLI: returns the exit code; the printed lines go to `printed`. */
+  async function cli(backupId: string): Promise<number> {
+    printed = [];
+    const log = vi.spyOn(console, 'log').mockImplementation((line: string) => {
+      printed.push(line);
+    });
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      return await main(
+        ['check', '--backup-id', backupId, '--container', containerName, '--quiet'],
+        env,
+      );
+    } finally {
+      log.mockRestore();
+      error.mockRestore();
+    }
+  }
+
+  const fresh = async () =>
+    (await exportBackup(tables, store, { label: 'check', tablePrefix: prefix }, quiet)).backupId;
+  const file = (backupId: string, table: string) => `${backupId}/tables/${table}.jsonl.gz`;
+  const download = (path: string) => container.getBlobClient(path).downloadToBuffer();
+  // A plain overwrite, as anyone with write access could do it (the tool itself never overwrites).
+  const overwrite = (path: string, data: Buffer) =>
+    container.getBlockBlobClient(path).uploadData(data);
+  const problems = async (backupId: string, table: string) =>
+    (await checkBackup(store, { backupId }, quiet)).tables.find((t) => t.name === table)?.problems;
+
+  beforeAll(async () => {
+    await store.ensureContainer();
+    await service.createTable(rsvps);
+    await service.createTable(guests);
+    for (let i = 0; i < 5; i++) await client(rsvps).createEntity(seedRsvp(i));
+    await client(guests).createEntity({ partitionKey: 'household', rowKey: 'perez', Size: 3 });
+  });
+
+  afterAll(async () => {
+    for (const name of [rsvps, guests]) await service.deleteTable(name);
+    await container.deleteIfExists();
+  });
+
+  it('a good backup passes; --quiet prints only the id and the number of tables', async () => {
+    const backupId = await fresh();
+    const result = await checkBackup(store, { backupId }, quiet);
+    expect(result).toMatchObject({ ok: true, manifest: 'ok', unlisted: [] });
+    expect(result.tables.map((t) => [t.name, t.ok])).toEqual([
+      [guests, true],
+      [rsvps, true],
+    ]);
+    expect(await cli(backupId)).toBe(0);
+    expect(printed).toEqual([`backup ${backupId}: ok (2 tables)`]);
+  });
+
+  it('a corrupted gzip file fails', async () => {
+    const backupId = await fresh();
+    const data = await download(file(backupId, rsvps));
+    data[data.length - 6] = (data[data.length - 6] ?? 0) ^ 0xff;
+    await overwrite(file(backupId, rsvps), data);
+    expect(await problems(backupId, rsvps)).toEqual(['sha256', 'gzip']);
+    expect(await cli(backupId)).toBe(1);
+    expect(printed).toEqual([`backup ${backupId}: FAILED`, `  ${rsvps}: sha256, gzip`]);
+  });
+
+  it('a changed row fails (content hash) without printing the row or a count', async () => {
+    const backupId = await fresh();
+    const text = gunzipSync(await download(file(backupId, rsvps))).toString('utf8');
+    expect(text).toContain('"Guest 1"');
+    await overwrite(file(backupId, rsvps), gzipSync(text.replace('"Guest 1"', '"Guest X"')));
+    const found = await problems(backupId, rsvps);
+    expect(found).toContain('sha256');
+    expect(found).toContain('content');
+    expect(found).not.toContain('rows');
+    expect(await cli(backupId)).toBe(1);
+    expect(printed).toEqual([`backup ${backupId}: FAILED`, `  ${rsvps}: ${found?.join(', ')}`]);
+    expect(printed.join('\n')).not.toMatch(/Guest|\b5\b/);
+  });
+
+  it('a missing table file fails', async () => {
+    const backupId = await fresh();
+    await container.deleteBlob(file(backupId, guests));
+    expect(await problems(backupId, guests)).toEqual(['missing']);
+    expect(await cli(backupId)).toBe(1);
+    expect(printed).toEqual([`backup ${backupId}: FAILED`, `  ${guests}: missing`]);
+  });
+
+  it('a missing manifest fails, also for a backup id that does not exist', async () => {
+    const backupId = await fresh();
+    await container.deleteBlob(`${backupId}/manifest.json`);
+    expect(await checkBackup(store, { backupId }, quiet)).toMatchObject({
+      ok: false,
+      manifest: 'missing',
+    });
+    expect(await cli(backupId)).toBe(1);
+    expect(printed).toEqual([`backup ${backupId}: FAILED`, '  manifest: missing']);
+    expect(await cli('20990101T000000Z-check-000000')).toBe(1);
+  });
+
+  it('an extra file in the backup folder fails', async () => {
+    const backupId = await fresh();
+    await overwrite(`${backupId}/tables/${prefix}Other.jsonl.gz`, gzipSync(''));
+    const result = await checkBackup(store, { backupId }, quiet);
+    expect(result.tables.every((t) => t.ok)).toBe(true);
+    expect(result.unlisted).toEqual([`tables/${prefix}Other.jsonl.gz`]);
+    expect(await cli(backupId)).toBe(1);
+    expect(printed).toEqual([`backup ${backupId}: FAILED`, '  unlisted files: 1']);
+  });
+
+  it('the CLI needs a valid backup id', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(await main(['check', '--container', containerName], env)).toBe(2);
+      expect(await main(['check', '--backup-id', '../x', '--container', containerName], env)).toBe(
+        1,
+      );
+    } finally {
+      error.mockRestore();
+    }
   });
 });
