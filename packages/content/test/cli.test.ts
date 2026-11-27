@@ -77,6 +77,52 @@ describe('cli validate (node packages/content/src/cli.ts)', () => {
   });
 });
 
+describe('cli validate: the target environment (--env, else DEPLOY_ENV)', () => {
+  const rsvpLive = () =>
+    sampleWith(
+      set('instance.json', ['environments', 'production', 'features', 'rsvp'], true),
+      unset('site-content.json', ['privacy', 'email']),
+    );
+
+  it('fails for production and without a target when production has RSVP on and no privacy email', async () => {
+    const dir = await rsvpLive();
+    const production = await node(['validate', dir, '--strict', '--env', 'production']);
+    expect(production.code).toBe(1);
+    expect(production.stderr).toContain('error E_PRIVACY_EMAIL site-content.json $.privacy.email');
+    expect(production.stdout).toContain(
+      'Invalid (strict) for production: 1 error(s), 0 warning(s).',
+    );
+
+    const anyEnv = await node(['validate', dir]);
+    expect(anyEnv.code).toBe(1);
+    expect(anyEnv.stdout).toContain('Invalid: 1 error(s), 0 warning(s).');
+  });
+
+  it('only warns for test, also when DEPLOY_ENV names it', async () => {
+    const dir = await rsvpLive();
+    for (const run of [
+      await node(['validate', dir, '--env', 'test']),
+      await node(['validate', dir], { DEPLOY_ENV: 'test' }),
+    ]) {
+      expect(run.code).toBe(0);
+      expect(run.stderr).toContain('warning W_PRIVACY_EMAIL site-content.json $.privacy.email');
+      expect(run.stdout).toContain('Valid for test: 0 error(s), 1 warning(s).');
+    }
+    const fromEnv = await node(['validate', dir], { DEPLOY_ENV: 'production' });
+    expect(fromEnv.code).toBe(1);
+  });
+
+  it('rejects an unknown target: --env as a usage error, DEPLOY_ENV as a diagnostic', async () => {
+    const flag = await inProcess(['validate', 'samples/instance', '--env', 'staging']);
+    expect(flag.code).toBe(2);
+    expect(flag.err).toContain('--env must be one of e2e, test, production');
+
+    const run = await node(['validate', 'samples/instance'], { DEPLOY_ENV: 'staging' });
+    expect(run.code).toBe(1);
+    expect(run.stderr).toContain('error E_ENV_UNKNOWN env DEPLOY_ENV');
+  });
+});
+
 describe('cli bake', () => {
   it('bakes INSTANCE_DIR for DEPLOY_ENV into --web-dir', async () => {
     const webDir = await tempDir('wp-web-');

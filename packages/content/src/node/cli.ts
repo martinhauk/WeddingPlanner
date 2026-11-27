@@ -1,18 +1,21 @@
 import path from 'node:path';
 import { parseArgs } from 'node:util';
+import { ENVIRONMENT_NAMES, type EnvironmentName, isEnvironmentName } from '../schema/instance.ts';
 import { bake, DEFAULT_DEPLOY_ENV, DEFAULT_SITE_URL } from './bake/index.ts';
-import { type Diagnostic, formatDiagnostic } from './diagnostics.ts';
+import { type Diagnostic, error, formatDiagnostic } from './diagnostics.ts';
 import { DEFAULT_INSTANCE_DIR, DEFAULT_WEB_DIR, REPO_ROOT } from './paths.ts';
 import { validate } from './validate.ts';
 
 export const USAGE = `Usage:
-  node packages/content/src/cli.ts validate [instanceDir] [--strict]
+  node packages/content/src/cli.ts validate [instanceDir] [--strict] [--env <env>]
   node packages/content/src/cli.ts bake [--strict] [--web-dir <dir>]
 
 validate  checks instance.json, site.json, site-content.json and media/ of an
           instance directory (default: INSTANCE_DIR, else samples/instance).
-          --strict also fails on missing site.json translations. Exits 1 on
-          errors.
+          --strict also fails on missing site.json translations. --env (default:
+          DEPLOY_ENV, else every environment) is the target: e2e, test or
+          production; a missing privacy notice is an error for production
+          when its RSVP is on. Exits 1 on errors.
 bake      validates, then writes the web app's generated content. Reads
           INSTANCE_DIR (default samples/instance), DEPLOY_ENV (e2e | test |
           production, default e2e), GIT_SHA (default "local") and SITE_URL
@@ -63,24 +66,44 @@ export async function runCli(argv: readonly string[], context: CliContext): Prom
 async function runValidate(args: readonly string[], context: CliContext): Promise<number> {
   const { values, positionals } = parseArgs({
     args: [...args],
-    options: { strict: { type: 'boolean', default: false } },
+    options: { strict: { type: 'boolean', default: false }, env: { type: 'string' } },
     allowPositionals: true,
     strict: true,
   });
   if (positionals.length > 1) {
     throw usageError('validate takes at most one instance directory');
   }
+  if (values.env !== undefined && !isEnvironmentName(values.env)) {
+    throw usageError(`--env must be one of ${ENVIRONMENT_NAMES.join(', ')}`);
+  }
   const instanceDir =
     resolveFrom(context, positionals[0] ?? nonEmpty(context.env.INSTANCE_DIR)) ??
     DEFAULT_INSTANCE_DIR;
-  const result = await validate(instanceDir, { strict: values.strict });
-  report(result.diagnostics, context.io);
-  const { errors, warnings } = count(result.diagnostics);
+  const target = values.env ?? nonEmpty(context.env.DEPLOY_ENV);
+  const env: EnvironmentName | undefined =
+    target !== undefined && isEnvironmentName(target) ? target : undefined;
+  const result = await validate(instanceDir, { strict: values.strict, env });
+  const diagnostics =
+    target !== undefined && env === undefined
+      ? [
+          ...result.diagnostics,
+          error(
+            'E_ENV_UNKNOWN',
+            'env',
+            'DEPLOY_ENV',
+            `must be one of ${ENVIRONMENT_NAMES.join(', ')}`,
+          ),
+        ]
+      : result.diagnostics;
+  const ok = result.ok && diagnostics === result.diagnostics;
+  report(diagnostics, context.io);
+  const { errors, warnings } = count(diagnostics);
   const mode = values.strict ? ' (strict)' : '';
+  const scope = env === undefined ? '' : ` for ${env}`;
   context.io.out(
-    `${result.ok ? 'Valid' : 'Invalid'}${mode}: ${errors} error(s), ${warnings} warning(s).`,
+    `${ok ? 'Valid' : 'Invalid'}${mode}${scope}: ${errors} error(s), ${warnings} warning(s).`,
   );
-  return result.ok ? 0 : 1;
+  return ok ? 0 : 1;
 }
 
 async function runBake(args: readonly string[], context: CliContext): Promise<number> {

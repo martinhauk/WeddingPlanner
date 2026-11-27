@@ -36,30 +36,46 @@ def group($name): {group: $name};
   check("TLS 1.2, HTTPS only, no public blobs, no cross-tenant replication"; account.properties
     | .minimumTlsVersion == "TLS1_2" and .supportsHttpsTrafficOnly == true
       and .allowBlobPublicAccess == false and .allowCrossTenantReplication == false),
-  check("blob versioning, 30-day blob and container soft delete";
+  check("blob versioning, 7-day blob and container soft delete, no early permanent delete";
     vars as $v | inner("Microsoft.Storage/storageAccounts/blobServices").properties
     | .isVersioningEnabled == true
-      and .deleteRetentionPolicy.enabled == true and (.deleteRetentionPolicy.days | resolve($v)) == 30
+      and .deleteRetentionPolicy.enabled == true and (.deleteRetentionPolicy.days | resolve($v)) == 7
+      and .deleteRetentionPolicy.allowPermanentDelete == false
       and .containerDeleteRetentionPolicy.enabled == true
-      and (.containerDeleteRetentionPolicy.days | resolve($v)) == 30),
+      and (.containerDeleteRetentionPolicy.days | resolve($v)) == 7),
   check("exactly one container, private";
     [inner("Microsoft.Storage/storageAccounts/blobServices/containers") | .properties.publicAccess]
     == ["None"] and vars.containerName == "table-backups"),
-  check("WORM: container immutability policy, 30 days, no append writes";
-    vars as $v
-    | [inner("Microsoft.Storage/storageAccounts/blobServices/containers/immutabilityPolicies")
-      | {name: (.name | test("'default'\\)\\]$")),
-         days: (.properties.immutabilityPeriodSinceCreationInDays | resolve($v)),
-         append: .properties.allowProtectedAppendWrites}]
-    == [{name: true, days: 30, append: false}]),
-  check("the policy is not locked by the template (no lock or extend resources)";
-    [nested.properties.template.resources[] | .type | select(test("immutabilityPolicies/"))] == []),
-  check("lifecycle: backups and their versions deleted after 180 days";
+  # Lifecycle delete is "not supported with blobs in an immutable container" (Microsoft Learn,
+  # lifecycle policy structure), so a WORM policy would keep backups past the privacy promise.
+  check("no immutability (WORM) policy, legal hold or version-level immutability";
+    [nested.properties.template.resources[] | .type | select(test("immutabilityPolicies|legalHold"; "i"))]
+    == []
+    and ([nested.properties.template.resources[] | .properties | tostring
+      | test("immutableStorageWithVersioning|immutabilityPolicy"; "i")] | any | not)),
+  check("lifecycle: backups, their previous versions and snapshots deleted after 18 days";
     vars as $v
     | [inner("Microsoft.Storage/storageAccounts/managementPolicies") | .properties.policy.rules[]
-      | {enabled, base: (.definition.actions.baseBlob.delete.daysAfterModificationGreaterThan | resolve($v)),
-         version: (.definition.actions.version.delete.daysAfterCreationGreaterThan | resolve($v))}]
-    == [{enabled: true, base: 180, version: 180}]),
+      | {enabled, type, blobTypes: .definition.filters.blobTypes,
+         prefix: .definition.filters.prefixMatch,
+         base: (.definition.actions.baseBlob.delete.daysAfterModificationGreaterThan | resolve($v)),
+         version: (.definition.actions.version.delete.daysAfterCreationGreaterThan | resolve($v)),
+         snapshot: (.definition.actions.snapshot.delete.daysAfterCreationGreaterThan | resolve($v))}]
+    == [{enabled: true, type: "Lifecycle", blobTypes: ["blockBlob"],
+         prefix: ["[format('{0}/', variables('containerName'))]"],
+         base: 18, version: 18, snapshot: 18}]),
+  # The privacy notice promises at most 30 days. Worst case: the threshold, one more day in case
+  # Azure counts "GreaterThan" in whole days (Microsoft Learn does not say), up to three lifecycle
+  # runs (at most 24 hours apart: delete the old versions, the current version, the previous
+  # version that leaves) and the soft delete period (docs/runbooks/backup-restore.md).
+  check("worst case retention + 1 day + 3 lifecycle runs + soft delete stays within 30 days";
+    vars as $v
+    | ([inner("Microsoft.Storage/storageAccounts/managementPolicies") | .properties.policy.rules[]
+        | .definition.actions[] | .delete | to_entries[] | .value | resolve($v)] | max) as $lifecycle
+    | (inner("Microsoft.Storage/storageAccounts/blobServices").properties
+        | [.deleteRetentionPolicy.days, .containerDeleteRetentionPolicy.days]
+        | map(resolve($v)) | max) as $softDelete
+    | $lifecycle + 1 + 3 + $softDelete <= 30),
 
   group("backup store: outputs and scope"),
   check("outputs are exactly the account and container names";

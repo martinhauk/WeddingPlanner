@@ -186,6 +186,10 @@ def group($name): {group: $name};
       and .properties.IngestionMode == "LogAnalytics"
       and .properties.WorkspaceResourceId
         == "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsName'))]"),
+  # docs/privacy/data-inventory.md: telemetry never keeps a client IP address.
+  check("App Insights: IP masking stays on (DisableIpMasking false)";
+    inner("app-infra-monitoring"; "Microsoft.Insights/components").properties.DisableIpMasking
+    == false),
 
   group("alerts"),
   check("action group via resourceId() in the ops resource group";

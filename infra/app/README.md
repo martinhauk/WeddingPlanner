@@ -12,7 +12,7 @@ delete lock and the action group. This template creates no role assignments, loc
 | [`modules/static-web-app.bicep`](modules/static-web-app.bicep)           | Static Web App (Free) in `swaLocation` and its complete app settings                            |
 | [`modules/storage.bicep`](modules/storage.bicep)                         | Data account in `dataLocation`: tables, blob versioning and soft delete                         |
 | [`backup.bicep`](backup.bicep), [`backup.bicepparam`](backup.bicepparam) | Backup store (separate template, deployed before the pre-deploy backup): see below              |
-| [`modules/backup-storage.bicep`](modules/backup-storage.bicep)           | Backup account `bk...`: Entra ID only, container `table-backups` with WORM 30 days, versioning  |
+| [`modules/backup-storage.bicep`](modules/backup-storage.bicep)           | Backup account `bk...`: Entra ID only, container `table-backups`, versioning, 18-day lifecycle  |
 | [`modules/monitoring.bicep`](modules/monitoring.bicep)                   | Log Analytics (daily cap) and workspace-based Application Insights in `dataLocation`            |
 | [`modules/alerts.bicep`](modules/alerts.bicep)                           | Metric alerts on the Static Web App, notifying the bootstrap action group (if `enableAlerts`)   |
 | [`../bicepconfig.json`](../bicepconfig.json)                             | Linter rules shared with `infra/bootstrap`                                                      |
@@ -21,7 +21,8 @@ delete lock and the action group. This template creates no role assignments, loc
 ## Regions
 
 SWA is offered only in `westeurope`, `centralus`, `eastus2`, `westus2` and `eastasia`, so the
-Static Web App and its managed functions run in `swaLocation` (default `westeurope`). Everything
+Static Web App and its managed functions run in `swaLocation` (`main.bicep` default `westus2`; the
+deploy job passes `instance.json` `swaLocation`). Everything
 that stores data stays in `dataLocation` (default `germanywestcentral`): the storage account, Log
 Analytics and Application Insights ([ADR 0006](../../docs/adr/0006-azure-regions.md)). Metric alert
 rules are global resources.
@@ -127,10 +128,16 @@ az deployment group create --name app-backup --resource-group "$AZURE_RESOURCE_G
 
 `backup.bicep` is a template of its own so the backup step never changes the app or the data
 account. It reads `DEPLOYMENT_SLUG`, `ENVIRONMENT_NAME` and `DATA_LOCATION`. The backup account
-allows Entra ID only (no shared key), its container `table-backups` has an unlocked container-level
-immutability policy (WORM, 30 days), blob versioning and 30-day soft delete; a lifecycle rule
-deletes backups after 180 days. The resource group's delete lock also protects the policy. The
-data account has no blob container; an empty `backups` container from earlier versions is unused.
+allows Entra ID only (no shared key), has blob versioning and 7-day soft delete for blobs and
+containers (permanent delete off), and a lifecycle rule deletes backups, their previous versions
+and snapshots after 18 days. Every copy is therefore gone within 30 days, as the privacy notice
+promises; the arithmetic is in
+[the backup runbook](../../docs/runbooks/backup-restore.md#retention-and-protection) and
+`tests/backup.jq` checks it. The container has **no immutability (WORM) policy**: Microsoft
+documents that lifecycle delete is not supported in an immutable container. A policy created by an
+earlier version of this template stays until the owner deletes it (one-time step in the runbook);
+removing it from the template does not remove it from Azure. The data account has no blob
+container; an empty `backups` container from earlier versions is unused.
 
 The deployment and module names are fixed, so repeated deploys do not grow the deployment history.
 Read the non-secret outputs with `az deployment group show --name app-infra ... --query

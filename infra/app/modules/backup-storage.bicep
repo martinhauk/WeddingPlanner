@@ -1,15 +1,32 @@
 // Backup store of one environment: a storage account of its own (never the data account) with a
 // private container for the table backups of tools/table-backup.
 //
+// Retention: the privacy notice promises that backups are kept for at most 30 days. Every copy of a
+// backup (the blob, a previous version, its soft-deleted state) is gone at the latest
+//   retentionDays (lifecycle threshold)                           18 days
+//   + 1 lifecycle run that deletes the current version           <= 1 day
+//   + 1 run that deletes the previous version that delete leaves <= 1 day
+//   + softDeleteDays                                                7 days
+//   = 27 days after it was written (28 for a blob that was ever overwritten, one more run; one
+// day more each if Azure counts "GreaterThan" in whole days, which Microsoft Learn does not say).
+// Lifecycle runs start at most 24 hours after the previous one completed, so 1 to 3 days of slack
+// remain. docs/runbooks/backup-restore.md explains the arithmetic and its sources.
+//
+// There is deliberately NO immutability (WORM) policy on the container: Microsoft documents that
+// the lifecycle delete action is "not supported with blobs in an immutable container", so a
+// container-level time-based retention policy would keep backups forever and break the promise.
+// An existing policy from earlier versions must be deleted by the owner (runbook, one-time step);
+// infra/app/tests/backup.jq fails if this template ever creates one again.
+//
 // Protection, from the outside in:
-//   - the app resource group's CanNotDelete lock (infra/bootstrap): the account, its container
-//     and the immutability policy cannot be deleted by anyone without removing the lock first;
-//   - a time-based immutability policy (WORM) on the container: no backup blob can be modified or
-//     deleted for `immutabilityDays` after it was written. The policy stays UNLOCKED so the owner
-//     can still correct it; locking is a one-way owner decision (docs/runbooks/backup-restore.md);
-//   - blob versioning and soft delete for blobs and containers (`softDeleteDays`);
-//   - Microsoft Entra ID only: shared key access is off, so no account key can read or write it.
-// A lifecycle rule deletes backups (and any previous versions) after `retentionDays`.
+//   - the app resource group's CanNotDelete lock (infra/bootstrap): the account cannot be deleted
+//     by anyone without removing the lock first;
+//   - Microsoft Entra ID only: shared key access is off, so no account key can read or write it;
+//     the nightly identity can only write new blobs (no read, no delete);
+//   - blob versioning: an overwrite keeps the original as a previous version;
+//   - soft delete for blobs and containers (`softDeleteDays`), permanent delete off: anything
+//     deleted by hand or by mistake stays recoverable for that long.
+// A lifecycle rule deletes backups, their previous versions and snapshots after `retentionDays`.
 
 @description('Storage account name (3-24 lower-case letters and digits, globally unique).')
 @minLength(3)
@@ -25,14 +42,11 @@ param tags object
 @description('Name of the private backup container.')
 var containerName = 'table-backups'
 
-@description('Days a backup blob is immutable (WORM) after it was written.')
-var immutabilityDays = 30
+@description('Days that deleted blobs and containers stay recoverable (soft delete).')
+var softDeleteDays = 7
 
-@description('Days that deleted blobs and containers stay recoverable.')
-var softDeleteDays = 30
-
-@description('Days after which backups and previous versions are deleted.')
-var retentionDays = 180
+@description('Days after which backups, their previous versions and snapshots are deleted.')
+var retentionDays = 18
 
 resource account 'Microsoft.Storage/storageAccounts@2026-06-01' = {
   name: name
@@ -64,6 +78,8 @@ resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2026-06-01'
     deleteRetentionPolicy: {
       enabled: true
       days: softDeleteDays
+      // Soft-deleted versions and snapshots cannot be purged early by anyone.
+      allowPermanentDelete: false
     }
     containerDeleteRetentionPolicy: {
       enabled: true
@@ -77,16 +93,6 @@ resource container 'Microsoft.Storage/storageAccounts/blobServices/containers@20
   name: containerName
   properties: {
     publicAccess: 'None'
-  }
-}
-
-// Container-level time-based retention (WORM), unlocked. Applies to every blob in the container.
-resource immutability 'Microsoft.Storage/storageAccounts/blobServices/containers/immutabilityPolicies@2026-06-01' = {
-  parent: container
-  name: 'default'
-  properties: {
-    immutabilityPeriodSinceCreationInDays: immutabilityDays
-    allowProtectedAppendWrites: false
   }
 }
 
@@ -118,6 +124,11 @@ resource lifecycle 'Microsoft.Storage/storageAccounts/managementPolicies@2026-06
                 }
               }
               version: {
+                delete: {
+                  daysAfterCreationGreaterThan: retentionDays
+                }
+              }
+              snapshot: {
                 delete: {
                   daysAfterCreationGreaterThan: retentionDays
                 }
