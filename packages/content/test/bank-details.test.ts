@@ -49,6 +49,10 @@ describe('containsBankDetails', () => {
     'Überweisung an DE89370400440532013000, danke!',
     'cuenta es91 2100 0418 4502 0005 1332 por favor',
     'Konto: DE89 3704 0044 0532 0130 00',
+    // Groups separated by hyphens (ASCII, U+2010, the no-break hyphen U+2011).
+    ...DOC_IBANS.map((iban) => iban.replaceAll(' ', '-')),
+    'IBAN DE89\u20103704\u20100044\u20100532\u20100130\u201000',
+    'IBAN GB82\u2011WEST\u20111234\u20115698\u20117654\u201132',
   ])('finds the IBAN in %j', (text) => {
     expect(containsIban(text)).toBe(true);
     expect(containsBankDetails(text)).toBe(true);
@@ -81,8 +85,14 @@ describe('containsBankDetails', () => {
     'Beispielweg 1, 99999 Musterstadt, DE 12345',
     // numbers that look a bit like an IBAN but fail the check
     'DE89 3704 0044 0532 0130 01',
+    'DE89-3704-0044-0532-0130-01',
     'AB12 3456 7890 1234 5678',
     'Booking code AB12CD34EF56GH78',
+    'Booking code AB12-CD34-EF56-GH78',
+    // hyphenated codes, dates and phone numbers
+    'DE-99999 Musterstadt, Tel. +49-151-0000-0000',
+    'Am 2099-06-20, Tisch A12-B34',
+    'Ticket DE12-3456-7890',
     // a BIC without its label, or the label without a code
     'COBADEFFXXX',
     'BIC: ask us',
@@ -154,6 +164,26 @@ describe('validate: E_BANK_DETAILS', () => {
     expect(loaded.diagnostics.map((d) => `${d.code} ${d.path}`)).toEqual([
       `E_BANK_DETAILS $.sections[${gifts}].data.text.en`,
     ]);
+  });
+
+  it('checks the texts of site.json too (display name, event title), at their paths only', async () => {
+    const dir = await sampleWith(
+      set('site.json', ['couple', 'displayName', 'en'], `Anna & Ben, IBAN ${DOC_IBANS[4]}`),
+      set(
+        'site.json',
+        ['event', 'title', 'es'],
+        `Nos casamos · ${(DOC_IBANS[6] ?? '').replaceAll(' ', '-')}`,
+      ),
+    );
+    const result = await validate(dir);
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.filter((d) => d.code === 'E_BANK_DETAILS').map(brief)).toEqual([
+      'error E_BANK_DETAILS site.json $.couple.displayName.en',
+      'error E_BANK_DETAILS site.json $.event.title.es',
+    ]);
+    for (const d of result.diagnostics) {
+      expect(d.message).not.toMatch(/CH93|ES91/);
+    }
   });
 
   it('accepts the sample, whose gifts text says "ask us"', async () => {

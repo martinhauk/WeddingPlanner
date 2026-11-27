@@ -45,15 +45,22 @@ public sealed class AdminApiIntegrationTests
         lines.ShouldContain(line => line.Contains("\"nein\";\"1\";\"'=Ben+1\"", StringComparison.Ordinal), "a formula name is neutralised");
 
         var accepted = new { attending = true, people = new[] { new { name = "Jürgen Müller", dietary = new { tags = new[] { "vegan" } } } }, language = "de", website = string.Empty };
-        var updated = await harness.AdminPutAsync(id, accepted, version);
+        var unattested = await harness.AdminPutAsync(id, accepted, version);
+        unattested.Response.StatusCode.ShouldBe(StatusCodes.Status400BadRequest, "new dietary data needs the admin's attestation");
+
+        var attested = new { accepted.attending, accepted.people, accepted.language, accepted.website, dietaryConsent = true };
+        var updated = await harness.AdminPutAsync(id, attested, version);
         updated.Response.StatusCode.ShouldBe(StatusCodes.Status200OK);
         var newVersion = TestHttp.ReadJson(updated).GetProperty("rsvp").GetProperty("version").GetString().ShouldNotBeNull();
         newVersion.ShouldNotBe(version);
-        (await harness.AdminPutAsync(id, accepted, version)).Response.StatusCode.ShouldBe(StatusCodes.Status412PreconditionFailed);
+        (await harness.AdminPutAsync(id, attested, version)).Response.StatusCode.ShouldBe(StatusCodes.Status412PreconditionFailed);
 
         var stored = await store.Table.GetEntityAsync<TableEntity>("rsvp", id, cancellationToken: TestContext.Current.CancellationToken);
         stored.Value.GetBoolean("Attending").ShouldBe(true);
         stored.Value.GetInt32("AttendingCount").ShouldBe(1);
+        stored.Value.GetBoolean("DietaryConsent").ShouldBe(true);
+        stored.Value.GetString("DietaryConsentSource").ShouldBe("admin");
+        stored.Value.GetDateTimeOffset("DietaryConsentAt").ShouldBe(harness.Time.GetUtcNow());
 
         (await harness.AdminDeleteAsync(id, version)).Response.StatusCode.ShouldBe(StatusCodes.Status412PreconditionFailed);
         (await harness.AdminDeleteAsync(id, newVersion)).Response.StatusCode.ShouldBe(StatusCodes.Status204NoContent);

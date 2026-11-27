@@ -51,6 +51,8 @@ export const de = {
     'Die Antwort wurde inzwischen geändert. Die Liste ist neu geladen, bitte erneut versuchen.',
   gone: 'Die Antwort gibt es nicht mehr. Die Liste ist neu geladen.',
   invalid: 'Bitte die Eingaben prüfen: Jede Person braucht einen Namen.',
+  consentRequired:
+    'Neue oder geänderte Angaben zum Essen speichern wir nur mit der ausdrücklichen Einwilligung des Gastes. Bitte bestätigen.',
   actionFailed: 'Das hat nicht geklappt. Bitte versuche es gleich noch einmal.',
   editor: {
     title: 'Antwort bearbeiten',
@@ -63,6 +65,12 @@ export const de = {
     removePerson: 'Person entfernen',
     addPerson: 'Person hinzufügen',
     message: 'Nachricht an das Paar',
+    dietaryConsent:
+      'Der Gast hat ausdrücklich eingewilligt, dass wir diese Angaben zum Essen speichern.',
+    dietaryConsentHint:
+      'Nur ankreuzen, wenn das stimmt. Den Nachweis aufbewahren, zum Beispiel die E-Mail des Gastes.',
+    dietaryConsentMissing:
+      'Bitte bestätigen, dass der Gast eingewilligt hat, oder die neuen Angaben zum Essen wieder entfernen.',
     save: 'Speichern',
     saving: 'Speichert …',
     cancel: 'Abbrechen',

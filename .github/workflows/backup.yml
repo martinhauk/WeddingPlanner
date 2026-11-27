@@ -1,8 +1,10 @@
 # Nightly table backup of test and production (docs/runbooks/backup-restore.md).
 #
 # Each environment exports every table of its data account with tools/table-backup into its own
-# backup storage account (container table-backups: WORM 30 days, versioning, soft delete). Never
-# into pipeline artifacts: this repository is public and its artifacts are downloadable.
+# backup storage account (container table-backups: versioning, a lifecycle rule that deletes
+# backups after 18 days, 7 days of soft delete, no WORM policy; every copy is gone within the
+# privacy notice's 30 days). Never into pipeline artifacts: this repository is public and its
+# artifacts are downloadable.
 #
 # Identity: the deploy environments cannot be used here (production waits for a reviewer, which a
 # schedule cannot pass). Each job runs in the GitHub Environment backup-<env> instead, created by

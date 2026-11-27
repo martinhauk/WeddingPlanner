@@ -358,6 +358,46 @@ button.link {
   gap: 0.4rem 1rem;
 }
 
+/* The admin's attestation of the guest's consent to new or changed dietary data. */
+.admin-consent {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.75rem;
+  border: 1px solid var(--admin-line);
+  border-radius: 0.5rem;
+  background: var(--admin-accent-soft);
+}
+
+.admin-consent.invalid {
+  border-color: var(--admin-danger);
+  background: var(--admin-danger-soft);
+}
+
+.admin-consent label {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.admin-consent input[type="checkbox"] {
+  margin-top: 0.3rem;
+}
+
+.admin-hint,
+.admin-field-error {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.admin-hint {
+  color: var(--admin-muted);
+}
+
+.admin-field-error {
+  color: var(--admin-danger);
+  font-weight: 600;
+}
+
 .admin-editor-actions {
   display: flex;
   gap: 0.5rem;

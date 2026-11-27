@@ -227,7 +227,11 @@ export class BackupStore {
     await this.#container.createIfNotExists();
   }
 
-  /** Writes a new blob. Never overwrites: an existing blob fails the call (and WORM forbids it). */
+  /**
+   * Writes a new blob. Never overwrites: an existing blob fails the call (`If-None-Match: *`). The
+   * backup container has no WORM policy (lifecycle delete would not work with one); blob
+   * versioning keeps an overwritten original, and the lifecycle rule deletes backups after 18 days.
+   */
   async put(path: string, data: Buffer, contentType: string): Promise<void> {
     await this.#container.getBlockBlobClient(path).uploadData(data, {
       conditions: { ifNoneMatch: '*' },

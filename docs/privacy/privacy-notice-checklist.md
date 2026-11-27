@@ -53,12 +53,17 @@ Tick each item on `test` (open `/datenschutz` there in German, English and Spani
       dietary fields in all three languages; it names what is stored, that it is used only to plan
       the food, that the guest answers for companions with their agreement, and that consent can be
       withdrawn.
-- [ ] **Admin edits are not checked.** The admin editor can add or change tags and notes, and
-      `PUT /api/admin/rsvps/{id}` neither asks for consent nor updates the stored `DietaryConsent`
-      flag (it keeps the old value). Agree among the admins: **enter dietary data for a guest only
-      with that guest's explicit consent, and keep your own proof of it** (for example their email or
-      message), because the system does not record it for admin edits. A follow-up for the API is
-      open.
+- [ ] **Admin edits need an attestation, enforced by the API.** When an admin adds or changes dietary
+      data (a tag, a note, a new name for a person who keeps dietary data, a new person with dietary
+      data), the admin editor shows the checkbox "Der Gast hat ausdrücklich eingewilligt, dass wir
+      diese Angaben zum Essen speichern." and `PUT /api/admin/rsvps/{id}` refuses the edit without it
+      (400). The reply then records that and when an admin attested (`DietaryConsentSource`
+      `admin`), but not which admin and not the guest's proof. To replace a companion, remove the
+      person and add the new one, so their dietary data does not move to someone else. Agree among
+      the admins: **tick it only with that guest's explicit consent, and
+      keep your own proof of it** (for example their email or message). The notice's "What data we
+      process" says so too: dietary details given another way (for example by email) are entered
+      only with explicit consent, and the consent, its time and where it was given are recorded.
 - [ ] Dietary details go only to the kitchen or caterer, with names only (the notice's "purpose"
       paragraph says so). Decide how you pass them on (the CSV export leaves the system: keep it
       safe and delete it after the wedding).
@@ -138,14 +143,16 @@ The backup sentence to check (de, then en; es says the same):
 - [ ] Admins only: Static Web Apps sets `StaticWebAppsAuthCookie` when an admin signs in. Guests never
       get it; the notice need not list it, but the record of processing may.
 - [ ] If map consent is ever remembered (`wp.mapConsent`, planned), the notice must list it first.
-- [ ] **Required before production RSVP: the built-in text must mention the personal edit link**
-      (`/#edit=…`): it works like the cookie, anyone who has it can see and change that reply, and it
-      stays valid until the reply is withdrawn. Two sentences of the built-in text are wrong without
-      it (a follow-up changes `apps/web/src/site/privacy/privacy-text.ts`; check it landed):
-  - `cookieRsvp` says `wp_rsvp` is set only when the guest sends a reply ("wird erst beim Absenden
-    gesetzt", "is set only when you send your reply"). Opening a personal link sets it too.
-  - The closing cookie paragraph says that after deleting cookies "only we can change a saved reply
-    for you". The guest can still change it through the personal link.
+- [ ] **The personal edit link** (`/#edit=…`): read the two paragraphs about it in "What data we
+      process" in all three languages (#90). They say that guests get it after sending and can show
+      it again, that whoever has it can see, change and withdraw the reply (so keep it to
+      yourselves), that it works while the reply exists, that only a hash of its secret is stored,
+      and that the secret stays in the part after "#", which browsers do not send to the server
+      (the page itself sends it, encrypted, to open the reply).
+- [ ] The `wp_rsvp` item says the cookie is set when a reply is sent **or** a personal link is opened
+      (after "who are you?" if the device already has another reply), and the closing paragraph says
+      that after deleting cookies the personal link opens the reply again, and that only the guest
+      (until replies close) and you as hosts can change it.
 
 ### 9. Languages
 

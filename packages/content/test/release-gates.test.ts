@@ -130,6 +130,14 @@ describe('findDates', () => {
     ['en', 'RSVP by 2099-05-01', [{ year: 2099, month: 5, day: 1 }]],
     ['es', 'Por favor, antes del 1 de mayo de 2099.', [{ year: 2099, month: 5, day: 1 }]],
     ['es', 'Confirmad antes del 1/5/2099', [{ year: 2099, month: 5, day: 1 }]],
+    // "May" capitalised, or in lower case with a year or an ordinal, is the month.
+    ['en', 'Reply by May 2', [{ month: 5, day: 2 }]],
+    ['en', 'Reply by 2 May', [{ month: 5, day: 2 }]],
+    ['en', 'reply by may 2, 2099', [{ year: 2099, month: 5, day: 2 }]],
+    ['en', 'reply by may 2nd', [{ month: 5, day: 2 }]],
+    ['en', 'reply by the 2nd of may', [{ month: 5, day: 2 }]],
+    ['en', 'reply by 2 may 2099', [{ year: 2099, month: 5, day: 2 }]],
+    ['en', 'Arrive by March 3', [{ month: 3, day: 3 }]],
   ] as const)('%s: %j', (language, text, expected) => {
     expect(findDates(text, language)).toEqual(expected);
   });
@@ -141,6 +149,11 @@ describe('findDates', () => {
     ['de', '99999 Musterstadt'],
     ['en', 'Doors open at 18:30, 3 courses'],
     ['es', 'Mar y montaña'],
+    // The verb "may" (and "march", "august" as words) next to a number is no date.
+    ['en', 'Children under 12 may come for free.'],
+    ['en', 'You may 2 or 3 times change your reply.'],
+    ['en', 'Afterwards we march 5 minutes to the barn.'],
+    ['en', 'An august 4 piece band plays.'],
   ] as const)('finds no date in %s: %j', (language, text) => {
     expect(findDates(text, language)).toEqual([]);
   });
@@ -224,6 +237,49 @@ describe('RSVP deadline consistency', () => {
         set('site-content.json', at(story, 'text'), 'Am 3. März 2090 haben wir uns kennengelernt.'),
       ]),
     ).toEqual({ ok: true, diagnostics: [] });
+  });
+
+  it('does not take "verantwortlich", "responsible" or "responsable" for a reply word', async () => {
+    const story = await sectionIndex('story');
+    const text = (lang: 'de' | 'en' | 'es', value: string) =>
+      set('site-content.json', ['sections', story, 'data', 'text', lang], value);
+    expect(
+      await findings([
+        text('de', 'Verantwortlich für die Musik am 3. März: unsere Freunde.'),
+        text('en', 'Responsible for the music on 3 March: our friends. It corresponds to 4 May.'),
+        text('es', 'Responsables de la música el 3 de marzo: nuestros amigos.'),
+      ]),
+    ).toEqual({ ok: true, diagnostics: [] });
+    // A real reply word next to another date still warns, in every language.
+    expect(
+      await findings([
+        text('de', 'Die Antwortfrist endet am 3. März.'),
+        text('en', 'Please respond by 3 March.'),
+        text('es', 'Esperamos vuestra respuesta antes del 3 de marzo.'),
+      ]),
+    ).toEqual({
+      ok: true,
+      diagnostics: ['de', 'en', 'es'].map(
+        (lang) =>
+          `warning W_RSVP_DEADLINE_TEXT site-content.json $.sections[${story}].data.text.${lang}`,
+      ),
+    });
+  });
+
+  it('does not read the verb "may" before a number as a date', async () => {
+    const story = await sectionIndex('story');
+    const text = (value: string) =>
+      set('site-content.json', ['sections', story, 'data', 'text', 'en'], value);
+    expect(await findings([text('Children under 12 may come; please reply by 1 May.')])).toEqual({
+      ok: true,
+      diagnostics: [],
+    });
+    expect(await findings([text('Please reply by May 12.')])).toEqual({
+      ok: true,
+      diagnostics: [
+        `warning W_RSVP_DEADLINE_TEXT site-content.json $.sections[${story}].data.text.en`,
+      ],
+    });
   });
 
   it('never prints a date', async () => {

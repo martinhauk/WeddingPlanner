@@ -4,12 +4,14 @@ import { type Diagnostic, error, jsonPath } from './diagnostics.ts';
  * Guard against bank details on the public page ("no IBAN" decision: the gifts section says "ask
  * us"). It finds
  *
- * - an IBAN of any country, with or without spaces, in upper or lower case, that passes the ISO
- *   13616 check (mod 97), so ordinary numbers (phone numbers, dates, postcodes) never match;
+ * - an IBAN of any country, with or without spaces or hyphens between its groups, in upper or
+ *   lower case, that passes the ISO 13616 check (mod 97), so ordinary numbers (phone numbers,
+ *   dates, postcodes) never match;
  * - a BIC (SWIFT code) that is labelled as such: `BIC`, `SWIFT`, `SWIFT-Code`, `BIC/SWIFT`, … right
  *   before an 8 or 11 character code in capitals.
  *
- * Findings name the JSON path only, never the text.
+ * `validate` runs it on every string of `site-content.json` and `site.json`. Findings name the JSON
+ * path only, never the text.
  */
 
 // Country code and IBAN length of every country in the SWIFT IBAN registry.
@@ -59,8 +61,9 @@ export function isValidIban(iban: string): boolean {
   return remainder === 1;
 }
 
-// Separators people put between the groups of an IBAN: a space, a no-break or narrow no-break space.
-const GROUP_SEPARATOR = /[   ]/;
+// Separators people put between the groups of an IBAN: a space, a no-break or narrow no-break space,
+// or a hyphen (ASCII, U+2010 or the no-break hyphen U+2011).
+const GROUP_SEPARATOR = /[ \u00A0\u202F\u2010\u2011-]/;
 const ALNUM = /[A-Za-z0-9]/;
 // Start of a possible IBAN: two letters and two digits that do not continue a word or number.
 const IBAN_START = /(?<![\p{L}\p{N}])[A-Za-z]{2}[0-9]{2}/gu;

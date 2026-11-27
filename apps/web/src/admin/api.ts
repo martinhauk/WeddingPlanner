@@ -61,7 +61,16 @@ export type AdminRsvpUpdate = {
   }[];
   readonly message?: string;
   readonly language: string;
+  /**
+   * The admin attests that the guest explicitly agreed to storing their dietary data. Required when
+   * the edit adds or changes dietary data; otherwise the API answers 400 with the field
+   * `dietaryConsent` (`DIETARY_CONSENT_FIELD`).
+   */
+  readonly dietaryConsent?: true;
 };
+
+/** The `field` of the API's validation error for a missing dietary consent attestation. */
+export const DIETARY_CONSENT_FIELD = 'dietaryConsent';
 
 export type AdminFailureKind =
   | 'unauthorized'
@@ -75,7 +84,13 @@ export type AdminFailureKind =
 
 export type AdminResult<T> =
   | { readonly ok: true; readonly data: T }
-  | { readonly ok: false; readonly kind: AdminFailureKind; readonly status: number };
+  | {
+      readonly ok: false;
+      readonly kind: AdminFailureKind;
+      readonly status: number;
+      /** For `invalid`: the fields the API's `validation_failed` names, when it names any. */
+      readonly fields?: readonly string[];
+    };
 
 export type AdminApi = {
   list(): Promise<AdminResult<AdminList>>;
@@ -115,7 +130,11 @@ export function createAdminApi(fetchImpl: typeof fetch = (...args) => fetch(...a
     }
 
     if (response.status !== expected) {
-      return { ok: false, kind: failureKind(response), status: response.status };
+      const kind = failureKind(response);
+      const fields = kind === 'invalid' ? await errorFields(response) : undefined;
+      return fields === undefined
+        ? { ok: false, kind, status: response.status }
+        : { ok: false, kind, status: response.status, fields };
     }
 
     let data: unknown = null;
@@ -168,6 +187,22 @@ function failureKind(response: Response): AdminFailureKind {
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/** The `field` of every entry in a 400 problem's `errors` (names only, never values). */
+async function errorFields(response: Response): Promise<readonly string[] | undefined> {
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    return undefined;
+  }
+  if (!isRecord(body) || !Array.isArray(body.errors)) {
+    return undefined;
+  }
+  return body.errors.flatMap((error: unknown) =>
+    isRecord(error) && typeof error.field === 'string' ? [error.field] : [],
+  );
+}
 
 function isRsvp(value: unknown): value is AdminRsvp {
   return (

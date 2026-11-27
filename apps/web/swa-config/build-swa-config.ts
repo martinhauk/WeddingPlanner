@@ -44,12 +44,6 @@ const IMMUTABLE = 'public, max-age=31536000, immutable';
 /** For files whose names may not be content-hashed: a replaced file shows up within a day. */
 const ONE_DAY = 'public, max-age=86400';
 
-/**
- * The only origin that may be framed: the click-to-load OpenStreetMap embed
- * (`/export/embed.html`). The iframe loads its own tiles under OpenStreetMap's policy.
- */
-export const OSM_EMBED_ORIGIN = 'https://www.openstreetmap.org';
-
 /** Extensions of static files: a missing one is a real 404, never the SPA shell. */
 const STATIC_FILE_EXTENSIONS = [
   'js',
@@ -125,14 +119,14 @@ export type SwaConfigOptions = {
  * Content-Security-Policy for every static response. `default-src 'self'` also covers
  * `script-src`, `font-src` (self-hosted fonts) and `connect-src` (the `/api/health` ping is
  * same-origin). Images come from the site itself (`/media/*`, `/content/media/*`, CSS
- * backgrounds), `data:` URIs and OpenStreetMap tiles. Only the OpenStreetMap embed may be framed,
- * and the page creates that iframe only after the visitor clicks "show map". Inline styles carry
- * the theme.
+ * backgrounds), `data:` URIs and OpenStreetMap tiles: the click-to-load map draws those tiles
+ * itself, only after the visitor clicks "show map". No page has a frame, so `frame-src 'none'`
+ * (without it, frames would fall back to `default-src 'self'`). Inline styles carry the theme.
  */
 export const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   "img-src 'self' data: https://tile.openstreetmap.org",
-  `frame-src ${OSM_EMBED_ORIGIN}`,
+  "frame-src 'none'",
   "style-src 'self' 'unsafe-inline'",
   "frame-ancestors 'none'",
   "object-src 'none'",
