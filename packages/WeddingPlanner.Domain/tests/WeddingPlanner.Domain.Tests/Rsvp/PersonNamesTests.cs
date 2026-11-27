@@ -41,6 +41,14 @@ public sealed class PersonNamesTests
     [InlineData("Mag.art. Anna Example")]
     [InlineData("Lic.De la Cruz")]
     [InlineData("Ana M.De la Cruz")]
+    [InlineData("Mª.de los Ángeles")]
+    [InlineData("lic.de la cruz")]
+    [InlineData("Jürgen v.de Berg")]
+    [InlineData("MA.DE LOS ANGELES")]
+    [InlineData("J.de Vries")]
+    [InlineData("Wei J.LI")]
+    [InlineData("Anna Lu")]
+    [InlineData("J.Lu")]
     public void AcceptsRealNames(string name)
     {
         PersonNames.Check(name).ShouldBeNull();
@@ -89,6 +97,11 @@ public sealed class PersonNamesTests
     [InlineData("http://a")]
     [InlineData("EXAMPLE.COM")]
     [InlineData("Anna example.de/")]
+    [InlineData("example.de")]
+    [InlineData("EXAMPLE.DE")]
+    [InlineData("shop.de?x")]
+    [InlineData("Anna (example.de)")]
+    [InlineData("example.ai:8080")]
     [InlineData("Ben ab.cd.example.es")]
     [InlineData("Anna x-y.online")]
     [InlineData("Anna ://")]
