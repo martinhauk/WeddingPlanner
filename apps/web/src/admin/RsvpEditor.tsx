@@ -21,11 +21,12 @@ export type RsvpEditorProps = {
   readonly rsvp: AdminRsvp;
   readonly saving: boolean;
   /**
-   * The API refused the last save because new or changed dietary data came without the consent
-   * attestation (`dietaryConsent`): the checkbox is shown with its error until it is ticked, or
-   * until the answer or the people (names, dietary data) differ from what was sent.
+   * The body of the last save the API refused because new or changed dietary data came without the
+   * consent attestation (`dietaryConsent`). While the answer and the people (names, dietary data)
+   * are the ones in it, the checkbox is shown, with its error until it is ticked. It is compared
+   * with the refused body itself, so a later save of other data never shows it while in flight.
    */
-  readonly consentError?: boolean;
+  readonly consentRefused?: AdminRsvpUpdate | undefined;
   readonly onSave: (body: AdminRsvpUpdate) => void;
   readonly onCancel: () => void;
 };
@@ -60,13 +61,7 @@ export function addsOrChangesDietary(stored: AdminRsvp, body: AdminRsvpUpdate): 
 const consentKey = (body: AdminRsvpUpdate) => JSON.stringify([body.attending, body.people]);
 
 /** Edits one reply: yes/no, people with dietary needs, and the message. */
-export function RsvpEditor({
-  rsvp,
-  saving,
-  consentError = false,
-  onSave,
-  onCancel,
-}: RsvpEditorProps) {
+export function RsvpEditor({ rsvp, saving, consentRefused, onSave, onCancel }: RsvpEditorProps) {
   const formId = useId();
   const consentRef = useRef<HTMLInputElement>(null);
   const [attending, setAttending] = useState(rsvp.attending);
@@ -82,8 +77,6 @@ export function RsvpEditor({
   const [message, setMessage] = useState(rsvp.message ?? '');
   const [consent, setConsent] = useState(false);
   const [consentMissing, setConsentMissing] = useState(false);
-  /** `consentKey` of the last body sent: the API's `consentError` is about exactly that data. */
-  const [sentKey, setSentKey] = useState<string | null>(null);
 
   const change = (key: string, update: Partial<PersonDraft>) =>
     setPeople((current) =>
@@ -117,8 +110,7 @@ export function RsvpEditor({
   // The API decides: the checkbox also appears when it asked for the attestation, but only while
   // the answer and the people are what it refused. Any change there (for example removing the new
   // dietary data, as the error suggests) leaves the decision to the rule again.
-  const dataKey = consentKey(body);
-  const apiAsks = consentError && dataKey === sentKey;
+  const apiAsks = consentRefused !== undefined && consentKey(body) === consentKey(consentRefused);
   const askConsent = apiAsks || addsOrChangesDietary(rsvp, body);
   const showConsentError = askConsent && !consent && (apiAsks || consentMissing);
 
@@ -135,7 +127,6 @@ export function RsvpEditor({
       consentRef.current?.focus();
       return;
     }
-    setSentKey(dataKey);
     onSave(askConsent ? { ...body, dietaryConsent: true } : body);
   };
 

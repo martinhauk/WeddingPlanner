@@ -4,7 +4,8 @@ import type { UiText } from '../ui.ts';
  * The built-in privacy notice (German law: GDPR, TDDDG, DDG), complete in every site language. The
  * instance adds the controllers, the contact email, the deletion date and optional paragraphs
  * (`site-content.json` `privacy`). Placeholders in braces are filled by the page: `{controllers}`,
- * `{email}`, `{deleteBy}`, `{appRegion}`, `{dataRegion}`, `{showMap}`.
+ * `{email}`, `{deleteBy}`, `{appRegion}`, `{dataRegion}`, `{regions}`, `{showMap}`, and the links
+ * of `transferLinks` (`{scc}`, `{dpa}`, `{dpf}`).
  *
  * Keep it true to the code: when the app starts storing, logging or loading something new, change
  * this text and `docs/privacy/data-inventory.md` in the same commit.
@@ -61,8 +62,8 @@ export const privacyText = {
   },
   editLink: {
     de: 'Nach dem Absenden bekommt ihr einen persönlichen Link zu eurer Antwort. Später könnt ihr ihn euch auf der Einladungsseite bei eurer Antwort noch einmal anzeigen lassen, in dem Browser, mit dem ihr geantwortet oder den Link geöffnet habt. Wer den Link hat, kann eure Antwort ansehen, ändern und zurückziehen. Behaltet ihn deshalb für euch. Er funktioniert, solange es eure Antwort gibt.',
-    en: 'After sending your reply, you get a personal link to it. You can show it again later on the invitation page, with your reply, in the browser you used to reply or to open the link. Anyone who has the link can see, change and withdraw your reply, so please keep it to yourselves. It works for as long as your reply exists.',
-    es: 'Después de enviar la respuesta recibís un enlace personal a ella. Más tarde podéis volver a mostrarlo en la página de la invitación, junto a vuestra respuesta, en el navegador con el que respondisteis o abristeis el enlace. Quien tenga el enlace puede ver, cambiar y retirar vuestra respuesta, así que no lo compartáis con nadie. Funciona mientras exista vuestra respuesta.',
+    en: 'After sending your reply, you get a personal link to it. You can show it again later in the reply section of the invitation page, in the browser you used to reply or to open the link. Anyone who has the link can see, change and withdraw your reply, so please keep it to yourselves. It works for as long as your reply exists.',
+    es: 'Después de enviar la respuesta recibís un enlace personal a ella. Más tarde podéis volver a mostrarlo junto a vuestra respuesta en la página de la invitación, desde el navegador con el que respondisteis o abristeis el enlace. Quien tenga el enlace puede ver, cambiar y retirar vuestra respuesta, así que no lo compartáis con nadie. Funciona mientras exista vuestra respuesta.',
   },
   editLinkSecret: {
     de: 'Der Link enthält einen zufälligen geheimen Schlüssel. Wir speichern davon nur eine Art Fingerabdruck (einen sogenannten Hash), aus dem sich der Link nicht zurückgewinnen lässt, nie den Link selbst. Der Schlüssel steht im Teil der Adresse nach dem „#“. Diesen Teil schicken Browser beim Öffnen nicht an den Server, er landet also nicht in Server-Protokollen. Nur die Seite selbst liest ihn und schickt ihn verschlüsselt an unsere Schnittstelle, um eure Antwort zu öffnen.',
@@ -120,15 +121,34 @@ export const privacyText = {
     en: 'The website and the reply form run on Microsoft Azure. The provider is Microsoft Ireland Operations Limited (Dublin, Ireland), which acts as a processor on our instructions (Art. 28 GDPR). Microsoft delivers the pages through a worldwide network of servers. The interface that receives your replies runs in the Azure region {appRegion}. Your replies are stored in the region {dataRegion}, where the backups and the technical logs are kept as well.',
     es: 'La web y el formulario de respuesta funcionan en Microsoft Azure. El proveedor es Microsoft Ireland Operations Limited (Dublín, Irlanda), que actúa como encargado del tratamiento siguiendo nuestras instrucciones (art. 28 RGPD). Microsoft sirve las páginas a través de una red mundial de servidores. La interfaz que recibe vuestras respuestas funciona en la región de Azure {appRegion}. Vuestras respuestas se guardan en la región {dataRegion}, donde también están las copias de seguridad y los registros técnicos.',
   },
-  transferUs: {
-    de: 'Da dabei auch Server in den USA genutzt werden, können eure Angaben dorthin übermittelt werden. Microsoft ist nach dem EU-U.S. Data Privacy Framework zertifiziert, für das ein Angemessenheitsbeschluss der EU-Kommission besteht (Art. 45 DSGVO); zusätzlich gelten die Standardvertragsklauseln der EU-Kommission (Art. 46 DSGVO).',
-    en: 'Because servers in the USA are used as well, your details may be transferred there. Microsoft is certified under the EU-U.S. Data Privacy Framework, which is covered by an adequacy decision of the European Commission (Art. 45 GDPR); in addition, the European Commission’s standard contractual clauses apply (Art. 46 GDPR).',
-    es: 'Como también se utilizan servidores en EE. UU., vuestros datos pueden transferirse allí. Microsoft está certificada conforme al Marco de Privacidad de Datos UE-EE. UU., cubierto por una decisión de adecuación de la Comisión Europea (art. 45 RGPD); además, se aplican las cláusulas contractuales tipo de la Comisión Europea (art. 46 RGPD).',
+  // The transfer paragraph is always shown: Microsoft's worldwide network delivers the pages also
+  // from outside the EU, whatever the two regions are. The region sentence is added when the app
+  // or data region itself is outside the EU (`{regions}`: their names, as a list).
+  transfer: {
+    de: 'Zum weltweiten Netz von Microsoft gehören auch Server außerhalb der EU, zum Beispiel in den USA. Eure Angaben können deshalb auch dorthin übermittelt werden.',
+    en: 'Microsoft’s worldwide network also includes servers outside the EU, for example in the USA, so your details may be transferred there as well.',
+    es: 'La red mundial de Microsoft incluye también servidores fuera de la UE, por ejemplo en EE. UU., así que vuestros datos también pueden transferirse allí.',
   },
-  transferOther: {
-    de: 'Da dabei auch Server außerhalb der EU genutzt werden, können eure Angaben dorthin übermittelt werden. Dafür gelten die Standardvertragsklauseln der EU-Kommission (Art. 46 DSGVO).',
-    en: 'Because servers outside the EU are used as well, your details may be transferred there. The European Commission’s standard contractual clauses apply to this (Art. 46 GDPR).',
-    es: 'Como también se utilizan servidores fuera de la UE, vuestros datos pueden transferirse allí. Para ello se aplican las cláusulas contractuales tipo de la Comisión Europea (art. 46 RGPD).',
+  transferRegionOne: {
+    de: 'Die Azure-Region {regions} liegt ebenfalls außerhalb der EU; dorthin werden eure Antworten in jedem Fall übermittelt.',
+    en: 'The Azure region {regions} is also outside the EU, and your replies are always sent there.',
+    es: 'La región de Azure {regions} también está fuera de la UE, y vuestras respuestas se envían allí en todo caso.',
+  },
+  transferRegionMany: {
+    de: 'Die Azure-Regionen {regions} liegen ebenfalls außerhalb der EU; dorthin werden eure Antworten in jedem Fall übermittelt.',
+    en: 'The Azure regions {regions} are also outside the EU, and your replies are always sent there.',
+    es: 'Las regiones de Azure {regions} también están fuera de la UE, y vuestras respuestas se envían allí en todo caso.',
+  },
+  transferBasis: {
+    de: 'Microsoft ist nach dem EU-U.S. Data Privacy Framework zertifiziert, für das ein Angemessenheitsbeschluss der EU-Kommission besteht (Art. 45 DSGVO). Für jede Übermittlung in ein Land außerhalb der EU gelten außerdem die Standardvertragsklauseln der EU-Kommission (Art. 46 DSGVO).',
+    en: 'Microsoft is certified under the EU-U.S. Data Privacy Framework, which is covered by an adequacy decision of the European Commission (Art. 45 GDPR). In addition, the European Commission’s standard contractual clauses apply to every transfer to a country outside the EU (Art. 46 GDPR).',
+    es: 'Microsoft está certificada conforme al Marco de Privacidad de Datos UE-EE. UU., cubierto por una decisión de adecuación de la Comisión Europea (art. 45 RGPD). Además, para cualquier transferencia a un país fuera de la UE se aplican las cláusulas contractuales tipo de la Comisión Europea (art. 46 RGPD).',
+  },
+  // Where the safeguards are published (Art. 13(1)(f) GDPR); the three links are `transferLinks`.
+  transferSources: {
+    de: 'Die Klauseln findet ihr auf der Website der {scc}, unseren Vertrag mit Microsoft im {dpa} und die Zertifizierung von Microsoft in der {dpf}.',
+    en: 'You can find the clauses on the website of the {scc}, our contract with Microsoft in the {dpa} and Microsoft’s certification on the {dpf}.',
+    es: 'Podéis encontrar las cláusulas en la web de la {scc}, nuestro contrato con Microsoft en el {dpa} y la certificación de Microsoft en la {dpf}.',
   },
   logs: {
     de: 'Technische Protokolle (Azure Application Insights) helfen uns, Fehler zu finden. Sie enthalten keine Namen, Nachrichten, Angaben zur Ernährung, persönlichen Links, Cookies oder IP-Adressen und werden nach 30 Tagen gelöscht.',
@@ -224,3 +244,46 @@ export const privacyText = {
     es: 'Esta es una web privada, sin fines comerciales ni publicidad, por lo que no es obligatorio un aviso legal (Impressum) según el § 5 DDG.',
   },
 } as const satisfies Record<string, UiText | readonly UiText[]>;
+
+/**
+ * The official pages named in `transferSources`: the European Commission's page on the standard
+ * contractual clauses (a URL per language with the menus translated; the text is in English and
+ * links the clauses), Microsoft's Products and Services Data Protection Addendum (one page; the DPA
+ * can be downloaded there in many languages) and the Data Privacy Framework list, where Microsoft's
+ * certification can be looked up (English only). The page renders them as plain links that open in
+ * a new tab without a referrer, so nothing is loaded before a click and the CSP needs no new origin.
+ */
+export const transferLinks = {
+  scc: {
+    text: { de: 'EU-Kommission', en: 'European Commission', es: 'Comisión Europea' },
+    href: {
+      de: 'https://commission.europa.eu/law/law-topic/data-protection/international-dimension-data-protection/standard-contractual-clauses-scc_de',
+      en: 'https://commission.europa.eu/law/law-topic/data-protection/international-dimension-data-protection/standard-contractual-clauses-scc_en',
+      es: 'https://commission.europa.eu/law/law-topic/data-protection/international-dimension-data-protection/standard-contractual-clauses-scc_es',
+    },
+  },
+  dpa: {
+    text: {
+      de: 'Data Protection Addendum',
+      en: 'Data Protection Addendum',
+      es: 'Data Protection Addendum',
+    },
+    href: {
+      de: 'https://www.microsoft.com/licensing/docs/view/Microsoft-Products-and-Services-Data-Protection-Addendum-DPA',
+      en: 'https://www.microsoft.com/licensing/docs/view/Microsoft-Products-and-Services-Data-Protection-Addendum-DPA',
+      es: 'https://www.microsoft.com/licensing/docs/view/Microsoft-Products-and-Services-Data-Protection-Addendum-DPA',
+    },
+  },
+  dpf: {
+    text: {
+      de: 'Liste des Data Privacy Framework',
+      en: 'Data Privacy Framework list',
+      es: 'lista del Marco de Privacidad de Datos',
+    },
+    href: {
+      de: 'https://www.dataprivacyframework.gov/list',
+      en: 'https://www.dataprivacyframework.gov/list',
+      es: 'https://www.dataprivacyframework.gov/list',
+    },
+  },
+} as const satisfies Record<string, { readonly text: UiText; readonly href: UiText }>;

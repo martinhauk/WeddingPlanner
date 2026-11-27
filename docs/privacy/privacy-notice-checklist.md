@@ -59,11 +59,15 @@ Tick each item on `test` (open `/datenschutz` there in German, English and Spani
       diese Angaben zum Essen speichern." and `PUT /api/admin/rsvps/{id}` refuses the edit without it
       (400). The reply then records that and when an admin attested (`DietaryConsentSource`
       `admin`), but not which admin and not the guest's proof. To replace a companion, remove the
-      person and add the new one, so their dietary data does not move to someone else. Agree among
-      the admins: **tick it only with that guest's explicit consent, and
-      keep your own proof of it** (for example their email or message). The notice's "What data we
-      process" says so too: dietary details given another way (for example by email) are entered
-      only with explicit consent, and the consent, its time and where it was given are recorded.
+      person and add the new one, so their dietary data does not move to someone else. Fixing a
+      typo in the name of a person with dietary data asks for the confirmation too (the system
+      cannot tell a typo from another person); the guest's own consent time from the form is kept
+      (`DietaryConsentGuestAt`), so the stored row (table and backups) keeps both times; the admin
+      view does not show them. Agree among the admins: **tick it only with that guest's explicit
+      consent, and keep your own proof of it** (for example their email or message). The notice's
+      "What data we process" says so too: dietary details given another way (for example by
+      email) are entered only with explicit consent, and the consent, its time and where it was
+      given are recorded.
 - [ ] Dietary details go only to the kitchen or caterer, with names only (the notice's "purpose"
       paragraph says so). Decide how you pass them on (the CSV export leaves the system: keep it
       safe and delete it after the wedding).
@@ -84,10 +88,26 @@ reply, including dietary data, is **received and processed in the USA** for the 
 request before it is stored in Germany; telemetry and backups stay in Germany.
 
 - [ ] The "Hosting and service providers" section names both regions (filled from `instance.json`)
-      and shows the **US transfer clause**: servers in the USA are used, Microsoft is certified under
-      the **EU-U.S. Data Privacy Framework** (adequacy decision, Art. 45 GDPR) and the **standard
-      contractual clauses** apply as well (Art. 46 GDPR). The page shows this clause automatically
-      when a region is in the USA; check that it is there.
+      and is followed by the **transfer paragraph**, which the page always shows: Microsoft's
+      worldwide network (which delivers the pages) also includes servers outside the EU, for
+      example in the USA; Microsoft is certified under the **EU-U.S. Data Privacy Framework**
+      (adequacy decision, Art. 45 GDPR), and the **standard contractual clauses** apply to every
+      transfer outside the EU (Art. 46 GDPR). When `swaLocation` or `dataLocation` is outside the
+      EU, the paragraph also names that region and says that the replies are always sent there;
+      check that it names West US 2 (or your `swaLocation`). Lead decision in #95, confirmed by the
+      owner: the paragraph is always shown, because the notice says the pages come from a worldwide
+      network (before, it appeared only when a region was outside the EU).
+- [x] **Where the safeguards can be found** (Art. 13(1)(f) GDPR, #97; owner decision: links, not
+      "on request"). The transfer paragraph ends with one sentence that links three official pages:
+      the European Commission's page on the
+      [standard contractual clauses](https://commission.europa.eu/law/law-topic/data-protection/international-dimension-data-protection/standard-contractual-clauses-scc_en)
+      (`_de`, `_en` or `_es` to match the page language; the text there is in English), Microsoft's
+      [Products and Services Data Protection Addendum](https://www.microsoft.com/licensing/docs/view/Microsoft-Products-and-Services-Data-Protection-Addendum-DPA)
+      (our contract with Microsoft; downloads in many languages) and the
+      [Data Privacy Framework list](https://www.dataprivacyframework.gov/list), where Microsoft's
+      certification can be looked up. They are plain links (new tab, `rel="noopener noreferrer"`),
+      so nothing is loaded before a click and the CSP is unchanged. The URLs live in
+      `transferLinks` in `privacy-text.ts`; if one of them moves, change it there.
 - [ ] **Open question: should the dietary consent sentence mention the US processing?** The transfer
       itself rests on the adequacy decision and the clauses, not on consent, and the notice
       explains it. Mentioning it in the consent sentence too ("…processed on Microsoft servers,

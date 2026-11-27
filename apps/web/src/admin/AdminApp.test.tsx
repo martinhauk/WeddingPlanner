@@ -431,6 +431,91 @@ describe('AdminApp', () => {
     expect(await screen.findByText('Antwort gespeichert.')).toBeInTheDocument();
   });
 
+  it('does not flash the API’s request while saving the reply without the refused data', async () => {
+    let answer: (result: AdminResult<AdminRsvp>) => void = () => {};
+    const api = fakeApi();
+    api.update
+      .mockResolvedValueOnce({
+        ok: false,
+        kind: 'invalid',
+        status: 400,
+        fields: ['dietaryConsent'],
+      })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          }),
+      );
+    renderApp(api);
+    await userEvent.click(
+      await screen.findByRole('button', {
+        name: 'Antwort von Pablo Pérez, María-José García bearbeiten',
+      }),
+    );
+    const editor = screen.getByRole('form', { name: 'Antwort bearbeiten' });
+    const first = within(editor).getByRole('group', { name: 'Person 1 (Gast)' });
+    await userEvent.click(within(editor).getByRole('button', { name: 'Speichern' }));
+    expect(within(editor).getByRole('checkbox', { name: CONSENT })).toBeInTheDocument();
+
+    // The admin removes the data the API refused and saves again.
+    await userEvent.clear(within(first).getByLabelText('Hinweis zum Essen'));
+    await userEvent.click(within(editor).getByRole('button', { name: 'Speichern' }));
+
+    // While that save is in flight, the old request is about other data: no checkbox, no error.
+    expect(within(editor).getByRole('button', { name: 'Speichert …' })).toBeDisabled();
+    expect(within(editor).queryByRole('checkbox', { name: CONSENT })).not.toBeInTheDocument();
+    expect(within(editor).queryByText(/Bitte bestätigen/)).not.toBeInTheDocument();
+    expect(api.update).toHaveBeenLastCalledWith(
+      'a1',
+      '"v1"',
+      expect.not.objectContaining({ dietaryConsent: true }),
+    );
+
+    answer(ok(pablo));
+    expect(await screen.findByText('Antwort gespeichert.')).toBeInTheDocument();
+  });
+
+  it('keeps the ticked confirmation visible while the attested save is in flight', async () => {
+    let answer: (result: AdminResult<AdminRsvp>) => void = () => {};
+    const api = fakeApi();
+    api.update
+      .mockResolvedValueOnce({
+        ok: false,
+        kind: 'invalid',
+        status: 400,
+        fields: ['dietaryConsent'],
+      })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          }),
+      );
+    renderApp(api);
+    await userEvent.click(
+      await screen.findByRole('button', {
+        name: 'Antwort von Pablo Pérez, María-José García bearbeiten',
+      }),
+    );
+    const editor = screen.getByRole('form', { name: 'Antwort bearbeiten' });
+    await userEvent.click(within(editor).getByRole('button', { name: 'Speichern' }));
+    await userEvent.click(within(editor).getByRole('checkbox', { name: CONSENT }));
+    await userEvent.click(within(editor).getByRole('button', { name: 'Speichern' }));
+
+    const consent = within(editor).getByRole('checkbox', { name: CONSENT });
+    expect(consent).toBeChecked();
+    expect(consent).toHaveAttribute('aria-invalid', 'false');
+    expect(api.update).toHaveBeenLastCalledWith(
+      'a1',
+      '"v1"',
+      expect.objectContaining({ dietaryConsent: true }),
+    );
+
+    answer(ok(pablo));
+    expect(await screen.findByText('Antwort gespeichert.')).toBeInTheDocument();
+  });
+
   it('reloads and explains when the reply changed in the meantime (412)', async () => {
     const api = fakeApi({ update: vi.fn(() => Promise.resolve(fail('conflict', 412))) });
     renderApp(api);
