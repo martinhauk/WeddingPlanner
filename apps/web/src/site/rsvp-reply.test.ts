@@ -161,7 +161,7 @@ describe('validateReply', () => {
       attending: false,
       people: [
         { ...person, name: 'A' },
-        { ...person, name: 'example.com' },
+        { ...person, name: 'www.example.de' },
         { ...person, name: 'Pablo Pérez' },
         { ...person, name: ' pablo perez ' },
         { ...person, name: 'a' },
@@ -211,7 +211,15 @@ describe('nameRuleCode', () => {
     'Ana M. de la Cruz',
     '李明',
     'Ελένη',
-  ])('accepts %s like the API', (name) => {
+    // Name particles after a dot and titles typed without spaces: the API accepts them too.
+    'Mª.de los Ángeles',
+    'lic.de la cruz',
+    'J.de Vries',
+    'Dr.rer.nat. Ben Example',
+    'Mag.art. Anna Example',
+    'Dr.med.vet. Jürgen Müller',
+    'joh.fr. müller',
+  ])('accepts %s', (name) => {
     expect(nameRuleCode(name)).toBeNull();
   });
 
@@ -227,14 +235,20 @@ describe('nameRuleCode', () => {
     'Anna＠example',
     'https://example.com',
     'Anna HTTP://EXAMPLE',
+    'Anna ://example',
+    'www.example.de',
     'Anna www.example',
-    'example.com',
-    'Buy cheap at example.com now',
-    'bit.ly',
-    'mail.example.co.uk',
+    'Anna (WWW.EXAMPLE)',
   ])('finds %s invalid', (name) => {
     expect(nameRuleCode(name)).toBe('invalid');
   });
+
+  it.each(['example.com', 'Buy cheap at example.com now', 'bit.ly', 'mail.example.co.uk'])(
+    'leaves the domain in %s to the API',
+    (name) => {
+      expect(nameRuleCode(name)).toBeNull();
+    },
+  );
 });
 
 describe('nameKey', () => {

@@ -19,13 +19,15 @@ export type HeroProps = {
    * reply state is not shown).
    */
   readonly rsvpId: string | undefined;
+  /** The RSVP deadline has passed (baked deadline): the own reply can only be viewed. */
+  readonly rsvpClosed?: boolean;
 };
 
 /**
  * The first screen: tagline, names, date, place, countdown and the RSVP button, on full-bleed
  * photos (side by side when there are two) under a scrim that keeps the text readable.
  */
-export function Hero({ content, lang, rsvpId }: HeroProps) {
+export function Hero({ content, lang, rsvpId, rsvpClosed = false }: HeroProps) {
   const { event } = content;
   const images = heroImages(content);
   return (
@@ -52,7 +54,7 @@ export function Hero({ content, lang, rsvpId }: HeroProps) {
         </p>
         <p className="hero-place">{t(content.place, lang)}</p>
         <Countdown to={event.start} lang={lang} />
-        {rsvpId !== undefined && <HeroRsvp rsvpId={rsvpId} lang={lang} />}
+        {rsvpId !== undefined && <HeroRsvp rsvpId={rsvpId} lang={lang} closed={rsvpClosed} />}
       </div>
     </section>
   );
@@ -60,10 +62,18 @@ export function Hero({ content, lang, rsvpId }: HeroProps) {
 
 /**
  * The hero's RSVP link: "RSVP" without a reply in this browser, else "you said yes/no" and a link to
- * change it. Reads only the `wp_rsvp_state` cookie (no API call), and follows it when the RSVP
- * section saves, claims or withdraws a reply.
+ * change it (after the deadline: to view it). Reads only the `wp_rsvp_state` cookie (no API call),
+ * and follows it when the RSVP section saves, claims or withdraws a reply.
  */
-function HeroRsvp({ rsvpId, lang }: { readonly rsvpId: string; readonly lang: Lang }) {
+function HeroRsvp({
+  rsvpId,
+  lang,
+  closed,
+}: {
+  readonly rsvpId: string;
+  readonly lang: Lang;
+  readonly closed: boolean;
+}) {
   const state = useRsvpState();
   if (state === null) {
     return (
@@ -76,7 +86,7 @@ function HeroRsvp({ rsvpId, lang }: { readonly rsvpId: string; readonly lang: La
     <>
       <p className="hero-place">{t(state === 'yes' ? ui.rsvpSaidYes : ui.rsvpSaidNo, lang)}</p>
       <a className="btn" href={`#${rsvpId}`}>
-        {t(ui.rsvp.change, lang)}
+        {t(closed ? ui.rsvp.viewReply : ui.rsvp.change, lang)}
       </a>
     </>
   );

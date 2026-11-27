@@ -24,7 +24,8 @@ namespace WeddingPlanner.Api.Features.Rsvp;
 /// the cap. The cap is checked by counting before the insert, so two simultaneous requests may exceed it by one; it
 /// is a cost guard, not a business limit. Refusals at the cap are not logged one by one: the warning
 /// (<see cref="CapacityReachedEvent"/>, for alerts) is written at most once per hour and worker instance
-/// (<see cref="RsvpLogThrottle"/>).
+/// (<see cref="RsvpLogThrottle"/>). Refused submissions (honeypot, fill time, name rules) are counted the same way:
+/// one <see cref="SubmissionsRejectedEvent"/> warning per hour at most, with the counts per reason only.
 /// </remarks>
 public sealed partial class RsvpCreateFunction(
     IRsvpRepository repository,
@@ -47,6 +48,15 @@ public sealed partial class RsvpCreateFunction(
 
     /// <summary>Event id of the <see cref="CapacityReachedEvent"/> warning.</summary>
     public const int CapacityReachedEventId = 2101;
+
+    /// <summary>
+    /// Event name of the count of refused new replies (honeypot, fill time, name rules): counts only, no names, bodies
+    /// or addresses, at most once per hour and worker instance (<see cref="RsvpLogThrottle.CountRejection"/>).
+    /// </summary>
+    public const string SubmissionsRejectedEvent = "RsvpSubmissionsRejected";
+
+    /// <summary>Event id of the <see cref="SubmissionsRejectedEvent"/> warning.</summary>
+    public const int SubmissionsRejectedEventId = 2102;
 
     [Function(FunctionName)]
     public async Task<IActionResult> Run(
@@ -75,14 +85,20 @@ public sealed partial class RsvpCreateFunction(
             return bodyProblem;
         }
 
-        if (RsvpSubmissionGuard.RejectsCreate(input, settings.MinSubmitTime))
+        if (RsvpSubmissionGuard.CreateRejection(input, settings.MinSubmitTime) is { } rejection)
         {
+            CountRejection(rejection);
             return RsvpSubmissionGuard.Rejected();
         }
 
         var validation = RsvpValidator.Validate(input.ToDraft(), settings.Limits);
         if (validation.Answer is not { } answer)
         {
+            if (BreaksNameRules(validation.Errors))
+            {
+                CountRejection(RsvpRejectionReason.NameRules);
+            }
+
             return RsvpHttp.ValidationFailed(validation.Errors);
         }
 
@@ -122,6 +138,27 @@ public sealed partial class RsvpCreateFunction(
         response.Headers.Location = MineLocation;
         return ApiResult.Json(StatusCodes.Status201Created, new RsvpCreatedResponse(RsvpView.From(stored.Record), version, credential.CookieValue));
     }
+
+    /// <summary>A name of the reply breaks the name rules (<see cref="PersonNames.Check"/>: too short, no letter, a web address or <c>@</c>).</summary>
+    private static bool BreaksNameRules(IReadOnlyList<RsvpValidationError> errors) => errors.Any(error =>
+        error.Field.StartsWith("people[", StringComparison.Ordinal)
+        && error.Field.EndsWith("].name", StringComparison.Ordinal)
+        && error.Code is RsvpValidationCodes.TooShort or RsvpValidationCodes.Invalid);
+
+    private void CountRejection(RsvpRejectionReason reason)
+    {
+        if (logThrottle.CountRejection(reason) is { } counts)
+        {
+            LogSubmissionsRejected(logger, counts.Total, counts.Honeypot, counts.FillTime, counts.NameRules);
+        }
+    }
+
+    [LoggerMessage(
+        EventId = SubmissionsRejectedEventId,
+        EventName = SubmissionsRejectedEvent,
+        Level = LogLevel.Warning,
+        Message = SubmissionsRejectedEvent + ": {Count} new replies refused since the last report (honeypot {Honeypot}, fill time {FillTime}, name rules {NameRules}; logged at most once per hour).")]
+    private static partial void LogSubmissionsRejected(ILogger logger, long count, long honeypot, long fillTime, long nameRules);
 
     [LoggerMessage(
         EventId = CapacityReachedEventId,

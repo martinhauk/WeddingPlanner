@@ -46,6 +46,8 @@ export function Site({ content, build, initialLanguage }: SiteProps) {
   const rsvpId = build.features.rsvp
     ? content.sections.find((section) => section.type === 'rsvp' && isShown(section))?.id
     : undefined;
+  // Past the baked deadline the hero and the navigation offer to view a reply, not to change it.
+  const [rsvpClosed] = useState(() => Date.now() > Date.parse(build.rsvpDeadline));
   // The section a deep link jumps to: the fragment itself, or for a personal edit link
   // (/#edit=<id>.<token>) the RSVP section, which claims the reply and removes the fragment.
   const [deepLinkId] = useState(() => {
@@ -125,6 +127,7 @@ export function Site({ content, build, initialLanguage }: SiteProps) {
         brandHref={privacyPage ? '/' : '#top'}
         nav={privacyPage ? [] : nav}
         rsvpId={privacyPage ? undefined : rsvpId}
+        rsvpClosed={rsvpClosed}
         lang={lang}
         onLangChange={setLang}
         overHero={!privacyPage && heroImages(content).length > 0}
@@ -135,7 +138,7 @@ export function Site({ content, build, initialLanguage }: SiteProps) {
             <PrivacyPage content={content} regions={build.regions} lang={lang} />
           ) : (
             <>
-              <Hero content={content} lang={lang} rsvpId={rsvpId} />
+              <Hero content={content} lang={lang} rsvpId={rsvpId} rsvpClosed={rsvpClosed} />
               {content.sections.map((section) => renderSection(section, ctx))}
             </>
           )}

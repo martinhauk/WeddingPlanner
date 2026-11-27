@@ -112,7 +112,9 @@ test('a seeded reply is served to a returning guest', async () => {
     version: '"v1"',
     open: false,
     deadline: '2099-05-01T21:59:00Z',
+    editToken: rsvp.editToken(),
   });
+  assert.match(rsvp.editToken() ?? '', new RegExp(`^${SAMPLE_YES_REPLY.id}\\.[A-Za-z0-9_-]{43}$`));
   assert.deepEqual(rsvpStateCookie('http://127.0.0.1:4173', 'yes'), {
     name: 'wp_rsvp_state',
     value: 'yes',
@@ -170,4 +172,30 @@ test('the stored reply keeps given ids, assigns new ones and drops empty fields'
     ],
     language: 'es',
   });
+});
+
+test('a browser with its own reply previews a link without losing it, then claims it', async () => {
+  const { api, call } = fakeApi();
+  const other = fakeApi();
+  const rsvp = await installFakeRsvpApi(api);
+  rsvp.seed(SAMPLE_YES_REPLY);
+  const own = replyFromRequest(YES_REQUEST, 'e2e000000000000000000000000000aa');
+  await rsvp.attach(other.api, { own });
+  const editToken = rsvp.editToken();
+  const idOf = (response: MockResponse) => (response.json as { rsvp: { id: string } }).rsvp.id;
+
+  const before = await other.call('GET', '/api/rsvp/me');
+  assert.equal(idOf(before), own.id);
+  assert.equal((before.json as { editToken: string }).editToken, rsvp.editToken(own));
+
+  const preview = await other.call('POST', '/api/rsvp/claim', { editToken, preview: true });
+  assert.deepEqual(preview.json, { names: ['Jürgen Müller', 'María-José García'] });
+  assert.equal(idOf(await other.call('GET', '/api/rsvp/me')), own.id, 'a preview claims nothing');
+  const wrong = `${SAMPLE_YES_REPLY.id}.${'A'.repeat(43)}`;
+  const failed = await other.call('POST', '/api/rsvp/claim', { editToken: wrong, preview: true });
+  assert.equal(failed.status, 404);
+
+  assert.equal((await other.call('POST', '/api/rsvp/claim', { editToken })).status, 200);
+  assert.equal(idOf(await other.call('GET', '/api/rsvp/me')), SAMPLE_YES_REPLY.id);
+  assert.equal(idOf(await call('GET', '/api/rsvp/me')), SAMPLE_YES_REPLY.id, 'the first keeps it');
 });

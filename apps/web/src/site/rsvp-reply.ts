@@ -135,24 +135,26 @@ export function toRequest(
 }
 
 /**
- * A web address as the API detects it in a name: a scheme (`https://`), `www.`, or a label of three
- * or more characters, a dot and a lower-case top-level domain (`example.com`), so `Dr.med.` passes.
+ * A web address no name can be: `://` anywhere or `www.` starting a word. The API owns the full
+ * web-address rule (`PersonNames`, docs/api.md: domains such as `example.com`, with exceptions for
+ * titles and name particles like `Dr.rer.nat.` or `Mª.de los Ángeles`); the form only pre-checks
+ * these unambiguous cases and shows a name the API refuses at its field like its own findings.
  * No lookbehind: older Safari versions fail to parse it, which would break the whole page.
  */
-const SCHEME_OR_WWW = /[a-z][a-z0-9+.-]*:\/\/|(?:^|[^\p{L}\p{N}])www\./iu;
-const DOMAIN = /(?:^|[^\p{L}\p{N}-])[\p{L}\p{N}-]{3,}\.[a-z]{2,24}(?![\p{L}\p{N}])/u;
+const WEB_ADDRESS = /:\/\/|(?:^|[^\p{L}\p{N}])www\./iu;
 
 /**
- * The API's name rules (beyond required and the maximum length): at least two characters, a letter,
- * no web address and no `@`. Returns the finding's code, or `null`.
+ * The unambiguous part of the API's name rules (beyond required and the maximum length): at least
+ * two characters, a letter, no `@` and no `://` or `www.`. Returns the finding's code, or `null`.
  */
 export function nameRuleCode(name: string): 'too_short' | 'invalid' | null {
   const text = name.normalize('NFC');
   if ([...text].length < MIN_NAME_LENGTH) {
     return 'too_short';
   }
-  const webAddress = SCHEME_OR_WWW.test(text) || DOMAIN.test(text);
-  return !/\p{L}/u.test(text) || /[@\uFF20]/.test(text) || webAddress ? 'invalid' : null;
+  return !/\p{L}/u.test(text) || /[@\uFF20]/.test(text) || WEB_ADDRESS.test(text)
+    ? 'invalid'
+    : null;
 }
 
 /**

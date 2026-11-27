@@ -68,7 +68,7 @@ names and `screenshots/<project>/` are a contract with `ci.yml`.
 | `navigation.spec.ts` | Nav links per section, anchor scrolling, hero RSVP button; the small-screen menu opens and closes on a tap outside, Escape and a link. |
 | `language.spec.ts`   | de → en → es switch (`<html lang>`, `aria-pressed`, texts, title), remembered choice, browser language.                                |
 | `map.spec.ts`        | No OpenStreetMap request before the click, then the 3 × 3 tiles (mocked); Google Maps directions link.                                 |
-| `rsvp.spec.ts`       | Yes with companion and dietary needs, no with several names, validation, revisit/edit/withdraw, closed; the exact request bodies.      |
+| `rsvp.spec.ts`       | Yes, no, validation, revisit/edit/withdraw, closed; the personal link (shown, claimed, wrong, "who are you?"); hero and nav state.     |
 | `a11y.spec.ts`       | axe on the home page per language, the open menu, the loaded map and the RSVP states.                                                  |
 
 ## Fixtures
@@ -82,8 +82,10 @@ Specs import `test` and `expect` from `fixtures/test.ts`. Every test gets, witho
 - **API mocks** (`api`): `GET /api/health` answers by default; any other unmocked `/api/*` call
   answers `501 not_mocked` and fails the test. `api.mock(method, path, response)` adds a route.
 - **RSVP API** (`rsvpApi`, `fixtures/rsvp-api.ts`): an in-memory RSVP API (status, create, read,
-  replace with `If-Match`, withdraw). `setStatus({ open: false })`, `seed(reply)` (with the
-  `rsvpStateCookie`) and `writes()` for the request bodies.
+  replace with `If-Match`, withdraw, claim and claim preview), with one own reply per browser context
+  like the `wp_rsvp` cookie. `setStatus({ open: false })`, `seed(reply)` (with the `rsvpStateCookie`),
+  `editToken(reply?)`, `attach(api, { own })` for a second browser context (optionally holding its own
+  reply) and `writes()` for the request bodies.
 - **Fixed clock**: `Date` is fixed at `FIXED_NOW` (2099-03-14, before the sample's deadline), so the
   countdown and every screenshot are stable; timers keep running.
 - `expectOnlyKeepWarmCalls()`: waits until the page is idle, then fails on any API call other than
@@ -107,7 +109,10 @@ scrolled into view; images, web fonts and two animation frames are awaited.
 - **Cases:** `home.<lang>` (full page, de/en/es), `home-first-view`, `section-hero` and
   `section-<id>` (every section), `menu-open`, `header`, `map-placeholder`, `map-loaded`,
   `rsvp-start`, `rsvp-filled-yes|no`, `rsvp-validation`, `rsvp-saved-yes|no`, `rsvp-revisit`,
-  `rsvp-edit`, `rsvp-withdrawn`, `rsvp-closed`.
+  `rsvp-edit`, `rsvp-withdrawn`, `rsvp-closed`, `rsvp-edit-link`, `rsvp-link-invalid`,
+  `rsvp-show-link` (a returning guest's link shown on request), `rsvp-who-are-you` (the question when a
+  link opens another reply), `rsvp-hero-answered`, `rsvp-nav-answered` (the answered RSVP entry: the
+  open menu on small screens, the header on wide ones).
 - **Sample content only.** `snap()` checks that `/version.json` says `isSample: true`; against a
   public target it writes nothing. `E2E_ALLOW_REAL_CONTENT=true` is only for a private instance
   repo's own run.
