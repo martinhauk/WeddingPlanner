@@ -2,6 +2,7 @@ import { type EnvironmentName, type Instance, instanceSchema } from '../schema/i
 import { collectLocalizedTexts } from '../schema/localizable.ts';
 import { type Site, siteSchema } from '../schema/site.ts';
 import type { SiteContent } from '../schema/site-content.ts';
+import { checkBankDetails } from './bank-details.ts';
 import {
   type Diagnostic,
   diagnosticsFromZod,
@@ -46,10 +47,10 @@ export type ValidationResult = {
 };
 
 /**
- * Validates an instance directory: `instance.json`, `site.json` (schema and i18n), `media/` and
- * `site-content.json` (schema, references, media, bank details), then the release gates that need
- * both files: the RSVP deadline guests read matches `instance.json`, and the privacy notice is
- * complete where production has RSVP on.
+ * Validates an instance directory: `instance.json`, `site.json` (schema, i18n, bank details),
+ * `media/` and `site-content.json` (schema, references, media, bank details), then the release
+ * gates that need both files: the RSVP deadline guests read matches `instance.json`, and the
+ * privacy notice is complete where production has RSVP on.
  *
  * Diagnostics carry a code, the file and a JSON path, never values from the files. Missing
  * translations in `site.json` are warnings, or errors with `strict`; in `site-content.json` they
@@ -76,6 +77,8 @@ export async function validate(
   let site: Site | undefined;
   const siteJson = await readJson(instanceDir, SITE_FILE, diagnostics);
   if (siteJson.ok) {
+    // The couple's display name, the event title and the other texts are public as well.
+    diagnostics.push(...checkBankDetails(SITE_FILE, siteJson.value));
     const { result: parsed, texts } = collectLocalizedTexts(() =>
       siteSchema.safeParse(siteJson.value, { reportInput: true }),
     );
