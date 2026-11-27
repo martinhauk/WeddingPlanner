@@ -5,7 +5,7 @@ import { randomBytes } from 'node:crypto';
 import { connect } from 'node:net';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { TableClient, type TableEntity, TableServiceClient } from '@azure/data-tables';
-import { BlobServiceClient } from '@azure/storage-blob';
+import { BlobServiceClient, ContainerSASPermissions } from '@azure/storage-blob';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { main } from '../src/cli.ts';
 import type { BackupEntity } from '../src/edm.ts';
@@ -393,24 +393,23 @@ describe.skipIf(!available)('check against Azurite (read a written backup back)'
     expect(printed).toEqual([`backup ${backupId}: ok (2 tables)`]);
   });
 
-  it('a corrupted gzip file fails', async () => {
+  it('a corrupted gzip file fails on its SHA-256 and is not unpacked', async () => {
     const backupId = await fresh();
     const data = await download(file(backupId, rsvps));
     data[data.length - 6] = (data[data.length - 6] ?? 0) ^ 0xff;
     await overwrite(file(backupId, rsvps), data);
-    expect(await problems(backupId, rsvps)).toEqual(['sha256', 'gzip']);
+    expect(await problems(backupId, rsvps)).toEqual(['sha256']);
     expect(await cli(backupId)).toBe(1);
-    expect(printed).toEqual([`backup ${backupId}: FAILED`, `  ${rsvps}: sha256, gzip`]);
+    expect(printed).toEqual([`backup ${backupId}: FAILED`, `  ${rsvps}: sha256`]);
   });
 
-  it('a changed row fails (content hash) without printing the row or a count', async () => {
+  it('a changed row fails without printing the row or a count', async () => {
     const backupId = await fresh();
     const text = gunzipSync(await download(file(backupId, rsvps))).toString('utf8');
     expect(text).toContain('"Guest 1"');
     await overwrite(file(backupId, rsvps), gzipSync(text.replace('"Guest 1"', '"Guest X"')));
     const found = await problems(backupId, rsvps);
     expect(found).toContain('sha256');
-    expect(found).toContain('content');
     expect(found).not.toContain('rows');
     expect(await cli(backupId)).toBe(1);
     expect(printed).toEqual([`backup ${backupId}: FAILED`, `  ${rsvps}: ${found?.join(', ')}`]);
@@ -445,6 +444,52 @@ describe.skipIf(!available)('check against Azurite (read a written backup back)'
     expect(result.unlisted).toEqual([`tables/${prefix}Other.jsonl.gz`]);
     expect(await cli(backupId)).toBe(1);
     expect(printed).toEqual([`backup ${backupId}: FAILED`, '  unlisted files: 1']);
+  });
+
+  /** A connection string for this container with only these SAS permissions (Azurite's key). */
+  async function limited(permissions: string): Promise<Record<string, string>> {
+    const url = await container.generateSasUrl({
+      permissions: ContainerSASPermissions.parse(permissions),
+      expiresOn: new Date(Date.now() + 60 * 60 * 1000),
+    });
+    const [base = '', sas = ''] = url.split('?');
+    const endpoint = base.slice(0, base.lastIndexOf('/'));
+    return { BACKUP_CONNECTION_STRING: `BlobEndpoint=${endpoint};SharedAccessSignature=${sas}` };
+  }
+
+  /** `check --quiet` with another environment; returns the exit code and what went to stderr. */
+  async function cliWith(backupId: string, environment: Record<string, string>) {
+    const errors: string[] = [];
+    printed = [];
+    const log = vi.spyOn(console, 'log').mockImplementation((line: string) => {
+      printed.push(line);
+    });
+    const error = vi.spyOn(console, 'error').mockImplementation((line: string) => {
+      errors.push(line);
+    });
+    try {
+      const code = await main(
+        ['check', '--backup-id', backupId, '--container', containerName, '--quiet'],
+        environment,
+      );
+      return { code, errors };
+    } finally {
+      log.mockRestore();
+      error.mockRestore();
+    }
+  }
+
+  it('exits 3 only when the folder cannot be listed; a refused read after that is a failure', async () => {
+    const backupId = await fresh();
+    // Read but no list: the identity has no usable read access yet, so the nightly job may skip.
+    const noList = await cliWith(backupId, await limited('r'));
+    expect(noList.code).toBe(3);
+    expect(noList.errors.join('\n')).toContain('may not read the backups');
+    expect(printed).toEqual([]);
+    // List but no read: never the "not yet" exit code.
+    const noRead = await cliWith(backupId, await limited('l'));
+    expect(noRead.code).toBe(1);
+    expect(noRead.errors.join('\n')).not.toMatch(/sig=(?!<redacted>)/);
   });
 
   it('the CLI needs a valid backup id', async () => {

@@ -8,6 +8,7 @@ import {
   decodeTable,
   encodeTable,
   inspectTableFile,
+  MAX_DECOMPRESSED_BYTES,
   type Manifest,
   newBackupId,
   parseManifest,
@@ -129,18 +130,24 @@ describe('table files', () => {
     const gzip = encodeTable(rows).gzip;
     expect(inspectTableFile(table, gzip).problems).toEqual([]);
 
-    // Recompressed, same rows: only the stored bytes differ.
+    // Recompressed, same rows: the stored bytes differ, and such a file is not unpacked.
     const recompressed = gzipSync(gunzip(gzip), { level: 0 });
-    expect(codes(inspectTableFile(table, recompressed))).toEqual(['size', 'sha256']);
+    expect(inspectTableFile(table, recompressed)).toEqual({
+      entities: undefined,
+      problems: [
+        { code: 'size', message: 'Rsvps: the file does not match the manifest (size)' },
+        { code: 'sha256', message: 'Rsvps: the file does not match the manifest (sha256)' },
+      ],
+    });
     // Other rows in a file that matches size and SHA-256: the manifest itself is wrong.
     const other = encodeTable(rows.slice(1)).gzip;
     const resigned = { ...table, bytes: other.length, sha256: sha256Hex(other) };
     expect(codes(inspectTableFile(resigned, other))).toEqual(['rows', 'content']);
-    expect(codes(inspectTableFile(table, Buffer.from('plain')))).toEqual([
-      'size',
-      'sha256',
-      'gzip',
-    ]);
+    expect(codes(inspectTableFile(table, Buffer.from('plain')))).toEqual(['size', 'sha256']);
+    const plain = Buffer.from('plain');
+    expect(
+      codes(inspectTableFile({ ...table, bytes: plain.length, sha256: sha256Hex(plain) }, plain)),
+    ).toEqual(['gzip']);
 
     let error: unknown;
     try {
@@ -151,6 +158,40 @@ describe('table files', () => {
     expect(error).toBeInstanceOf(TableFileError);
     expect(error).toBeInstanceOf(BackupFormatError);
     expect((error as TableFileError).code).toBe('rows');
+  });
+
+  it('never unpack a file whose size or SHA-256 failed', () => {
+    const table = manifestFor(rows).tables[0] as Manifest['tables'][number];
+    // Still a valid gzip of the same rows and length, only another time stamp in its header. With
+    // a ceiling of 1 byte, unpacking it would add `gzip`: the check stops at the SHA-256.
+    const restamped = Buffer.from(encodeTable(rows).gzip);
+    restamped[4] = (restamped[4] ?? 0) ^ 0xff;
+    expect(gunzip(restamped)).toEqual(gunzip(encodeTable(rows).gzip));
+    const result = inspectTableFile(table, restamped, 1);
+    expect(codes(result)).toEqual(['sha256']);
+    expect(result.entities).toBeUndefined();
+    expect(() => readTableFile(table, restamped, 1)).toThrow(/\(sha256\)$/);
+  });
+
+  it('cap what a file may unpack to, also when the manifest matches it (a forged manifest)', () => {
+    // 4 MiB of zeros packs into a few KB; a ceiling of 1 MiB refuses it before it is all in memory.
+    const bomb = gzipSync(Buffer.alloc(4 * 1024 * 1024));
+    const table = {
+      ...(manifestFor(rows).tables[0] as Manifest['tables'][number]),
+      bytes: bomb.length,
+      sha256: sha256Hex(bomb),
+    };
+    expect(inspectTableFile(table, bomb, 1024 * 1024)).toEqual({
+      entities: undefined,
+      problems: [{ code: 'gzip', message: 'Rsvps: unpacks to more than 1048576 bytes' }],
+    });
+    expect(() => readTableFile(table, bomb, 1024 * 1024)).toThrow(
+      'Rsvps: unpacks to more than 1048576 bytes',
+    );
+    expect(() => decodeTable(bomb, 'Rsvps', 1024 * 1024)).toThrow(TableFileError);
+    // Below the ceiling the same file unpacks (and then fails as what it is: not entity lines).
+    expect(codes(inspectTableFile(table, bomb, 8 * 1024 * 1024))).toEqual(['json']);
+    expect(MAX_DECOMPRESSED_BYTES).toBe(256 * 1024 * 1024);
   });
 
   it('report broken files by line, never by content', () => {
