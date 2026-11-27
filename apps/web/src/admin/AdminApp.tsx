@@ -39,8 +39,11 @@ export function AdminApp({ api, timeZone, confirm = defaultConfirm }: AdminAppPr
   const [editing, setEditing] = useState<AdminRsvp | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
-  /** The API asked for the dietary consent attestation on the last save of the open editor. */
-  const [consentError, setConsentError] = useState(false);
+  /**
+   * The body of the open editor's last save that the API refused for want of the dietary consent
+   * attestation; set only once that answer is in, so a save still in flight never shows it.
+   */
+  const [consentRefused, setConsentRefused] = useState<AdminRsvpUpdate | null>(null);
   const mounted = useRef(true);
 
   useEffect(() => {
@@ -104,9 +107,9 @@ export function AdminApp({ api, timeZone, confirm = defaultConfirm }: AdminAppPr
     setBusy(true);
     setNotice(null);
     const result = await api.update(rsvp.id, rsvp.version, body);
-    setConsentError(
-      !result.ok && result.kind === 'invalid' && !!result.fields?.includes(DIETARY_CONSENT_FIELD),
-    );
+    const refused =
+      !result.ok && result.kind === 'invalid' && !!result.fields?.includes(DIETARY_CONSENT_FIELD);
+    setConsentRefused(refused ? body : null);
     if (await settle(result, de.saved)) {
       setEditing(null);
     }
@@ -161,10 +164,10 @@ export function AdminApp({ api, timeZone, confirm = defaultConfirm }: AdminAppPr
                 key={`${editing.id}-${editing.version}`}
                 rsvp={editing}
                 saving={busy}
-                consentError={consentError}
+                consentRefused={consentRefused ?? undefined}
                 onSave={(body) => void save(editing, body)}
                 onCancel={() => {
-                  setConsentError(false);
+                  setConsentRefused(null);
                   setEditing(null);
                 }}
               />
@@ -175,7 +178,7 @@ export function AdminApp({ api, timeZone, confirm = defaultConfirm }: AdminAppPr
               busy={busy}
               onEdit={(rsvp) => {
                 setNotice(null);
-                setConsentError(false);
+                setConsentRefused(null);
                 setEditing(rsvp);
               }}
               onDelete={(rsvp) => void remove(rsvp)}
