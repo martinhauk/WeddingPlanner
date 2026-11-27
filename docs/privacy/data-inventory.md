@@ -32,7 +32,8 @@ the guest (create, change, withdraw) and by an admin (change, delete).
 | `Attending`, `PersonCount`, `AttendingCount` | Yes or no, number of people                      | Guest list, planning                     | Art. 6(1)(a), 6(1)(b) GDPR   |
 | `People[].tags`                              | vegetarian, vegan, glutenFree, lactoseFree       | Food planning (only for a "yes")         | Art. 9(2)(a) GDPR (explicit) |
 | `People[].note`                              | Free text: allergies, intolerances (health data) | Food planning (only for a "yes")         | Art. 9(2)(a) GDPR (explicit) |
-| `DietaryConsent`                             | `true` after guest consent (guest writes only)   | Proof of consent (Art. 7(1) GDPR)        | Art. 6(1)(c) GDPR            |
+| `DietaryConsent`                             | `true` while stored dietary data has consent     | Proof of consent (Art. 7(1) GDPR)        | Art. 6(1)(c) GDPR            |
+| `DietaryConsentSource`, `DietaryConsentAt`   | `guest` (form) or `admin` (attested), time (UTC) | Proof of consent (Art. 7(1) GDPR)        | Art. 6(1)(c) GDPR            |
 | `Message`                                    | Optional free text to the couple                 | Personal message                         | Art. 6(1)(a) GDPR            |
 | `Language`                                   | `de`, `en` or `es`                               | Answering in the guest's language        | Art. 6(1)(b) GDPR            |
 | `CreatedAt`, `UpdatedAt`                     | Timestamps (UTC)                                 | Deadline handling, support               | Art. 6(1)(b) GDPR            |
@@ -41,13 +42,28 @@ the guest (create, change, withdraw) and by an admin (change, delete).
 
 - Dietary data is dropped for a "no". **Guest writes** (`POST /api/rsvp`, `PUT /api/rsvp/me`) store it
   only with `dietaryConsent: true` (the API answers 400 otherwise; the form asks for consent as soon
-  as dietary data is entered) and set `DietaryConsent` accordingly.
-- **Admin edits do not check or record consent.** The admin editor can add or change tags and notes;
-  `PUT /api/admin/rsvps/{id}` never asks for `dietaryConsent` and keeps the reply's old
-  `DietaryConsent` flag. So an admin can store Art. 9 data while the flag says `false`. Until the API
-  records it: **admins enter dietary data only with the guest's explicit consent and keep their own
-  proof of it** (for example the guest's email), because an admin edit does not update the flag. A
-  follow-up for the API is open (consent check or attestation on admin writes).
+  as dietary data is entered) and record the consent: `DietaryConsent` `true`, source `guest`, the
+  time. A guest write without dietary data clears all three.
+- **Admin edits need an attestation** (`PUT /api/admin/rsvps/{id}`, `AdminDietaryConsent`). An edit
+  that adds or changes dietary data (a new tag, a new or changed note, a new name for a person who
+  keeps dietary data, a new person with dietary data; people compared by id) must carry
+  `dietaryConsent: true`: the admin attests that the guest explicitly consented, for example in an
+  email. A rename counts because the data may now belong to someone else. Without the attestation
+  the API answers 400 and stores nothing;
+  the admin editor shows the checkbox "Der Gast hat ausdrücklich eingewilligt, dass wir diese Angaben
+  zum Essen speichern." as soon as such a change is made. An attested edit records source `admin` and
+  the time. Unchanged or only removed dietary data needs no attestation and keeps the stored consent;
+  no dietary data left clears it. The system records **that and when** an admin attested, **not which
+  admin** (no admin identity is stored, see `UpdatedBy` below) and not the guest's proof: **admins
+  tick the box only with the guest's explicit consent and keep their own proof of it** (for example
+  the guest's email).
+- Rows written before the source existed have no `DietaryConsentSource`/`DietaryConsentAt`; their
+  `DietaryConsent` `true` came from a guest write (only guest writes set it then). Admin edits from
+  before the attestation left the flag as it was. So on a reply without an earlier guest consent,
+  dietary data an admin entered then keeps `DietaryConsent` `false` until it is changed with the
+  attestation or the guest saves the reply. On a reply where the guest had consented in the form,
+  the guest's `true` stayed, although it records no consent for what the admin added. Production RSVP
+  was still off when the attestation landed, so only e2e and test data can be affected.
 - **No IP addresses, cookies or raw tokens are stored.** The edit token (32 random bytes) exists only
   as its SHA-256 hash (`TokenHash`), compared in constant time.
 - **Deletes are hard deletes.** A withdrawn reply (`DELETE /api/rsvp/me`) or an admin delete removes
@@ -92,7 +108,8 @@ content, from the architecture and API plan; check the fields again when the adm
   nothing.
 - **Lifetime:** valid while the reply exists; withdrawing the reply invalidates it everywhere.
 - Anyone who has the link can see and change that reply, like with the cookie. Guests should keep it
-  to themselves (the page says so).
+  to themselves (the link box and the privacy notice say so; the notice also says that only a hash
+  is stored and that the secret stays in the fragment).
 
 ## Browser storage (guest's device)
 
@@ -142,10 +159,9 @@ guest or admin uses).
   beyond the technical request metadata every request has (IP address, user agent at the edge).
 - External links (Google Maps directions, WhatsApp, playlists, hotel sites) send nothing until the
   guest opens them. Fonts and images are self-hosted. The CSP
-  ([`build-swa-config.ts`](../../apps/web/swa-config/build-swa-config.ts)) allows two third-party
-  origins: `img-src https://tile.openstreetmap.org` for the map tiles, and
-  `frame-src https://www.openstreetmap.org`, which nothing uses (the map draws tiles, no page has an
-  iframe; a follow-up drops it). The map tiles are requested with
+  ([`build-swa-config.ts`](../../apps/web/swa-config/build-swa-config.ts)) allows one third-party
+  origin: `img-src https://tile.openstreetmap.org` for the map tiles. It frames nothing
+  (`frame-src 'none'`: the map draws tiles, no page has an iframe). The map tiles are requested with
   `Referrer-Policy: strict-origin-when-cross-origin`, so OSM sees only the site's origin.
 
 ## Telemetry and logs

@@ -153,7 +153,8 @@ production deploys and approve the newest. Pending approvals expire after 30 day
 | `has INSTANCE_REPO but no INSTANCE_REPO_DEPLOY_KEY secret`             | Re-run the bootstrap for that environment; it recreates the key and the secret.                                                     |
 | `cannot fetch the main branch of INSTANCE_REPO`                        | The deploy key was removed or rotated without updating the secret, the repo was renamed, or it has no `main`. Re-run the bootstrap. |
 | `the instance repo still says "sample": true`                          | Remove `"sample": true` from the instance's `instance.json`.                                                                        |
-| `Invalid (strict): … error(s)`                                         | Run `pnpm content:validate ../<neutral-name> --strict` locally; it lists the same codes with values.                                |
+| `Invalid (strict) for <env>: … error(s)` (deploy)                      | Run `pnpm content:validate ../<neutral-name> --strict --env <env>` locally: the same codes and JSON paths, to check in your files.  |
+| `Invalid (strict): … error(s)` (the instance repo's `validate` job)    | Checked for every environment at once: run `pnpm content:validate ../<neutral-name> --strict` locally (no `--env`).                 |
 | `production deploys only commits on main`                              | The `ref` is not on `main`. Merge first, or pick a commit on `main`.                                                                |
 | `production deploys only instance commits on the instance repo's main` | Merge the content branch in the instance repo first.                                                                                |
 | `run this workflow from main`                                          | A manual run was started from another branch; start it from `main` and use `ref`.                                                   |

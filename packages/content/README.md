@@ -59,7 +59,7 @@ code and a JSON path, never the value.
 | `E_PRIVACY_EMAIL`      | error                    | the same, under the same condition as `E_PRIVACY_MISSING`                                                                                                              |
 | `E_RSVP_DEADLINE`      | error, every environment | `rsvpDeadline` (the date the page shows) is not the date of `instance.json` `rsvp.deadline` in `rsvp.timeZone`; a deadline at exactly 00:00 also allows the day before |
 | `W_RSVP_DEADLINE_TEXT` | warning (heuristic)      | a text about replying names another date (see below)                                                                                                                   |
-| `E_BANK_DETAILS`       | error, every environment | any string of `site-content.json` (every language, names, addresses, notes, links) holds an IBAN or a labelled BIC                                                     |
+| `E_BANK_DETAILS`       | error, every environment | any string of `site-content.json` or `site.json` (every language, names, addresses, notes, links) holds an IBAN or a labelled BIC                                      |
 
 - **Privacy gate.** The privacy warnings become errors with the same meaning (`W_PRIVACY_*` →
   `E_PRIVACY_*`) only where guests can reply in production. The target comes from `--env`, else
@@ -67,16 +67,22 @@ code and a JSON path, never the value.
   repo's own `validate` step therefore fails as soon as `instance.json` switches RSVP on in
   production without the privacy details, before any deploy. `e2e` and `test` keep the warnings.
 - **Deadline in texts.** `W_RSVP_DEADLINE_TEXT` looks at the RSVP section's intro, FAQ answers whose
-  question is about replying and any text with a reply word (`zusag`, `absag`, `antwort`,
-  `rückmeld`, `anmeld`, `bescheid`, `reply`, `respon`, `rsvp`, `let us know`, `confirm`,
-  `contest`, `avisa`, …). It recognises `2099-05-01`, `1.5.2099`, `1/5/2099` (German and Spanish),
-  `1. Mai 2099`, `1 May 2099`, `May 1, 2099` and `1 de mayo de 2099`, each also without the year,
-  and allows the deadline's date and the wedding date. It is a heuristic, so it only warns.
+  question is about replying and any text with a reply word. German stems count inside compounds
+  (`zusag`, `absag`, `rückmeld`, `antwort` but not `verantwort…`, `anmeld`, `bescheid` but not
+  `bescheiden`); English and Spanish ones only at the start of a word (`reply`, `respond`,
+  `response`, `respuest`, `rsvp`, `let us know`, `confirm`, `contest`, `avisa`), so
+  "responsible", "responsable" and "correspond" do not count. It recognises `2099-05-01`,
+  `1.5.2099`, `1/5/2099` (German and Spanish), `1. Mai 2099`, `1 May 2099`, `May 1, 2099` and
+  `1 de mayo de 2099`, each also without the year; a lower-case `may`, `march` or `august` is a
+  month only with a year or an ordinal ("may 2, 2099", "2nd of may"), so "children under 12 may
+  come" is no date. It allows the deadline's date and the wedding date. It is a heuristic, so it
+  only warns.
 - **Bank details** ("no IBAN" decision: the gifts section says "ask us"). An IBAN of any country
-  counts with or without spaces and in any case, but only when its check digits and mod-97 checksum
-  are valid, so phone numbers, dates, postcodes and booking codes never match. A BIC counts only
-  next to its label (`BIC`, `SWIFT`, `SWIFT-Code`, `BIC/SWIFT`, `Código SWIFT`, …). The Vite
-  plugin runs the same check, so a page build fails too.
+  counts with or without spaces or hyphens between its groups and in any case, but only when its
+  check digits and mod-97 checksum are valid, so phone numbers, dates, postcodes and booking codes
+  never match. A BIC counts only next to its label (`BIC`, `SWIFT`, `SWIFT-Code`, `BIC/SWIFT`,
+  `Código SWIFT`, …). `validate` checks every string of `site-content.json` and `site.json`; the
+  Vite plugin runs the same check on `site-content.json`, so a page build fails too.
 
 ## JSON Schemas
 

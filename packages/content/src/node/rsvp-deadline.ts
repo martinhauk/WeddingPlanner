@@ -12,10 +12,11 @@ import type { FoundText } from './localized-texts.ts';
  * - `E_RSVP_DEADLINE`: `site-content.json` `rsvpDeadline` (the date the page shows) is another day.
  *   A deadline at exactly midnight also accepts the day before ("by 1 May" = until 2 May, 00:00).
  * - `W_RSVP_DEADLINE_TEXT`: a text about replying (the RSVP section's intro, a FAQ entry, or any
- *   text with a word like "reply", "zusagen" or "confirmar") names another date. A heuristic, so a
- *   warning: it recognises `2099-05-01`, `1.5.2099`, `1/5/2099` (German and Spanish only), `1. Mai
- *   2099`, `1 May 2099`, `May 1, 2099` and `1 de mayo de 2099`, each also without the year. The
- *   wedding date is allowed in such a text too.
+ *   text with a word like "reply", "zusagen" or "confirmar", but not "verantwortlich" or
+ *   "responsible") names another date. A heuristic, so a warning: it recognises `2099-05-01`,
+ *   `1.5.2099`, `1/5/2099` (German and Spanish only), `1. Mai 2099`, `1 May 2099`, `May 1, 2099`
+ *   and `1 de mayo de 2099`, each also without the year; a lower-case "may", "march" or "august"
+ *   counts only with a year or an ordinal. The wedding date is allowed in such a text too.
  *
  * Diagnostics carry the JSON path only, never a date.
  */
@@ -143,18 +144,18 @@ const DATE_PATTERNS: ReadonlyArray<{
   // 1. Mai 2099, 1 May 2099, 1st of May, 1 de mayo de 2099
   {
     pattern: new RegExp(
-      `(?<![\\p{L}\\p{N}])(\\d{1,2})(?:\\.|st|nd|rd|th|º)?\\s{0,3}(?:de\\s{1,3}|of\\s{1,3})?(${MONTH})(?![\\p{L}])(?:,?\\s{0,3}(?:del?\\s{1,3})?(\\d{4})(?!\\d))?`,
+      `(?<![\\p{L}\\p{N}])(\\d{1,2})(\\.|st|nd|rd|th|º)?\\s{0,3}(de\\s{1,3}|of\\s{1,3})?(${MONTH})(?![\\p{L}])(?:,?\\s{0,3}(?:del?\\s{1,3})?(\\d{4})(?!\\d))?`,
       'giu',
     ),
-    read: (m) => named(m[1], m[2], m[3]),
+    read: (m) => named(m[1], m[4], m[5], m[2] !== undefined || m[3] !== undefined),
   },
   // May 1, 2099, May 1st
   {
     pattern: new RegExp(
-      `(?<![\\p{L}])(${MONTH})\\s{1,3}(\\d{1,2})(?:st|nd|rd|th)?(?!\\d)(?:,?\\s{1,3}(\\d{4})(?!\\d))?`,
+      `(?<![\\p{L}])(${MONTH})\\s{1,3}(\\d{1,2})(st|nd|rd|th)?(?!\\d)(?:,?\\s{1,3}(\\d{4})(?!\\d))?`,
       'giu',
     ),
-    read: (m) => named(m[2], m[1], m[3]),
+    read: (m) => named(m[2], m[1], m[4], m[3] !== undefined),
   },
 ];
 
@@ -175,9 +176,35 @@ export function findDates(text: string, language: SiteLanguage): TextDate[] {
   return found;
 }
 
-// Words that make a text about replying, in German, English and Spanish (prefixes, any case).
-const REPLY_WORDS =
-  /zusag|absag|rückmeld|rueckmeld|antwort|anmeld|bescheid|reply|respon|rsvp|r\.s\.v\.p|let us know|confirm|contest|avis[aá]/i;
+// Words that make a text about replying, in German, English and Spanish (stems, any case). German
+// stems also count inside a compound ("Rückantwort", "Voranmeldung"), but not in "verantwortlich"
+// (responsible) or "bescheiden" (modest). English and Spanish stems must start a word, and none of
+// them matches "responsible", "responsable" or "correspond".
+const REPLY_WORDS = new RegExp(
+  [
+    // German
+    'zusag',
+    'absag',
+    'r(?:ü|ue)ckmeld',
+    '(?<!ver)antwort',
+    'anmeld',
+    'bescheid(?!en)',
+    // English and Spanish, at the start of a word
+    `(?<![\\p{L}\\p{N}])(?:${[
+      'repl(?:y|ies|ied)',
+      'respond',
+      'response',
+      'respuest',
+      'rsvp',
+      'r\\.s\\.v\\.p',
+      'let us know',
+      'confirm',
+      'contest',
+      'av[ií]s[aá]',
+    ].join('|')})`,
+  ].join('|'),
+  'iu',
+);
 
 type ReplyText = FoundText & {
   /** Text in the same place that makes this one about replying, e.g. the question of a FAQ answer. */
@@ -209,8 +236,28 @@ function date(day?: string, month?: string, year?: string): TextDate | undefined
   return valid(Number(day), Number(month), year);
 }
 
-function named(day?: string, month?: string, year?: string): TextDate | undefined {
-  return valid(Number(day), MONTHS.get((month ?? '').toLowerCase()) ?? 0, year);
+// English month names that are everyday words too ("children under 2 may come", "we march 5 km"):
+// written in lower case they count only in a complete date, with a year or an ordinal ("may 2,
+// 2099", "2nd of may"). Capitalised ("May 2", "2 May") they always count.
+const AMBIGUOUS_MONTHS: ReadonlySet<string> = new Set(['may', 'march', 'august']);
+
+/**
+ * A date with a month name. `ordinal` tells whether the day had an ordinal mark (`1.`, `1st`,
+ * `1º`) or the month an "of"/"de" before it, which makes a lower-case ambiguous name a month.
+ */
+function named(
+  day: string | undefined,
+  month: string | undefined,
+  year: string | undefined,
+  ordinal: boolean,
+): TextDate | undefined {
+  const name = month ?? '';
+  const lower = name.toLowerCase();
+  const capitalised = name.charAt(0) !== lower.charAt(0);
+  if (AMBIGUOUS_MONTHS.has(lower) && !capitalised && year === undefined && !ordinal) {
+    return undefined;
+  }
+  return valid(Number(day), MONTHS.get(lower) ?? 0, year);
 }
 
 function valid(day: number, month: number, year?: string): TextDate | undefined {

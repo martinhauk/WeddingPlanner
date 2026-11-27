@@ -85,6 +85,8 @@ export function PrivacyPage({ content, regions, lang }: PrivacyPageProps) {
       <Block id="privacy-data" title={tx(p.dataTitle)}>
         <p>{tx(p.dataRsvp)}</p>
         <p>{tx(p.dataHealth)}</p>
+        <p>{tx(p.editLink)}</p>
+        <p>{tx(p.editLinkSecret)}</p>
         <p>{tx(p.dataTechnical)}</p>
       </Block>
 

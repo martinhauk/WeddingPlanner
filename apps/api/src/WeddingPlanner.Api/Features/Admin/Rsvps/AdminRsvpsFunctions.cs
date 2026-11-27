@@ -23,7 +23,10 @@ namespace WeddingPlanner.Api.Features.Admin.Rsvps;
 ///   totals}</c>, latest change first.</item>
 ///   <item><c>PUT</c>: replaces the reply with the body (the same shape as the guest's <c>PUT /api/rsvp/me</c>; the
 ///   honeypot is ignored). Requires <c>If-Match</c> with the reply's <c>version</c> (428 without, 412 when it changed
-///   since). Person ids sent back are kept. 200 <c>{rsvp}</c> with the new <c>version</c>.</item>
+///   since). Person ids sent back are kept. An edit that adds or changes dietary data needs <c>dietaryConsent: true</c>,
+///   the admin's attestation that the guest explicitly consented (400 <c>validation_failed</c> with
+///   <c>dietaryConsent</c> / <c>required</c> otherwise; <see cref="AdminDietaryConsent"/>). 200 <c>{rsvp}</c> with the
+///   new <c>version</c>.</item>
 ///   <item><c>DELETE</c>: deletes the reply (<c>If-Match</c> optional, 412 when it does not match); 204.</item>
 /// </list>
 /// An unknown id answers 404 <c>not_found</c>.
@@ -111,7 +114,12 @@ public sealed class AdminRsvpsFunctions(IRsvpRepository repository, RsvpSettings
 
         var current = stored.Record;
         var existingIds = current.Answer.People.Select(person => person.Id).OfType<string>();
-        var record = current with { Answer = PersonIds.Assign(answer, existingIds), UpdatedAt = timeProvider.GetUtcNow() };
+        var now = timeProvider.GetUtcNow();
+        var edited = current with { Answer = PersonIds.Assign(answer, existingIds), UpdatedAt = now };
+        if (AdminDietaryConsent.Apply(current, edited, input.DietaryConsent, now) is not { } record)
+        {
+            return RsvpHttp.ValidationFailed([RsvpDietaryConsent.Required]);
+        }
 
         StoredRsvp? replaced;
         try

@@ -61,6 +61,103 @@ describe('PrivacyPage', () => {
     }
   });
 
+  it.each([
+    [
+      'de',
+      'Welche Daten wir verarbeiten',
+      'Cookies und lokaler Speicher',
+      [
+        /Später könnt ihr ihn euch auf der Einladungsseite bei eurer Antwort noch einmal anzeigen lassen, in dem Browser, mit dem ihr geantwortet oder den Link geöffnet habt\./,
+        /Wer den Link hat, kann eure Antwort ansehen, ändern und zurückziehen\. Behaltet ihn deshalb für euch\./,
+        /Wir speichern davon nur eine Art Fingerabdruck \(einen sogenannten Hash\)/,
+        /Teil der Adresse nach dem „#“\. Diesen Teil schicken Browser beim Öffnen nicht an den Server/,
+      ],
+      [
+        /Er wird gesetzt, wenn ihr eure Antwort absendet oder euren persönlichen Link öffnet; hat dieser Browser schon eine andere Antwort/,
+        /in diesem Browser oder mit eurem persönlichen Link; außer euch \(und allen, die euren Link haben\) können das nur wir als Gastgeber\./,
+      ],
+      /nur noch über uns|auf dieser Seite|Gerät/,
+    ],
+    [
+      'en',
+      'What data we process',
+      'Cookies and local storage',
+      [
+        /You can show it again later on the invitation page, with your reply, in the browser you used to reply or to open the link\./,
+        /Anyone who has the link can see, change and withdraw your reply, so please keep it to yourselves\./,
+        /We only store a kind of fingerprint of it \(a so-called hash\)/,
+        /after the “#”\. Browsers do not send this part to the server/,
+      ],
+      [
+        /It is set when you send your reply or open your personal link; if this browser already has another reply/,
+        /in this browser or with your personal link; apart from you \(and anyone who has your link\), only we as your hosts can change it\./,
+      ],
+      /only we can change a saved reply|on this page|device/,
+    ],
+    [
+      'es',
+      'Qué datos tratamos',
+      'Cookies y almacenamiento local',
+      [
+        /Más tarde podéis volver a mostrarlo en la página de la invitación, junto a vuestra respuesta, en el navegador con el que respondisteis o abristeis el enlace\./,
+        /Quien tenga el enlace puede ver, cambiar y retirar vuestra respuesta, así que no lo compartáis con nadie\./,
+        /Solo guardamos una especie de huella de ella \(lo que se llama un hash\)/,
+        /sigue a «#»\. Los navegadores no envían esa parte al servidor/,
+      ],
+      [
+        /Se crea al enviar la respuesta o al abrir vuestro enlace personal; si este navegador ya tiene otra respuesta/,
+        /en este navegador o con vuestro enlace personal; aparte de vosotros \(y de quien tenga vuestro enlace\), solo podemos cambiarla nosotros como anfitriones\./,
+      ],
+      /solo nosotros podremos cambiar|en esta página|dispositivo/,
+    ],
+  ] as const)(
+    'explains the personal link and who can change a reply in %s',
+    (lang, dataTitle, cookiesTitle, link, cookie, stale) => {
+      renderPage({ lang });
+      const data = block(dataTitle);
+      for (const sentence of link) {
+        expect(data.textContent).toMatch(sentence);
+      }
+      const cookies = block(cookiesTitle);
+      for (const sentence of cookie) {
+        expect(cookies.textContent).toMatch(sentence);
+      }
+      // Cookies belong to a browser, and the link is shown again on the invitation, not here.
+      expect(data.textContent).not.toMatch(stale);
+      expect(cookies.textContent).not.toMatch(stale);
+    },
+  );
+
+  it('says that consent for dietary data given outside the form is recorded too', () => {
+    renderPage();
+    const data = block('Welche Daten wir verarbeiten');
+    expect(data.textContent).toContain(
+      'Gebt ihr uns solche Angaben auf anderem Weg, zum Beispiel per E-Mail, tragen wir sie nur ein, wenn ihr ausdrücklich zugestimmt habt.',
+    );
+    expect(data.textContent).not.toContain('nur, wenn ihr im Antwortformular ausdrücklich');
+  });
+
+  it.each([
+    [
+      'de',
+      'Welche Daten wir verarbeiten',
+      'Wir halten fest, dass und wann eingewilligt wurde und ob im Formular oder direkt bei uns.',
+    ],
+    [
+      'en',
+      'What data we process',
+      'We record that consent was given, when, and whether in the form or directly to us.',
+    ],
+    [
+      'es',
+      'Qué datos tratamos',
+      'Dejamos constancia de que se dio el consentimiento, de cuándo y de si fue en el formulario o directamente a nosotros.',
+    ],
+  ] as const)('says how the consent is recorded in %s', (lang, dataTitle, sentence) => {
+    renderPage({ lang });
+    expect(block(dataTitle).textContent).toContain(sentence);
+  });
+
   it('deletes by the last day of the third month after the wedding by default', () => {
     renderPage();
     expect(
@@ -109,6 +206,13 @@ describe('PrivacyPage', () => {
     expect(hosting.textContent).toContain('Germany West Central (Frankfurt am Main, Deutschland)');
     expect(hosting.textContent).toContain('EU-U.S. Data Privacy Framework');
     expect(hosting.textContent).toContain('Application Insights');
+    // The pages come from Microsoft's worldwide network; only the interface runs in the app region.
+    expect(hosting.textContent).toContain('über ein weltweites Netz von Servern');
+    expect(hosting.textContent).toMatch(
+      /Die Schnittstelle, die eure Antworten entgegennimmt, läuft in der Azure-Region East US 2/,
+    );
+    expect(hosting.textContent).toMatch(/dort liegen auch die Sicherungskopien/);
+    expect(hosting.textContent).toMatch(/persönlichen Links, Cookies oder IP-Adressen/);
   });
 
   it('has no transfer paragraph in the EU and the standard clauses elsewhere', () => {

@@ -98,12 +98,34 @@ delete exceeds 30 days. Sources (Microsoft Learn):
   soft-deleted under the old 30-day setting can stay up to 30 days; that was before RSVP opened.
 
 **Deploys and the lifecycle run.** Every deploy of an environment redeploys `backup.bicep`, which
-writes the lifecycle policy again even when nothing changed. Microsoft Learn says an active policy
-"is interrupted if changes are made to the policy" and that "policy changes and updates can also
-take up to 24 hours to go into effect" (lifecycle overview, performance characteristics). It does
-not say whether an unchanged write counts as a change. If it does, many deploys in a row could
-delay deletions beyond the slack above. So run the check command below after a week with many
-deploys as well, not only monthly. (A possible follow-up: write the policy only when it changes.)
+includes the lifecycle policy even when nothing changed. What Microsoft Learn says:
+
+- Lifecycle overview, "Policy execution": "When you add or edit the rules of a lifecycle policy, it
+  can take up to 24 hours for changes to go into effect and for the first execution to start. An
+  active policy processes objects periodically, and is interrupted if changes are made to the
+  policy." The performance article adds that "policy changes and updates can also take up to 24
+  hours to go into effect".
+- Resource Manager deployment modes: "If the resource already exists in the resource group and its
+  settings are unchanged, no operation is taken for that resource." (The same article also says
+  that redeploying an existing resource reapplies all its properties.)
+- Neither says whether the storage resource provider treats a write of an identical policy as a
+  change. The policy has a server-set `lastModifiedTime`, which shows whether a write counted.
+
+**Decision (#90): no change to the template or the workflows for now.** Resource Manager documents
+that an unchanged resource gets no operation, production deploys wait for the owner's approval (so
+they do not come several times a day like test deploys), and the slack above absorbs a delayed run. A fix would need a workflow step
+(read the deployed policy, skip it when it is the same), not just Bicep, so it is not worth the risk
+unless the check below shows a problem. **Owner check, read-only, once on test:** note the time,
+deploy a change that does not touch `backup.bicep`, then compare:
+
+```sh
+az storage account management-policy show --account-name "$account" -g "$rg" \
+  --query lastModifiedTime -o tsv   # prints only the time
+```
+
+If the time stays the same, an identical write is no change and nothing needs doing. If it moves
+with every deploy, file a follow-up (write the policy only when it differs), and until it lands run
+the check command below also after a week with many deploys, not only monthly.
 
 **Undelete restarts the clock.** Restoring a soft-deleted backup (Undelete Blob, container
 restore) brings it back as a normal blob; the next lifecycle run deletes it again and it is

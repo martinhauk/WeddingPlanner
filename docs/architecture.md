@@ -212,16 +212,23 @@ from them.
 ## 8. RSVP identity: cookies and edit link
 
 - **`wp_rsvp = <rsvpId>.<token>`**: 32 random bytes, only the SHA-256 hash is stored and compared in
-  constant time. `HttpOnly; Secure; SameSite=Strict; Path=/api/rsvp; Max-Age=…` (never `Expires` or
-  `Domain`; cleared with `Max-Age=0`).
-- **`wp_rsvp_state = yes|no`**: no personal data, readable by JS, drives the "answered" UI. `Secure;
-  SameSite=Lax; Path=/`.
-- **Personal edit link** `/rsvp#edit=<rsvpId>.<token>`: shown after saving; the token stays in the URL
-  fragment (never sent to servers or in `Referer`). On another device or an in-app browser,
-  `POST /rsvp/claim` sets the cookies there.
-- **localStorage** holds only the language and the map consent.
-- No consent banner: both cookies are strictly necessary for a service the guest requested, and the
-  privacy notice lists them.
+  constant time. `HttpOnly; Secure; SameSite=Strict; Path=/api/rsvp; Max-Age=…` (365 days, renewed
+  whenever the page reads or changes the reply; never `Expires` or `Domain`; cleared with
+  `Max-Age=0` on withdrawal and on a stale cookie). Set when a reply is sent or a personal link is
+  claimed.
+- **`wp_rsvp_state = yes|no`**: no personal data, readable by JS, drives the "answered" UI (hero,
+  navigation, RSVP section) without an API call. `Secure; SameSite=Lax; Path=/`.
+- **Personal edit link** `/#edit=<rsvpId>.<token>` (the cookie's value, `editToken` in the API):
+  shown on the success screen and later behind "show your personal link"; the token stays in the URL
+  fragment (never sent to servers or in `Referer`). Opening it jumps to the RSVP section, which calls
+  `POST /api/rsvp/claim` once it nears the viewport: that sets the cookies in this browser (another
+  device or an in-app browser) and removes the fragment. A browser that already holds another reply
+  first asks "who are you?" with a claim preview (names only, no cookies). Withdrawing the reply
+  invalidates the link everywhere. Contract: [`api.md`](api.md).
+- **localStorage** holds only the language (`wp.lang`). The map's consent is not stored: the
+  click-to-load map asks again on every visit.
+- No consent banner: both cookies and `wp.lang` are strictly necessary for a function the guest
+  uses, and the privacy notice lists them (and the personal link).
 
 ## 9. Fuzzy matching
 
@@ -297,7 +304,7 @@ subscription would be disabled after 30 days).
 ## 13. Security model
 
 - **Static site:** CSP (`default-src 'self'`; images from self, `data:` and the OSM tile server;
-  `frame-ancestors 'none'`, `object-src 'none'`), HSTS, `nosniff`, `Referrer-Policy:
+  `frame-src 'none'`, `frame-ancestors 'none'`, `object-src 'none'`), HSTS, `nosniff`, `Referrer-Policy:
   strict-origin-when-cross-origin`, `Permissions-Policy`, `X-Frame-Options: DENY`, `X-Robots-Tag:
   noindex, nofollow`. Fonts self-hosted, no third-party iframes, the map loads only after a click.
 - **RSVP API:** cookies as in section 8; CSRF protection through `SameSite=Strict`, JSON-only bodies,

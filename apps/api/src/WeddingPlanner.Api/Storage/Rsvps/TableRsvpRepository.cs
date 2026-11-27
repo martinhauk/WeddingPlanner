@@ -12,7 +12,9 @@ namespace WeddingPlanner.Api.Storage.Rsvps;
 /// <c>Attending</c> (bool), <c>People</c> (JSON array of <c>{id, name, tags, note}</c>), <c>PersonCount</c>,
 /// <c>AttendingCount</c> (people coming: <c>PersonCount</c> for a yes, 0 for a no), <c>Message</c>,
 /// <c>Language</c>, <c>DietaryConsent</c> (bool; missing on older entities, read as <see langword="false"/>),
-/// <c>TokenHash</c>, <c>CreatedAt</c>, <c>UpdatedAt</c>, <c>SchemaVersion</c>.
+/// <c>DietaryConsentSource</c> (<c>guest</c> or <c>admin</c>) and <c>DietaryConsentAt</c> (both only while there is
+/// consent; missing on older entities, read as <see langword="null"/>), <c>TokenHash</c>, <c>CreatedAt</c>,
+/// <c>UpdatedAt</c>, <c>SchemaVersion</c>. Columns added later are optional, so the schema version stays 1.
 /// </summary>
 public sealed class TableRsvpRepository(TableStorage storage) : IRsvpRepository
 {
@@ -138,6 +140,8 @@ public sealed class TableRsvpRepository(TableStorage storage) : IRsvpRepository
             ["Message"] = answer.Message,
             ["Language"] = answer.Language,
             ["DietaryConsent"] = record.DietaryConsent,
+            ["DietaryConsentSource"] = record.DietaryConsentSource is { } source ? SourceName(source) : null,
+            ["DietaryConsentAt"] = record.DietaryConsentAt?.ToUniversalTime(),
             ["TokenHash"] = record.TokenHash,
             ["CreatedAt"] = record.CreatedAt.ToUniversalTime(),
             ["UpdatedAt"] = record.UpdatedAt.ToUniversalTime(),
@@ -160,8 +164,24 @@ public sealed class TableRsvpRepository(TableStorage storage) : IRsvpRepository
             entity.GetString("TokenHash") ?? string.Empty,
             entity.GetDateTimeOffset("CreatedAt") ?? DateTimeOffset.MinValue,
             entity.GetDateTimeOffset("UpdatedAt") ?? DateTimeOffset.MinValue,
-            entity.GetBoolean("DietaryConsent") ?? false);
+            entity.GetBoolean("DietaryConsent") ?? false,
+            ParseSource(entity.GetString("DietaryConsentSource")),
+            entity.GetDateTimeOffset("DietaryConsentAt"));
     }
+
+    private static string SourceName(DietaryConsentSource source) => source switch
+    {
+        DietaryConsentSource.Guest => "guest",
+        DietaryConsentSource.Admin => "admin",
+        _ => throw new ArgumentOutOfRangeException(nameof(source)),
+    };
+
+    private static DietaryConsentSource? ParseSource(string? value) => value switch
+    {
+        "guest" => DietaryConsentSource.Guest,
+        "admin" => DietaryConsentSource.Admin,
+        _ => null,
+    };
 
     private static string CheckId(string id)
     {
