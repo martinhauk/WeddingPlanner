@@ -8,8 +8,15 @@
 # schedule cannot pass). Each job runs in the GitHub Environment backup-<env> instead, created by
 # scripts/bootstrap.sh: deployments from main only, no reviewer, and a dedicated identity
 # id-<slug>-<env>-backup with Reader (to find the accounts), Storage Table Data Reader and the
-# write-only "WeddingPlanner Backup Writer" role on the app resource group. It can neither change
-# guest data nor read or delete backups.
+# custom role "WeddingPlanner Backup Writer" on the app resource group: write new blobs, and read
+# blobs only as current versions in the table-backups container (a role assignment condition). No
+# delete. It can neither change guest data nor delete backups.
+#
+# Check: right after the export, the job reads the new backup back and compares it with its own
+# manifest (tools/table-backup check: sizes, SHA-256, gzip, every line, row counts, content hashes,
+# no missing or unlisted file). A failed check fails the job. While the role still lacks blob read
+# (the owner has not re-run scripts/bootstrap.sh since read was added), the check is skipped with
+# a notice and the backup itself still counts.
 #
 # Skips cleanly while backup-<env> has no Azure variables (bootstrap not re-run yet) or the
 # environment was never deployed. Hygiene: account names are masked, nothing prints row counts.
@@ -83,6 +90,7 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: Export the tables
+        id: export
         if: steps.gate.outputs.run == 'true'
         run: |
           # Naming contract of infra/app: the data account starts with "st", the backup account
@@ -110,7 +118,30 @@ jobs:
             --backup-account "$backup" --json >"$RUNNER_TEMP/backup-manifest.json"
           id=$(jq -er '.backupId' "$RUNNER_TEMP/backup-manifest.json")
           rm -f "$RUNNER_TEMP/backup-manifest.json"
+          echo "id=$id" >>"$GITHUB_OUTPUT"
+          echo "BACKUP_ACCOUNT=$backup" >>"$GITHUB_ENV"
           {
             echo "### $BACKUP_ENV nightly backup"
             echo "- backup id: \`$id\`"
           } >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Check the backup (read it back and compare it with its manifest)
+        if: steps.export.outputs.id != ''
+        env:
+          BACKUP_ID: ${{ steps.export.outputs.id }}
+        run: |
+          # --quiet prints "backup <id>: ok (<n> tables)" or a failure code per table, never row
+          # counts. Exit 1 (a problem) fails the job. Exit 3 means this identity may not read
+          # blobs: the custom role got blob read after the first bootstrap, so until the owner
+          # re-runs scripts/bootstrap.sh for this environment the check is skipped with a notice.
+          status=0
+          node tools/table-backup/src/cli.ts check --quiet --backup-id "$BACKUP_ID" \
+            --backup-account "$BACKUP_ACCOUNT" || status=$?
+          case $status in
+            0) echo "- backup check: passed" >>"$GITHUB_STEP_SUMMARY" ;;
+            3)
+              echo "::notice::backup-$BACKUP_ENV may not read backups yet, so this backup was not checked (re-run scripts/bootstrap.sh --env $BACKUP_ENV)."
+              echo "- backup check: skipped (no blob read yet; re-run the bootstrap)" >>"$GITHUB_STEP_SUMMARY"
+              ;;
+            *) exit "$status" ;;
+          esac
