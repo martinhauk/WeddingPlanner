@@ -55,9 +55,19 @@ export const privacyText = {
     es: 'Cuando respondéis a la invitación: los nombres de las personas por las que respondéis, si venís, datos voluntarios sobre alimentación (vegetariana, vegana, sin gluten, sin lactosa) y sobre alergias o intolerancias, vuestro mensaje opcional, el idioma elegido y la fecha de la respuesta. Responder es voluntario, pero sin nombres no podemos asignar la respuesta.',
   },
   dataHealth: {
-    de: 'Angaben zu Allergien und Unverträglichkeiten können Gesundheitsdaten sein (Art. 9 DSGVO). Angaben zur Ernährung speichern wir deshalb nur, wenn ihr im Antwortformular ausdrücklich einwilligt, und nur für Personen, die kommen. Bei einer Absage speichern wir keine Angaben zur Ernährung.',
-    en: 'Allergies and intolerances can be health data (Art. 9 GDPR). We therefore only store dietary details if you explicitly consent in the reply form, and only for people who are coming. If you decline, we store no dietary details.',
-    es: 'Las alergias e intolerancias pueden ser datos de salud (art. 9 RGPD). Por eso solo guardamos datos sobre alimentación si lo consentís expresamente en el formulario, y solo de las personas que vienen. Si no venís, no guardamos ningún dato sobre alimentación.',
+    de: 'Angaben zu Allergien und Unverträglichkeiten können Gesundheitsdaten sein (Art. 9 DSGVO). Angaben zur Ernährung speichern wir deshalb nur mit eurer ausdrücklichen Einwilligung und nur für Personen, die kommen. Im Antwortformular willigt ihr selbst ein. Gebt ihr uns solche Angaben auf anderem Weg, zum Beispiel per E-Mail, tragen wir sie nur ein, wenn ihr ausdrücklich zugestimmt habt. Wir halten fest, dass und wann eingewilligt wurde und ob im Formular oder bei uns. Bei einer Absage speichern wir keine Angaben zur Ernährung.',
+    en: 'Allergies and intolerances can be health data (Art. 9 GDPR). We therefore only store dietary details with your explicit consent, and only for people who are coming. In the reply form, you give your consent yourselves. If you give us such details another way, for example by email, we only enter them if you have explicitly agreed. We record that and when consent was given, and whether it was given in the form or to us. If you decline, we store no dietary details.',
+    es: 'Las alergias e intolerancias pueden ser datos de salud (art. 9 RGPD). Por eso solo guardamos datos sobre alimentación con vuestro consentimiento expreso, y solo de las personas que vienen. En el formulario lo dais vosotros mismos. Si nos dais esos datos por otra vía, por ejemplo por correo electrónico, solo los introducimos si lo habéis consentido expresamente. Dejamos constancia de que se dio el consentimiento, de cuándo y de si fue en el formulario o a nosotros. Si no venís, no guardamos ningún dato sobre alimentación.',
+  },
+  editLink: {
+    de: 'Nach dem Absenden bekommt ihr einen persönlichen Link zu eurer Antwort; auf dieser Seite könnt ihr ihn euch später noch einmal anzeigen lassen. Wer den Link hat, kann eure Antwort ansehen, ändern und zurückziehen. Behaltet ihn deshalb für euch. Er funktioniert, solange es eure Antwort gibt.',
+    en: 'After sending your reply, you get a personal link to it; you can show it again on this page later. Anyone who has the link can see, change and withdraw your reply, so please keep it to yourselves. It works for as long as your reply exists.',
+    es: 'Después de enviar la respuesta recibís un enlace personal a ella; más tarde podéis volver a mostrarlo en esta página. Quien tenga el enlace puede ver, cambiar y retirar vuestra respuesta, así que guardadlo para vosotros. Funciona mientras exista vuestra respuesta.',
+  },
+  editLinkSecret: {
+    de: 'Der Link enthält einen zufälligen geheimen Schlüssel. Wir speichern davon nur eine Art Fingerabdruck (einen sogenannten Hash), aus dem sich der Link nicht zurückgewinnen lässt, nie den Link selbst. Der Schlüssel steht im Teil der Adresse nach dem „#“. Diesen Teil schicken Browser beim Öffnen nicht an den Server, er landet also nicht in Server-Protokollen. Nur die Seite selbst liest ihn und schickt ihn verschlüsselt an unsere Schnittstelle, um eure Antwort zu öffnen.',
+    en: 'The link contains a random secret key. We only store a kind of fingerprint of it (a so-called hash) from which the link cannot be recovered, never the link itself. The key is in the part of the address after the “#”. Browsers do not send this part to the server when they open the page, so it does not end up in server logs. Only the page itself reads it and sends it, encrypted, to our interface to open your reply.',
+    es: 'El enlace contiene una clave secreta aleatoria. Solo guardamos una especie de huella de ella (lo que se llama un hash), a partir de la cual no se puede recuperar el enlace, y nunca el enlace en sí. La clave va en la parte de la dirección que sigue a «#». Los navegadores no envían esa parte al servidor al abrir la página, así que no queda en los registros del servidor. Solo la propia página la lee y la envía cifrada a nuestra interfaz para abrir vuestra respuesta.',
   },
   dataTechnical: {
     de: 'Beim Aufruf der Website verarbeitet unser Hosting-Anbieter technisch notwendige Verbindungsdaten wie eure IP-Adresse, um die Seiten auszuliefern und vor Missbrauch zu schützen. Unsere Anwendung zählt Anfragen zum Schutz vor Missbrauch kurzzeitig im Arbeitsspeicher und speichert keine IP-Adressen.',
@@ -106,9 +116,9 @@ export const privacyText = {
     es: 'Alojamiento y proveedores',
   },
   hosting: {
-    de: 'Website und Antwortformular laufen auf Microsoft Azure. Anbieter ist die Microsoft Ireland Operations Limited (Dublin, Irland), die als Auftragsverarbeiter nach unserer Weisung handelt (Art. 28 DSGVO). Die Website und ihre Schnittstelle werden in der Azure-Region {appRegion} betrieben; eure Antworten werden in der Region {dataRegion} gespeichert.',
-    en: 'The website and the reply form run on Microsoft Azure. The provider is Microsoft Ireland Operations Limited (Dublin, Ireland), which acts as a processor on our instructions (Art. 28 GDPR). The website and its interface run in the Azure region {appRegion}; your replies are stored in the region {dataRegion}.',
-    es: 'La web y el formulario de respuesta funcionan en Microsoft Azure. El proveedor es Microsoft Ireland Operations Limited (Dublín, Irlanda), que actúa como encargado del tratamiento siguiendo nuestras instrucciones (art. 28 RGPD). La web y su interfaz funcionan en la región de Azure {appRegion}; vuestras respuestas se guardan en la región {dataRegion}.',
+    de: 'Website und Antwortformular laufen auf Microsoft Azure. Anbieter ist die Microsoft Ireland Operations Limited (Dublin, Irland), die als Auftragsverarbeiter nach unserer Weisung handelt (Art. 28 DSGVO). Die Seiten liefert Microsoft über ein weltweites Netz von Servern aus. Die Schnittstelle, die eure Antworten entgegennimmt, läuft in der Azure-Region {appRegion}. Gespeichert werden eure Antworten in der Region {dataRegion}; dort liegen auch die Sicherungskopien und die technischen Protokolle.',
+    en: 'The website and the reply form run on Microsoft Azure. The provider is Microsoft Ireland Operations Limited (Dublin, Ireland), which acts as a processor on our instructions (Art. 28 GDPR). Microsoft delivers the pages through a worldwide network of servers. The interface that receives your replies runs in the Azure region {appRegion}. Your replies are stored in the region {dataRegion}, where the backups and the technical logs are kept as well.',
+    es: 'La web y el formulario de respuesta funcionan en Microsoft Azure. El proveedor es Microsoft Ireland Operations Limited (Dublín, Irlanda), que actúa como encargado del tratamiento siguiendo nuestras instrucciones (art. 28 RGPD). Microsoft sirve las páginas a través de una red mundial de servidores. La interfaz que recibe vuestras respuestas funciona en la región de Azure {appRegion}. Vuestras respuestas se guardan en la región {dataRegion}, donde también están las copias de seguridad y los registros técnicos.',
   },
   transferUs: {
     de: 'Da dabei auch Server in den USA genutzt werden, können eure Angaben dorthin übermittelt werden. Microsoft ist nach dem EU-U.S. Data Privacy Framework zertifiziert, für das ein Angemessenheitsbeschluss der EU-Kommission besteht (Art. 45 DSGVO); zusätzlich gelten die Standardvertragsklauseln der EU-Kommission (Art. 46 DSGVO).',
@@ -121,9 +131,9 @@ export const privacyText = {
     es: 'Como también se utilizan servidores fuera de la UE, vuestros datos pueden transferirse allí. Para ello se aplican las cláusulas contractuales tipo de la Comisión Europea (art. 46 RGPD).',
   },
   logs: {
-    de: 'Technische Protokolle (Azure Application Insights) helfen uns, Fehler zu finden. Sie enthalten keine Namen, Nachrichten, Angaben zur Ernährung, Cookies oder IP-Adressen.',
-    en: 'Technical logs (Azure Application Insights) help us find errors. They contain no names, messages, dietary details, cookies or IP addresses.',
-    es: 'Los registros técnicos (Azure Application Insights) nos ayudan a encontrar errores. No contienen nombres, mensajes, datos de alimentación, cookies ni direcciones IP.',
+    de: 'Technische Protokolle (Azure Application Insights) helfen uns, Fehler zu finden. Sie enthalten keine Namen, Nachrichten, Angaben zur Ernährung, persönlichen Links, Cookies oder IP-Adressen und werden nach 30 Tagen gelöscht.',
+    en: 'Technical logs (Azure Application Insights) help us find errors. They contain no names, messages, dietary details, personal links, cookies or IP addresses, and are deleted after 30 days.',
+    es: 'Los registros técnicos (Azure Application Insights) nos ayudan a encontrar errores. No contienen nombres, mensajes, datos de alimentación, enlaces personales, cookies ni direcciones IP, y se borran a los 30 días.',
   },
 
   mapsTitle: { de: 'Karten und Links', en: 'Maps and links', es: 'Mapas y enlaces' },
@@ -149,9 +159,9 @@ export const privacyText = {
     es: 'Cookies y almacenamiento local',
   },
   cookieRsvp: {
-    de: 'erkennt eure Antwort wieder, damit ihr sie ansehen, ändern oder zurückziehen könnt. Er enthält nur eine zufällige Kennung, keinen Namen, wird erst beim Absenden gesetzt, gilt ein Jahr und ist für Skripte nicht lesbar.',
-    en: 'recognises your reply so you can view, change or withdraw it. It only holds a random identifier, no name, is set only when you send your reply, lasts one year and cannot be read by scripts.',
-    es: 'reconoce vuestra respuesta para que podáis verla, cambiarla o retirarla. Solo contiene un identificador aleatorio, ningún nombre; se crea al enviar la respuesta, dura un año y los scripts no pueden leerla.',
+    de: 'erkennt eure Antwort wieder, damit ihr sie ansehen, ändern oder zurückziehen könnt. Er enthält nur zufällige Zeichen (denselben geheimen Schlüssel wie euer persönlicher Link), keinen Namen. Er wird gesetzt, wenn ihr eure Antwort absendet oder euren persönlichen Link öffnet; hat dieses Gerät schon eine andere Antwort, fragt die Seite vorher, wer ihr seid. Er gilt ein Jahr und ist für Skripte nicht lesbar.',
+    en: 'recognises your reply so you can view, change or withdraw it. It only holds random characters (the same secret key as your personal link), no name. It is set when you send your reply or open your personal link; if this device already has another reply, the page first asks who you are. It lasts one year and cannot be read by scripts.',
+    es: 'reconoce vuestra respuesta para que podáis verla, cambiarla o retirarla. Solo contiene caracteres aleatorios (la misma clave secreta que vuestro enlace personal), ningún nombre. Se crea al enviar la respuesta o al abrir vuestro enlace personal; si este dispositivo ya tiene otra respuesta, la página os pregunta antes quiénes sois. Dura un año y los scripts no pueden leerla.',
   },
   cookieState: {
     de: 'merkt sich nur „ja“ oder „nein“, damit die Seite zeigen kann, dass ihr schon geantwortet habt. Gilt ein Jahr.',
@@ -164,9 +174,9 @@ export const privacyText = {
     es: '(almacenamiento local del navegador): el idioma que habéis elegido.',
   },
   cookies: {
-    de: 'Diese Speicherungen sind für die Funktionen, die ihr nutzt, unbedingt erforderlich (§ 25 Abs. 2 Nr. 2 TDDDG). Deshalb fragen wir nicht mit einem Cookie-Banner nach. Tracking- oder Werbe-Cookies gibt es nicht. Ihr könnt Cookies und lokalen Speicher jederzeit in eurem Browser löschen; eine gespeicherte Antwort könnt ihr danach nur noch über uns ändern.',
-    en: 'These are strictly necessary for the functions you use (Section 25(2) no. 2 TDDDG), so we don’t ask with a cookie banner. There are no tracking or advertising cookies. You can delete cookies and local storage in your browser at any time; after that, only we can change a saved reply for you.',
-    es: 'Son estrictamente necesarios para las funciones que utilizáis (§ 25.2, n.º 2 TDDDG), por eso no os preguntamos con un banner de cookies. No hay cookies de seguimiento ni de publicidad. Podéis borrar las cookies y el almacenamiento local en vuestro navegador en cualquier momento; después, solo nosotros podremos cambiar una respuesta guardada.',
+    de: 'Diese Speicherungen sind für die Funktionen, die ihr nutzt, unbedingt erforderlich (§ 25 Abs. 2 Nr. 2 TDDDG). Deshalb fragen wir nicht mit einem Cookie-Banner nach. Tracking- oder Werbe-Cookies gibt es nicht. Ihr könnt Cookies und lokalen Speicher jederzeit in eurem Browser löschen. Eure gespeicherte Antwort öffnet ihr danach wieder mit eurem persönlichen Link. Bis zum Ende der Antwortfrist könnt ihr sie selbst ändern, auf diesem Gerät oder mit eurem persönlichen Link; außer euch können das nur wir als Gastgeber.',
+    en: 'These are strictly necessary for the functions you use (Section 25(2) no. 2 TDDDG), so we don’t ask with a cookie banner. There are no tracking or advertising cookies. You can delete cookies and local storage in your browser at any time. After that, you can open your saved reply again with your personal link. Until replies close, you can change it yourselves, on this device or with your personal link; apart from you, only we as your hosts can change it.',
+    es: 'Son estrictamente necesarios para las funciones que utilizáis (§ 25.2, n.º 2 TDDDG), por eso no os preguntamos con un banner de cookies. No hay cookies de seguimiento ni de publicidad. Podéis borrar las cookies y el almacenamiento local en vuestro navegador en cualquier momento. Después podréis volver a abrir vuestra respuesta guardada con vuestro enlace personal. Hasta que termine el plazo de respuesta podéis cambiarla vosotros mismos, en este dispositivo o con vuestro enlace personal; aparte de vosotros, solo podemos cambiarla nosotros como anfitriones.',
   },
 
   retentionTitle: {

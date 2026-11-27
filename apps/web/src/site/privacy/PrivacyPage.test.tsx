@@ -61,6 +61,70 @@ describe('PrivacyPage', () => {
     }
   });
 
+  it.each([
+    [
+      'de',
+      'Welche Daten wir verarbeiten',
+      'Cookies und lokaler Speicher',
+      [
+        /Wer den Link hat, kann eure Antwort ansehen, ändern und zurückziehen\. Behaltet ihn deshalb für euch\./,
+        /Wir speichern davon nur eine Art Fingerabdruck \(einen sogenannten Hash\)/,
+        /Teil der Adresse nach dem „#“\. Diesen Teil schicken Browser beim Öffnen nicht an den Server/,
+      ],
+      /Er wird gesetzt, wenn ihr eure Antwort absendet oder euren persönlichen Link öffnet/,
+      /außer euch können das nur wir als Gastgeber\./,
+      /nur noch über uns/,
+    ],
+    [
+      'en',
+      'What data we process',
+      'Cookies and local storage',
+      [
+        /Anyone who has the link can see, change and withdraw your reply, so please keep it to yourselves\./,
+        /We only store a kind of fingerprint of it \(a so-called hash\)/,
+        /after the “#”\. Browsers do not send this part to the server/,
+      ],
+      /It is set when you send your reply or open your personal link/,
+      /apart from you, only we as your hosts can change it\./,
+      /only we can change a saved reply/,
+    ],
+    [
+      'es',
+      'Qué datos tratamos',
+      'Cookies y almacenamiento local',
+      [
+        /Quien tenga el enlace puede ver, cambiar y retirar vuestra respuesta, así que guardadlo para vosotros\./,
+        /Solo guardamos una especie de huella de ella \(lo que se llama un hash\)/,
+        /sigue a «#»\. Los navegadores no envían esa parte al servidor/,
+      ],
+      /Se crea al enviar la respuesta o al abrir vuestro enlace personal/,
+      /solo podemos cambiarla nosotros como anfitriones\./,
+      /solo nosotros podremos cambiar/,
+    ],
+  ] as const)(
+    'explains the personal link and who can change a reply in %s',
+    (lang, dataTitle, cookiesTitle, link, cookie, closing, stale) => {
+      renderPage({ lang });
+      const data = block(dataTitle);
+      for (const sentence of link) {
+        expect(data.textContent).toMatch(sentence);
+      }
+      const cookies = block(cookiesTitle);
+      expect(cookies.textContent).toMatch(cookie);
+      expect(cookies.textContent).toMatch(closing);
+      expect(cookies.textContent).not.toMatch(stale);
+    },
+  );
+
+  it('says that consent for dietary data given outside the form is recorded too', () => {
+    renderPage();
+    const data = block('Welche Daten wir verarbeiten');
+    expect(data.textContent).toContain(
+      'Gebt ihr uns solche Angaben auf anderem Weg, zum Beispiel per E-Mail, tragen wir sie nur ein, wenn ihr ausdrücklich zugestimmt habt.',
+    );
+    expect(data.textContent).not.toContain('nur, wenn ihr im Antwortformular ausdrücklich');
+  });
+
   it('deletes by the last day of the third month after the wedding by default', () => {
     renderPage();
     expect(
@@ -109,6 +173,13 @@ describe('PrivacyPage', () => {
     expect(hosting.textContent).toContain('Germany West Central (Frankfurt am Main, Deutschland)');
     expect(hosting.textContent).toContain('EU-U.S. Data Privacy Framework');
     expect(hosting.textContent).toContain('Application Insights');
+    // The pages come from Microsoft's worldwide network; only the interface runs in the app region.
+    expect(hosting.textContent).toContain('über ein weltweites Netz von Servern');
+    expect(hosting.textContent).toMatch(
+      /Die Schnittstelle, die eure Antworten entgegennimmt, läuft in der Azure-Region East US 2/,
+    );
+    expect(hosting.textContent).toMatch(/dort liegen auch die Sicherungskopien/);
+    expect(hosting.textContent).toMatch(/persönlichen Links, Cookies oder IP-Adressen/);
   });
 
   it('has no transfer paragraph in the EU and the standard clauses elsewhere', () => {
