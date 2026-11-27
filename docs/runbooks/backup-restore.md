@@ -77,8 +77,10 @@ A backup blob written at day 0 is gone, including every copy, by:
 | **Total**                                                                                       | **27** |
 | A blob that was ever overwritten needs one more run (old versions go first)                     | 28     |
 
-That leaves 2 to 3 days for runs that start late or take longer. `infra/app/tests/backup.jq`
-fails if the threshold plus three runs plus soft delete exceeds 30 days. Sources (Microsoft Learn):
+Microsoft Learn does not say whether "more than 18 days" is counted in whole days. If it is, add
+one day: 28, or 29 for an overwritten blob. That leaves 1 to 3 days for runs that start late or take
+longer. `infra/app/tests/backup.jq` fails if the threshold plus one day plus three runs plus soft
+delete exceeds 30 days. Sources (Microsoft Learn):
 
 - Lifecycle: "Lifecycle management can take up to 24 hours to begin processing after the prior run
   is completed"; a new or changed policy takes up to 24 hours to take effect (lifecycle management
@@ -94,6 +96,14 @@ fails if the threshold plus three runs plus soft delete exceeds 30 days. Sources
 - A changed soft delete period applies to deletions after the change; blobs deleted before keep the
   period that applied then (soft delete for blobs and containers). After this change, anything
   soft-deleted under the old 30-day setting can stay up to 30 days; that was before RSVP opened.
+
+**Deploys and the lifecycle run.** Every deploy of an environment redeploys `backup.bicep`, which
+writes the lifecycle policy again even when nothing changed. Microsoft Learn says an active policy
+"is interrupted if changes are made to the policy" and that "policy changes and updates can also
+take up to 24 hours to go into effect" (lifecycle overview, performance characteristics). It does
+not say whether an unchanged write counts as a change. If it does, many deploys in a row could
+delay deletions beyond the slack above. So run the check command below after a week with many
+deploys as well, not only monthly. (A possible follow-up: write the policy only when it changes.)
 
 **Undelete restarts the clock.** Restoring a soft-deleted backup (Undelete Blob, container
 restore) brings it back as a normal blob; the next lifecycle run deletes it again and it is
@@ -117,20 +127,29 @@ test and production (after the first deploy of this change):
 ```sh
 rg=rg-<slug>-<env>
 account=$(az storage account list -g "$rg" --query "[?starts_with(name, 'bk')].name" -o tsv)
-az storage container immutability-policy show --account-name "$account" -c table-backups -g "$rg"
-# Only if it shows a policy (state "Unlocked"):
-az lock delete --name do-not-delete -g "$rg"
+# Prints only the state and the days (the full output contains the account name):
+az storage container immutability-policy show --account-name "$account" -c table-backups -g "$rg" \
+  --query "{state: state, days: immutabilityPeriodSinceCreationInDays}" -o table
+# Only if it shows a policy with state "Unlocked":
 etag=$(az storage container immutability-policy show --account-name "$account" -c table-backups \
   -g "$rg" --query etag -o tsv)
+az lock delete --name do-not-delete -g "$rg"
 az storage container immutability-policy delete --account-name "$account" -c table-backups \
   -g "$rg" --if-match "$etag"
-scripts/bootstrap.sh --env <env> --instance <instance checkout>   # puts the lock back
+# Put the lock back right away, also if the delete failed (same name and level as the bootstrap):
+az lock create --name do-not-delete --lock-type CanNotDelete -g "$rg" \
+  --notes "Protects the RSVP data of this WeddingPlanner environment. Managed by scripts/bootstrap.sh; see docs/runbooks/azure-onboarding.md before removing it."
+az lock show --name do-not-delete -g "$rg" --query level -o tsv   # CanNotDelete
 ```
 
-Never print or paste the account name. If the policy says `Locked`, it cannot be deleted or
-shortened: stop and plan the purge by hand (backups can be deleted once their 30 days have passed).
+The `az lock create` line works the same for every environment. Re-running the bootstrap would put
+the lock back too, but its arguments differ per environment (`--env e2e` takes no `--instance` and
+resets the e2e alert emails without `--alert-emails-from`), so use the line above. Never print or
+paste the account name. If the policy says `Locked`, it cannot be deleted or shortened: stop and
+plan the purge by hand (backups can be deleted once their 30 days have passed).
 
-**Check that backups really go (owner, three weeks after deleting the old policy, then monthly while RSVP data exists).** List
+**Check that backups really go (owner, three weeks after deleting the old policy, then monthly and
+after a week with many deploys while RSVP data exists).** List
 everything in the container, including previous versions and soft-deleted blobs, older than 30
 days. The answer must be `0`:
 

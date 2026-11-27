@@ -7,8 +7,9 @@
 //   + 1 lifecycle run that deletes the current version           <= 1 day
 //   + 1 run that deletes the previous version that delete leaves <= 1 day
 //   + softDeleteDays                                                7 days
-//   = 27 days after it was written (28 for a blob that was ever overwritten, one more run).
-// Lifecycle runs start at most 24 hours after the previous one completed, so 2 to 3 days of slack
+//   = 27 days after it was written (28 for a blob that was ever overwritten, one more run; one
+// day more each if Azure counts "GreaterThan" in whole days, which Microsoft Learn does not say).
+// Lifecycle runs start at most 24 hours after the previous one completed, so 1 to 3 days of slack
 // remain. docs/runbooks/backup-restore.md explains the arithmetic and its sources.
 //
 // There is deliberately NO immutability (WORM) policy on the container: Microsoft documents that
