@@ -17,6 +17,9 @@ export type Diet = (typeof DIETS)[number];
 /** One guest plus at most five companions. */
 export const MAX_PEOPLE = 6;
 
+/** Shortest name the API accepts, in Unicode code points. */
+export const MIN_NAME_LENGTH = 2;
+
 /** The API's text limits (UTF-16 code units, like `maxlength`); `GET /api/rsvp/status` may lower them. */
 export const DEFAULT_LIMITS: RsvpLimits = {
   maxPeople: MAX_PEOPLE,
@@ -95,10 +98,15 @@ export function replyFromView(view: RsvpView): Reply {
 }
 
 /**
- * The request body: trimmed text, dietary data only for a "yes", person ids kept for an update, and
- * the dietary consent whenever dietary data is sent.
+ * The request body: trimmed text, dietary data only for a "yes", person ids kept for an update, the
+ * dietary consent whenever dietary data is sent, and the fill time (`elapsedMs`) when given.
  */
-export function toRequest(reply: Reply, language: string, website: string): RsvpRequest {
+export function toRequest(
+  reply: Reply,
+  language: string,
+  website: string,
+  elapsedMs?: number,
+): RsvpRequest {
   const people = reply.people.map((person): RsvpRequestPerson => {
     const note = person.dietNote.trim();
     return {
@@ -122,7 +130,42 @@ export function toRequest(reply: Reply, language: string, website: string): Rsvp
     language,
     website,
     ...(hasDietData(reply) ? { dietaryConsent: reply.dietConsent } : {}),
+    ...(elapsedMs === undefined ? {} : { elapsedMs: Math.max(0, Math.round(elapsedMs)) }),
   };
+}
+
+/**
+ * A web address as the API detects it in a name: a scheme (`https://`), `www.`, or a label of three
+ * or more characters, a dot and a lower-case top-level domain (`example.com`), so `Dr.med.` passes.
+ * No lookbehind: older Safari versions fail to parse it, which would break the whole page.
+ */
+const SCHEME_OR_WWW = /[a-z][a-z0-9+.-]*:\/\/|(?:^|[^\p{L}\p{N}])www\./iu;
+const DOMAIN = /(?:^|[^\p{L}\p{N}-])[\p{L}\p{N}-]{3,}\.[a-z]{2,24}(?![\p{L}\p{N}])/u;
+
+/**
+ * The API's name rules (beyond required and the maximum length): at least two characters, a letter,
+ * no web address and no `@`. Returns the finding's code, or `null`.
+ */
+export function nameRuleCode(name: string): 'too_short' | 'invalid' | null {
+  const text = name.normalize('NFC');
+  if ([...text].length < MIN_NAME_LENGTH) {
+    return 'too_short';
+  }
+  const webAddress = SCHEME_OR_WWW.test(text) || DOMAIN.test(text);
+  return !/\p{L}/u.test(text) || /[@\uFF20]/.test(text) || webAddress ? 'invalid' : null;
+}
+
+/**
+ * The key the API compares the names of one reply by: case, diacritics and punctuation are ignored,
+ * so `María-José García` and `maria jose GARCIA` are the same person.
+ */
+export function nameKey(name: string): string {
+  return name
+    .normalize('NFD')
+    .replace(/\p{Mn}/gu, '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
 }
 
 /**
@@ -134,12 +177,22 @@ export function validateReply(reply: Reply, limits: RsvpLimits): FieldError[] {
   if (reply.people.length > limits.maxPeople) {
     errors.push({ field: 'people', code: 'too_many' });
   }
+  const names = new Set<string>();
   reply.people.forEach((person, index) => {
     const name = person.name.trim();
-    if (name === '') {
-      errors.push({ field: `people[${index}].name`, code: 'required' });
-    } else if (name.length > limits.maxNameLength) {
-      errors.push({ field: `people[${index}].name`, code: 'too_long' });
+    const field = `people[${index}].name`;
+    const code =
+      name === ''
+        ? 'required'
+        : name.length > limits.maxNameLength
+          ? 'too_long'
+          : nameRuleCode(name);
+    if (code !== null) {
+      errors.push({ field, code });
+    } else if (names.has(nameKey(name))) {
+      errors.push({ field, code: 'duplicate' });
+    } else {
+      names.add(nameKey(name));
     }
     if (reply.attending && person.dietNote.trim().length > limits.maxNoteLength) {
       errors.push({ field: `people[${index}].dietary.note`, code: 'too_long' });

@@ -1,5 +1,5 @@
 import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from 'react';
-import type { FieldError, RsvpLimits } from '../api/rsvp-client.ts';
+import { type FieldError, type RsvpLimits, SUBMISSION_REJECTED } from '../api/rsvp-client.ts';
 import { fill } from '../fill.tsx';
 import { type Lang, t } from '../i18n.ts';
 import { PRIVACY_PATH } from '../privacy/route.ts';
@@ -35,11 +35,30 @@ export type RsvpFormProps = {
 /** Fields the form can point at; other findings only show the summary. */
 const FIELD = /^people\[(\d+)\]\.(name|dietary\.note)$|^message$|^dietaryConsent$/;
 
+/** Messages of the name findings (the API's name rules; `too_long` is shared with the other texts). */
+const NAME_ERRORS: Readonly<Record<string, UiText>> = {
+  required: e.nameRequired,
+  too_short: e.nameTooShort,
+  invalid: e.nameInvalid,
+  duplicate: e.nameDuplicate,
+};
+
 function errorText(field: string, code: string): UiText {
   if (field === 'dietaryConsent') {
     return e.consentRequired;
   }
-  return code === 'required' ? e.nameRequired : code === 'too_long' ? e.tooLong : e.validation;
+  if (code === 'too_long') {
+    return e.tooLong;
+  }
+  return (field.endsWith('.name') ? NAME_ERRORS[code] : undefined) ?? e.validation;
+}
+
+/** The message above the buttons: a refused submission, a finding without a field, or "check the fields". */
+function summaryText(fieldErrors: readonly FieldError[]): UiText {
+  if (fieldErrors.some((error) => error.code === SUBMISSION_REJECTED)) {
+    return e.rejected;
+  }
+  return fieldErrors.some((error) => !FIELD.test(error.field)) ? e.validation : e.checkFields;
 }
 
 /**
@@ -70,7 +89,6 @@ export function RsvpForm(props: RsvpFormProps) {
   }, [fieldErrors]);
 
   const errorOf = (field: string) => fieldErrors.find((error) => error.field === field)?.code;
-  const unplaced = fieldErrors.some((error) => !FIELD.test(error.field));
   const fieldId = (field: string) => `${id}-${field.replace(/[^a-z0-9]/gi, '-')}`;
 
   /** `aria-invalid` and the message of one field. */
@@ -247,7 +265,7 @@ export function RsvpForm(props: RsvpFormProps) {
       </div>
       {fieldErrors.length > 0 && (
         <p className="rsvp-alert" role="alert">
-          {t(unplaced ? e.validation : e.checkFields, lang)}
+          {t(summaryText(fieldErrors), lang)}
         </p>
       )}
       {alert}

@@ -142,8 +142,8 @@ public sealed class RsvpValidatorTests
     {
         var limits = new RsvpLimits(maxCompanions: 2);
 
-        RsvpValidator.Validate(Draft(people: [Person("A"), Person("B"), Person("C")]), limits).IsValid.ShouldBeTrue();
-        RsvpValidator.Validate(Draft(people: [Person("A"), Person("B"), Person("C"), Person("D")]), limits).Errors
+        RsvpValidator.Validate(Draft(people: [Person("Anna"), Person("Ben"), Person("Pablo")]), limits).IsValid.ShouldBeTrue();
+        RsvpValidator.Validate(Draft(people: [Person("Anna"), Person("Ben"), Person("Pablo"), Person("Jürgen")]), limits).Errors
             .ShouldBe([new("people", RsvpValidationCodes.TooMany)]);
     }
 
@@ -176,6 +176,60 @@ public sealed class RsvpValidatorTests
 
         Valid(Draft(people: [Person($"   {eighty}   ")])).People[0].Name.ShouldBe(eighty);
         Invalid(Draft(people: [Person(eighty + "b")])).ShouldBe([new("people[0].name", RsvpValidationCodes.TooLong)]);
+    }
+
+    [Fact]
+    public void AppliesTheNameRulesToEveryPerson()
+    {
+        var errors = Invalid(Draft(people: [Person(" A "), Person("12"), Person("anna@example.com"), Person("Visit example.com"), Person("Ben")]));
+
+        errors.ShouldBe(
+        [
+            new("people[0].name", RsvpValidationCodes.TooShort),
+            new("people[1].name", RsvpValidationCodes.Invalid),
+            new("people[2].name", RsvpValidationCodes.Invalid),
+            new("people[3].name", RsvpValidationCodes.Invalid),
+        ]);
+    }
+
+    [Fact]
+    public void CountsTheMinimumLengthAfterSanitising()
+    {
+        Invalid(Draft(people: [Person("A​")])).ShouldBe([new("people[0].name", RsvpValidationCodes.TooShort)]);
+        Valid(Draft(people: [Person("Jo")])).People[0].Name.ShouldBe("Jo");
+    }
+
+    [Fact]
+    public void RejectsTheSameNameTwiceInOneReplyIgnoringCaseAndDiacritics()
+    {
+        var errors = Invalid(Draft(people:
+        [
+            Person("María-José García"),
+            Person("Pablo Pérez"),
+            Person("maria jose GARCIA"),
+            Person("PABLO PEREZ"),
+            Person("Jürgen Müller"),
+        ]));
+
+        errors.ShouldBe(
+        [
+            new("people[2].name", RsvpValidationCodes.Duplicate),
+            new("people[3].name", RsvpValidationCodes.Duplicate),
+        ]);
+    }
+
+    [Fact]
+    public void ReportsADuplicateForANoAsWell()
+    {
+        Invalid(Draft(attending: false, people: [Person("Ben"), Person(" ben ")]))
+            .ShouldBe([new("people[1].name", RsvpValidationCodes.Duplicate)]);
+    }
+
+    [Fact]
+    public void AnInvalidNameIsNotAlsoADuplicate()
+    {
+        Invalid(Draft(people: [Person("A"), Person("a")]))
+            .ShouldBe([new("people[0].name", RsvpValidationCodes.TooShort), new("people[1].name", RsvpValidationCodes.TooShort)]);
     }
 
     [Fact]

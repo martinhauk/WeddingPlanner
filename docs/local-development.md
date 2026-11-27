@@ -91,7 +91,7 @@ Through the Vite proxy, with fictional data and a cookie jar in a temporary dire
 jar="$(mktemp -d)/cookies"
 curl -s http://localhost:5173/api/rsvp/status
 curl -s -c "$jar" -b "$jar" -H 'Content-Type: application/json' -X POST http://localhost:5173/api/rsvp \
-  --data '{"attending":true,"people":[{"name":"Pablo Pérez","dietary":{"tags":["vegetarian"]}}],"language":"es","website":""}'
+  --data '{"attending":true,"people":[{"name":"Pablo Pérez","dietary":{"tags":["vegetarian"]}}],"language":"es","website":"","dietaryConsent":true,"elapsedMs":5000}'
 curl -s -c "$jar" -b "$jar" http://localhost:5173/api/rsvp/me
 curl -s -c "$jar" -b "$jar" -X DELETE -o /dev/null -w '%{http_code}\n' http://localhost:5173/api/rsvp/me
 ```
