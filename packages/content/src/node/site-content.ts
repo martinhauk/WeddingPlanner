@@ -6,6 +6,7 @@ import {
   type SiteContent,
   siteContentSchema,
 } from '../schema/site-content.ts';
+import { checkBankDetails } from './bank-details.ts';
 import {
   type Diagnostic,
   diagnosticsFromZod,
@@ -14,7 +15,7 @@ import {
   jsonPath,
   warning,
 } from './diagnostics.ts';
-import { findLocalizedTexts } from './localized-texts.ts';
+import { type FoundText, findLocalizedTexts } from './localized-texts.ts';
 import { type MediaSource, scanMedia } from './media.ts';
 import { readJson } from './read-json.ts';
 
@@ -24,13 +25,16 @@ export type SiteContentCheck = {
   /** Parsed content when it matches the schema (it may still have semantic errors). */
   readonly content: SiteContent | undefined;
   readonly diagnostics: Diagnostic[];
+  /** Every localized text of the parsed content with its JSON path (empty without content). */
+  readonly texts: FoundText[];
 };
 
 /**
  * Validates the parsed JSON of `site-content.json`: the schema, then what the schema cannot express
  * (one of hero image/images, unique ids, schedule → location references, media that exist in
- * `media/`, inline links with an allowed scheme and no raw HTML in any text) and translations that
- * fall back to German (warnings only: English and Spanish are optional by design).
+ * `media/`, inline links with an allowed scheme and no raw HTML in any text, no bank details in any
+ * string) and translations that fall back to German (warnings only: English and Spanish are
+ * optional by design).
  *
  * `mediaIds` are the ids of the instance's media (paths relative to `media/`).
  */
@@ -39,7 +43,11 @@ export function checkSiteContent(value: unknown, mediaIds: ReadonlySet<string>):
     siteContentSchema.safeParse(value, { reportInput: true }),
   );
   if (!parsed.success) {
-    return { content: undefined, diagnostics: diagnosticsFromZod(SITE_CONTENT_FILE, parsed.error) };
+    return {
+      content: undefined,
+      diagnostics: diagnosticsFromZod(SITE_CONTENT_FILE, parsed.error),
+      texts: [],
+    };
   }
   const content = parsed.data;
   const diagnostics = [
@@ -48,8 +56,10 @@ export function checkSiteContent(value: unknown, mediaIds: ReadonlySet<string>):
     ...checkLocationReferences(content),
     ...checkMedia(content, mediaIds),
     ...checkPrivacy(content),
+    ...checkBankDetails(SITE_CONTENT_FILE, content),
   ];
-  for (const { path, text } of findLocalizedTexts(content, texts)) {
+  const found = findLocalizedTexts(content, texts);
+  for (const { path, text } of found) {
     diagnostics.push(...checkInlineText(path, text));
     for (const language of SITE_LANGUAGES) {
       const translation = text[language];
@@ -65,7 +75,7 @@ export function checkSiteContent(value: unknown, mediaIds: ReadonlySet<string>):
       }
     }
   }
-  return { content, diagnostics };
+  return { content, diagnostics, texts: found };
 }
 
 export type SiteContentLoad = {
@@ -212,8 +222,9 @@ function checkLocationReferences(content: SiteContent): Diagnostic[] {
 
 /**
  * The privacy notice needs the controllers and a contact address before guests can reply; without
- * them the page shows only the generic text (a warning, so a draft still builds). Data must not be
- * deleted before the wedding.
+ * them the page shows only the generic text. A warning here, so a draft still builds; `validate`
+ * turns both into errors (`E_PRIVACY_MISSING`, `E_PRIVACY_EMAIL`) where production has RSVP on.
+ * Data must not be deleted before the wedding.
  */
 function checkPrivacy(content: SiteContent): Diagnostic[] {
   const { privacy } = content;

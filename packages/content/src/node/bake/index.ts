@@ -101,7 +101,7 @@ export async function bake(options: BakeOptions): Promise<BakeResult> {
   }
 
   const strict = options.strict ?? (deployEnv === 'test' || deployEnv === 'production');
-  const validation = await validate(options.instanceDir, { strict });
+  const validation = await validate(options.instanceDir, { strict, env: environmentName });
   diagnostics.push(...validation.diagnostics);
 
   const { instance, site, siteContent } = validation;

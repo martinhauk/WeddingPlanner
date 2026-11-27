@@ -22,15 +22,18 @@ web bundle stays small. Both entries point at TypeScript sources; there is no bu
 Runs with plain `node` (built-in type stripping):
 
 ```sh
-node packages/content/src/cli.ts validate [instanceDir] [--strict]   # pnpm content:validate
-node packages/content/src/cli.ts bake [--strict] [--web-dir <dir>]   # pnpm content:bake
+node packages/content/src/cli.ts validate [instanceDir] [--strict] [--env <env>]   # pnpm content:validate
+node packages/content/src/cli.ts bake [--strict] [--web-dir <dir>]                 # pnpm content:bake
 ```
 
 - **validate** checks `instance.json`, `site.json`, `site-content.json` and `media/`, prints
   diagnostics and exits 1 on errors. Missing translations in `site.json` are warnings; `--strict`
   makes them errors. In `site-content.json` English and Spanish are optional by design (they fall
   back to German), so a missing translation there is always a warning (`W_I18N_FALLBACK`).
-- **bake** validates (strict for `test` and `production`), then writes
+  `--env e2e|test|production` (default: `DEPLOY_ENV`, else every environment) is the target of the
+  [release gates](#release-gates); an unknown `--env` is a usage error, an unknown `DEPLOY_ENV` the
+  error `E_ENV_UNKNOWN`.
+- **bake** validates for `DEPLOY_ENV` (strict for `test` and `production`), then writes
   `apps/web/src/content/generated/{site,media,build}.json`, `apps/web/public/content/media/` and
   `apps/web/public/version.json`. It reads `INSTANCE_DIR` (default `samples/instance`), `DEPLOY_ENV`
   (default `e2e`), `GIT_SHA` (default `local`) and `SITE_URL` (default `http://localhost:5173`). A
@@ -42,6 +45,38 @@ node packages/content/src/cli.ts bake [--strict] [--web-dir <dir>]   # pnpm cont
 Diagnostics look like `error E_SLUG instance.json $.slug: must match ^wed[0-9a-z]{3,8}$`: a code, the
 file and a JSON path, **never a value** from the files, because deploy logs are public. Media files
 are referred to by number (`media file #2`, code-point order of their paths), never by name.
+
+## Release gates
+
+Checks that keep a deploy from showing guests something wrong. Like every diagnostic they print a
+code and a JSON path, never the value.
+
+| Code                   | Severity                 | Fails when                                                                                                                                                             |
+| ---------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `W_PRIVACY_MISSING`    | warning                  | `site-content.json` has no `privacy` block (controllers and contact email for the notice)                                                                              |
+| `E_PRIVACY_MISSING`    | error                    | the same, while `environments.production.features.rsvp` is on and the target is `production` or no target is given                                                     |
+| `W_PRIVACY_EMAIL`      | warning                  | `privacy.email` (where guests send privacy requests) is missing                                                                                                        |
+| `E_PRIVACY_EMAIL`      | error                    | the same, under the same condition as `E_PRIVACY_MISSING`                                                                                                              |
+| `E_RSVP_DEADLINE`      | error, every environment | `rsvpDeadline` (the date the page shows) is not the date of `instance.json` `rsvp.deadline` in `rsvp.timeZone`; a deadline at exactly 00:00 also allows the day before |
+| `W_RSVP_DEADLINE_TEXT` | warning (heuristic)      | a text about replying names another date (see below)                                                                                                                   |
+| `E_BANK_DETAILS`       | error, every environment | any string of `site-content.json` (every language, names, addresses, notes, links) holds an IBAN or a labelled BIC                                                     |
+
+- **Privacy gate.** The privacy warnings become errors with the same meaning (`W_PRIVACY_*` →
+  `E_PRIVACY_*`) only where guests can reply in production. The target comes from `--env`, else
+  `DEPLOY_ENV` (the deploy job and the bake set it), else every environment counts: the instance
+  repo's own `validate` step therefore fails as soon as `instance.json` switches RSVP on in
+  production without the privacy details, before any deploy. `e2e` and `test` keep the warnings.
+- **Deadline in texts.** `W_RSVP_DEADLINE_TEXT` looks at the RSVP section's intro, FAQ answers whose
+  question is about replying and any text with a reply word (`zusag`, `absag`, `antwort`,
+  `rückmeld`, `anmeld`, `bescheid`, `reply`, `respon`, `rsvp`, `let us know`, `confirm`,
+  `contest`, `avisa`, …). It recognises `2099-05-01`, `1.5.2099`, `1/5/2099` (German and Spanish),
+  `1. Mai 2099`, `1 May 2099`, `May 1, 2099` and `1 de mayo de 2099`, each also without the year,
+  and allows the deadline's date and the wedding date. It is a heuristic, so it only warns.
+- **Bank details** ("no IBAN" decision: the gifts section says "ask us"). An IBAN of any country
+  counts with or without spaces and in any case, but only when its check digits and mod-97 checksum
+  are valid, so phone numbers, dates, postcodes and booking codes never match. A BIC counts only
+  next to its label (`BIC`, `SWIFT`, `SWIFT-Code`, `BIC/SWIFT`, `Código SWIFT`, …). The Vite
+  plugin runs the same check, so a page build fails too.
 
 ## JSON Schemas
 
@@ -78,8 +113,9 @@ fails while the committed files are out of date. Never edit them by hand.
   (contact for privacy requests), `deleteBy?` (ISO date after the wedding; default
   `privacyDeleteBy`: the last day of the third month after it), `extra[]? {title?, text}` and
   `imprint?`. A missing `privacy` block or email is a warning (`W_PRIVACY_MISSING`,
-  `W_PRIVACY_EMAIL`): fill both before RSVP goes live. The built-in notice text lives in the web
-  app (`apps/web/src/site/privacy/`).
+  `W_PRIVACY_EMAIL`), and an error where production has RSVP on (see
+  [release gates](#release-gates)). The built-in notice text lives in the web app
+  (`apps/web/src/site/privacy/`).
 - Story `items[] {heading?, text}` (e.g. a question and its answer); location cards take
   `links[] {label, url}`, `website` and `phone`.
 - **Inline links** in any text: `[label](https://…)`, `[label](mailto:…)` or `[label](tel:…)`
