@@ -5,7 +5,7 @@ using WeddingPlanner.Domain.Rsvp;
 
 namespace WeddingPlanner.Api.Features.Rsvp;
 
-/// <summary>The resolved RSVP configuration (singleton): parsed deadline, limits and cookie lifetime.</summary>
+/// <summary>The resolved RSVP configuration (singleton): parsed deadline, limits, cookie lifetime and minimum fill time.</summary>
 public sealed partial class RsvpSettings
 {
     public RsvpSettings(IOptions<RsvpOptions> options, ILogger<RsvpSettings> logger)
@@ -17,6 +17,7 @@ public sealed partial class RsvpSettings
         Limits = new RsvpLimits(settings.MaxCompanions);
         MaxActiveRsvps = settings.MaxActiveRsvps;
         CookieLifetime = TimeSpan.FromDays(settings.CookieLifetimeDays);
+        MinSubmitTime = TimeSpan.FromMilliseconds(settings.MinSubmitMs);
 
         if (RsvpDeadline.TryCreate(settings.Deadline, settings.TimeZone, out var deadline))
         {
@@ -40,6 +41,9 @@ public sealed partial class RsvpSettings
 
     /// <summary><c>Max-Age</c> of the RSVP cookies.</summary>
     public TimeSpan CookieLifetime { get; }
+
+    /// <summary>Minimum fill time of a new reply; <see cref="TimeSpan.Zero"/> turns the check off.</summary>
+    public TimeSpan MinSubmitTime { get; }
 
     /// <summary>The time zone the deadline is shown in.</summary>
     public string TimeZoneId => Deadline?.TimeZoneId ?? RsvpDeadline.DefaultTimeZoneId;

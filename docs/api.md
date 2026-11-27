@@ -25,7 +25,8 @@ The architecture overview is in [architecture.md](architecture.md) (sections 6 t
   storage, or without a valid deadline, the endpoints answer 503 `not_configured` (reading an existing
   reply only needs storage) and the status reports `enabled: false`.
 - Optional, with code defaults: `Rsvp__MaxCompanions` (5, can only be lowered), `Rsvp__MaxActiveRsvps`
-  (300), `Rsvp__CookieLifetimeDays` (365), `Storage__TablePrefix` (none), and the rate limits below.
+  (300), `Rsvp__CookieLifetimeDays` (365), `Rsvp__MinSubmitMs` (2500, see "Abuse protection"),
+  `Storage__TablePrefix` (none), and the rate limits below.
 
 The deadline is an ISO 8601 date-time, with offset (`2099-05-01T23:59:00+02:00`) or local to
 `Rsvp__TimeZone`. A space may replace the `T`; use that form in `local.settings.json`, because Core
@@ -84,7 +85,8 @@ the failure is logged by exception type only, at most once per hour and worker i
   "message": "¡Felicidades!",
   "language": "es",
   "website": "",
-  "dietaryConsent": true
+  "dietaryConsent": true,
+  "elapsedMs": 41250
 }
 ```
 
@@ -92,14 +94,15 @@ the failure is logged by exception type only, at most once per hour and worker i
 | ----------------------- | ------------------------------------------------------------------------------------------------ |
 | `attending`             | required boolean                                                                                 |
 | `people`                | 1 to 6 entries (the guest plus up to `maxCompanions`); a "no" may name several people            |
-| `people[].name`         | required, 1 to 80 characters after sanitising                                                    |
+| `people[].name`         | required, 2 to 80 characters after sanitising, a letter, no web address or `@` (see below)       |
 | `people[].id`           | optional; on `PUT`, send back the ids from the last read to keep them (admin matching uses them) |
 | `people[].dietary.tags` | at most 10 of `vegetarian`, `vegan`, `glutenFree`, `lactoseFree` (exact spelling)                |
 | `people[].dietary.note` | optional, at most 200 characters                                                                 |
 | `message`               | optional, at most 1000 characters, line breaks kept                                              |
 | `language`              | required language tag such as `de`, `en`, `es` (stored lower case)                               |
-| `website`               | honeypot: hidden in the form, must be empty                                                      |
+| `website`               | honeypot: hidden in the form, must be empty (else 400 `submission_rejected`)                     |
 | `dietaryConsent`        | `true` required when any stored person has a dietary tag or note, else `required`                |
+| `elapsedMs`             | `POST` only: whole ms since the form was shown; missing or too low is 400 `submission_rejected`  |
 
 Text is NFC-normalised and trimmed; control characters, lone surrogates, Unicode noncharacters (such as
 U+FFFE), format characters (category Cf: bidirectional controls, BOM, soft hyphen, zero-width space,
@@ -107,6 +110,16 @@ word joiner, tag characters and the like, except the joiners ZWJ and ZWNJ) and t
 and U+FFA0 are removed; names and notes collapse whitespace to single spaces. Text with nothing visible
 left (only whitespace, joiners or variation selectors) counts as empty, so such a name is `required`.
 An unknown tag is `unknown_tag` per entry; more than 10 entries are one `too_many` for the whole list.
+
+**Names** (domain rules, `PersonNames`): fewer than 2 characters (Unicode code points, after sanitising) is
+`too_short`; a name without a letter, with `@` (or the full-width `＠`), or with a web address is `invalid`.
+A web address is a scheme (`https://`), `www.`, or a label of three or more characters, a dot and a
+lower-case top-level domain (`example.com`, `bit.ly/x`); titles and initials such as `Dr.med.` or
+`J.R.R.` pass. A person whose name an earlier person of the same reply already has is `duplicate` on the
+later one; the comparison ignores case, diacritics and punctuation (`María-José García` =
+`maria jose GARCIA`), but does not transliterate (`Müller` ≠ `Mueller`). The rules apply to `POST`,
+`PUT` and the admin edit alike; the form checks the same rules before it sends.
+
 For a "no", dietary data is dropped and never stored. Allergies and intolerances can be health data
 (GDPR Art. 9), so dietary data is stored only with explicit consent: a reply that still has a dietary
 tag or note after validation needs `dietaryConsent: true`, otherwise it is 400 `validation_failed` with
@@ -155,22 +168,23 @@ wrong types or a non-object body are 400 `invalid_json`. Lengths count UTF-16 co
 
 ## Errors
 
-| Status | `code`                   | When                                                                                                                     |
-| ------ | ------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
-| 400    | `invalid_json`           | Malformed JSON, `null`, wrong types, duplicate members                                                                   |
-| 400    | `validation_failed`      | Validation; `errors: [{field, code}]` with `required`, `too_long`, `too_many`, `unknown_tag`, `invalid`, `must_be_empty` |
-| 403    | `cross_site_request`     | A write with `Sec-Fetch-Site: cross-site`                                                                                |
-| 403    | `rsvp_closed`            | `POST`, `PUT` or `DELETE` after the deadline                                                                             |
-| 404    | `not_found`              | Feature off, or no valid `wp_rsvp` cookie for `/me` (cookies cleared)                                                    |
-| 409    | `rsvp_exists`            | `POST` from a browser that already has a reply                                                                           |
-| 412    | `precondition_failed`    | `If-Match` does not match the current reply                                                                              |
-| 413    | `payload_too_large`      | Body above 16 KB (`maxBytes`), with or without `Content-Length`                                                          |
-| 415    | `unsupported_media_type` | A body that is not `application/json` (UTF-8)                                                                            |
-| 428    | `precondition_required`  | `PUT` without `If-Match`                                                                                                 |
-| 429    | `rate_limited`           | Rate limit; `Retry-After` in seconds                                                                                     |
-| 500    | `internal_error`         | Unexpected failure (no details)                                                                                          |
-| 503    | `not_configured`         | Storage or deadline missing or invalid                                                                                   |
-| 503    | `capacity_reached`       | `POST` when `Rsvp__MaxActiveRsvps` replies are stored                                                                    |
+| Status | `code`                   | When                                                                                                                              |
+| ------ | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | `invalid_json`           | Malformed JSON, `null`, wrong types, duplicate members                                                                            |
+| 400    | `validation_failed`      | Validation; `errors: [{field, code}]` with `required`, `too_short`, `too_long`, `too_many`, `duplicate`, `unknown_tag`, `invalid` |
+| 400    | `submission_rejected`    | `POST` or `PUT` refused as automated (honeypot, minimum fill time); never says which check failed                                 |
+| 403    | `cross_site_request`     | A write with `Sec-Fetch-Site: cross-site`                                                                                         |
+| 403    | `rsvp_closed`            | `POST`, `PUT` or `DELETE` after the deadline                                                                                      |
+| 404    | `not_found`              | Feature off, or no valid `wp_rsvp` cookie for `/me` (cookies cleared)                                                             |
+| 409    | `rsvp_exists`            | `POST` from a browser that already has a reply                                                                                    |
+| 412    | `precondition_failed`    | `If-Match` does not match the current reply                                                                                       |
+| 413    | `payload_too_large`      | Body above 16 KB (`maxBytes`), with or without `Content-Length`                                                                   |
+| 415    | `unsupported_media_type` | A body that is not `application/json` (UTF-8)                                                                                     |
+| 428    | `precondition_required`  | `PUT` without `If-Match`                                                                                                          |
+| 429    | `rate_limited`           | Rate limit; `Retry-After` in seconds                                                                                              |
+| 500    | `internal_error`         | Unexpected failure (no details)                                                                                                   |
+| 503    | `not_configured`         | Storage or deadline missing or invalid                                                                                            |
+| 503    | `capacity_reached`       | `POST` when `Rsvp__MaxActiveRsvps` replies are stored                                                                             |
 
 Every `/api/rsvp` response except the status is `Cache-Control: no-store`.
 
@@ -197,11 +211,30 @@ In the worker pipeline, before any storage I/O (`apps/api/CLAUDE.md`, "Request p
 - **CSRF:** `SameSite=Strict` credential cookie, JSON-only bodies (a cross-site JSON request needs a
   preflight the API never answers; no CORS headers), and writes with `Sec-Fetch-Site: cross-site` are
   rejected.
+- **Submission guard** (`Features/Rsvp/RsvpSubmissionGuard`), right after the body is read and before
+  validation or any storage I/O: a filled-in honeypot `website` (`POST` and `PUT`), or on `POST` an
+  `elapsedMs` below `Rsvp__MinSubmitMs` or missing, answers 400 `submission_rejected` with no `errors`
+  and no hint at the reason, so a bot cannot tell the honeypot from the timer. Refusals are not logged.
+  `Rsvp__MinSubmitMs` is 0 (off) to 60000; its code default is 2500, and a missing or invalid value keeps
+  the default. The form measures the time from showing the form to sending it (it does not reset after a
+  refusal, so pressing save again works). The value is client-supplied: it stops naive bots and scripts
+  that fill the form instantly, not a targeted attack; the per-instance write limit and the reply cap
+  remain the backstop.
+- **Automated tests against a deployed environment** (the WP3 write-path test on `e2e`) keep the
+  production setting and wait instead: a browser test spends at least `Rsvp__MinSubmitMs` (plus a margin)
+  between opening the form and saving, and a direct API call sends an honest `elapsedMs`. Bicep does not
+  set `Rsvp__MinSubmitMs`, so every environment checks the same fill time as production; the app setting
+  stays available as a per-environment override should a test ever need it.
 - **Size:** bodies above 16 KB are rejected; at most 300 replies are stored.
 - **Logs** contain no names, messages, dietary data, tokens, cookies or addresses; unexpected exceptions
   are logged by type only. Refusals are not logged per request: reaching the reply cap is a warning at
   most once per hour and worker instance, so spam at the cap cannot fill the daily Application Insights
   cap.
+- **Alert signal for the cap:** that warning has the event name **`RsvpCapacityReached`** (event id
+  2101, `EventName` in the log record) and its message starts with `RsvpCapacityReached:`, followed by the
+  cap (`MaxActiveRsvps`). An Application Insights log alert can match it with
+  `traces | where message startswith "RsvpCapacityReached"` (or on `customDimensions.EventName` where the
+  exporter records it). There is no separate metric: the worker exports logs and traces only.
 
 ## Storage
 
@@ -245,5 +278,5 @@ stays `/api/admin/…` (verified with Core Tools 4.17; to be confirmed on the SW
 ## Not implemented yet
 
 From the architecture, still open: the personal edit link and `POST /api/rsvp/claim` (moving a reply to
-another device), the minimum fill time (`Rsvp__MinSubmitMs`), and the admin `Settings` overrides
-(`deadlineOverride`, `closedManually`) in the open check.
+another device), and the admin `Settings` overrides (`deadlineOverride`, `closedManually`) in the open
+check.

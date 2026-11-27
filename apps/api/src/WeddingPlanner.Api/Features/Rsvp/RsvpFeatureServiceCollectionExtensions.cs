@@ -30,6 +30,7 @@ public static class RsvpFeatureServiceCollectionExtensions
                 options.MaxCompanions = ReadInt(section, nameof(RsvpOptions.MaxCompanions), options.MaxCompanions, 0, RsvpLimits.MaxCompanionsCeiling);
                 options.MaxActiveRsvps = ReadInt(section, nameof(RsvpOptions.MaxActiveRsvps), options.MaxActiveRsvps, 1, 100_000);
                 options.CookieLifetimeDays = ReadInt(section, nameof(RsvpOptions.CookieLifetimeDays), options.CookieLifetimeDays, 1, 400);
+                options.MinSubmitMs = ReadInt(section, nameof(RsvpOptions.MinSubmitMs), options.MinSubmitMs, 0, RsvpOptions.MaxMinSubmitMs);
             });
 
         services.AddSingleton<RsvpSettings>();

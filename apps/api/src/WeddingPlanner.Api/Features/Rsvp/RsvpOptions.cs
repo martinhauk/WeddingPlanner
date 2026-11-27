@@ -18,6 +18,12 @@ public sealed class RsvpOptions
     /// <summary>Default of <see cref="CookieLifetimeDays"/>.</summary>
     public const int DefaultCookieLifetimeDays = 365;
 
+    /// <summary>Default of <see cref="MinSubmitMs"/>.</summary>
+    public const int DefaultMinSubmitMs = 2500;
+
+    /// <summary>Largest accepted <see cref="MinSubmitMs"/> (one minute); a larger value keeps the default.</summary>
+    public const int MaxMinSubmitMs = 60_000;
+
     /// <summary><c>Rsvp__Deadline</c>: ISO 8601 date-time, with offset or local to <see cref="TimeZone"/>. Default: none.</summary>
     public string? Deadline { get; set; }
 
@@ -32,4 +38,10 @@ public sealed class RsvpOptions
 
     /// <summary><c>Rsvp__CookieLifetimeDays</c>: <c>Max-Age</c> of the RSVP cookies, 1 to 400 days. Default 365.</summary>
     public int CookieLifetimeDays { get; set; } = DefaultCookieLifetimeDays;
+
+    /// <summary>
+    /// <c>Rsvp__MinSubmitMs</c>: minimum fill time of a new reply, 0 (off) to 60000 ms. A create whose
+    /// <c>elapsedMs</c> is missing or lower is refused (<see cref="RsvpSubmissionGuard"/>). Default 2500.
+    /// </summary>
+    public int MinSubmitMs { get; set; } = DefaultMinSubmitMs;
 }

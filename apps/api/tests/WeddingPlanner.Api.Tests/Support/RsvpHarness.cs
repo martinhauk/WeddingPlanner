@@ -1,3 +1,6 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
+
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
@@ -59,10 +62,16 @@ internal sealed class RsvpHarness : IDisposable
 
     public RsvpStatusFunction StatusFunction() => ActivatorUtilities.CreateInstance<RsvpStatusFunction>(Services);
 
-    /// <summary><c>POST /api/rsvp</c>.</summary>
+    /// <summary>
+    /// A fill time well above the minimum (<c>Rsvp__MinSubmitMs</c>), which <see cref="PostAsync"/> adds to a body
+    /// without <c>elapsedMs</c>, as the web form does.
+    /// </summary>
+    public const long HumanElapsedMs = 15_000;
+
+    /// <summary><c>POST /api/rsvp</c>; <paramref name="body"/> gets <see cref="HumanElapsedMs"/> unless it sets <c>elapsedMs</c>.</summary>
     public async Task<HttpContext> PostAsync(object? body = null, string? cookie = null, string? rawBody = null, string? contentType = "application/json")
     {
-        var httpContext = TestHttp.Request("POST", "/api/rsvp", body ?? SampleBody(), rawBody, contentType, cookie);
+        var httpContext = TestHttp.Request("POST", "/api/rsvp", WithElapsedMs(body ?? SampleBody()), rawBody, contentType, cookie);
         await RunAsync(httpContext, request => CreateFunction().Run(request, CancellationToken.None));
         return httpContext;
     }
@@ -122,6 +131,17 @@ internal sealed class RsvpHarness : IDisposable
         {
             _provider.Value.Dispose();
         }
+    }
+
+    private static JsonNode? WithElapsedMs(object body)
+    {
+        var node = JsonSerializer.SerializeToNode(body, JsonSerializerOptions.Web);
+        if (node is JsonObject json && !json.ContainsKey("elapsedMs"))
+        {
+            json["elapsedMs"] = HumanElapsedMs;
+        }
+
+        return node;
     }
 
     private static async Task RunAsync(HttpContext httpContext, Func<HttpRequest, Task<IActionResult>> function)

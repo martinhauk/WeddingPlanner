@@ -188,6 +188,21 @@ export const ui = {
       en: 'Please enter a name.',
       es: 'Por favor, escribid un nombre.',
     },
+    nameTooShort: {
+      de: 'Bitte gebt den vollständigen Namen ein.',
+      en: 'Please enter the full name.',
+      es: 'Por favor, escribid el nombre completo.',
+    },
+    nameInvalid: {
+      de: 'Bitte gebt nur einen Namen ein, ohne Links oder E-Mail-Adressen.',
+      en: 'Please enter just a name, without links or email addresses.',
+      es: 'Por favor, escribid solo un nombre, sin enlaces ni direcciones de correo.',
+    },
+    nameDuplicate: {
+      de: 'Dieser Name steht schon in eurer Antwort.',
+      en: 'This name is already in your reply.',
+      es: 'Este nombre ya está en vuestra respuesta.',
+    },
     consentRequired: {
       de: 'Bitte willigt ein oder entfernt die Angaben zur Ernährung.',
       en: 'Please give your consent or remove the dietary details.',
@@ -207,6 +222,11 @@ export const ui = {
       de: 'Die Antwort konnte nicht gespeichert werden. Bitte prüft eure Angaben.',
       en: "Your reply couldn't be saved. Please check your entries.",
       es: 'No se pudo guardar la respuesta. Por favor, revisad los datos.',
+    },
+    rejected: {
+      de: 'Die Antwort konnte nicht gesendet werden. Bitte prüft eure Angaben und versucht es gleich noch einmal.',
+      en: "Your reply couldn't be sent. Please check your entries and try again in a moment.",
+      es: 'No se pudo enviar la respuesta. Por favor, revisad los datos y volved a intentarlo en un momento.',
     },
     closed: {
       de: 'Die Antwortfrist ist abgelaufen.',

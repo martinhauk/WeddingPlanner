@@ -286,6 +286,33 @@ public sealed class RsvpMineFunctionsTests
     }
 
     [Fact]
+    public async Task PutRefusesAFilledHoneypotGenerically()
+    {
+        using var harness = new RsvpHarness();
+        var created = await harness.PostAsync();
+        var body = new { attending = false, people = new[] { new { name = "Pablo Pérez" } }, language = "es", website = "https://spam.example.com" };
+
+        var httpContext = await harness.PutMineAsync(TestHttp.CookieHeader(created), body, "*");
+
+        httpContext.Response.StatusCode.ShouldBe(StatusCodes.Status400BadRequest);
+        Code(httpContext).ShouldBe("submission_rejected");
+        TestHttp.ReadJson(httpContext).TryGetProperty("errors", out _).ShouldBeFalse();
+        (await harness.Memory.GetAsync(TestHttp.ReadJson(created).GetProperty("rsvp").GetProperty("id").GetString()!, CancellationToken.None))
+            .ShouldNotBeNull().Record.Answer.Attending.ShouldBeTrue("the reply is unchanged");
+    }
+
+    [Fact]
+    public async Task PutNeedsNoFillTime()
+    {
+        using var harness = new RsvpHarness();
+        var created = await harness.PostAsync();
+
+        var httpContext = await harness.PutMineAsync(TestHttp.CookieHeader(created), new { attending = false, people = new[] { new { name = "Pablo Pérez" } }, language = "es" }, "*");
+
+        httpContext.Response.StatusCode.ShouldBe(StatusCodes.Status200OK);
+    }
+
+    [Fact]
     public async Task PutAfterTheDeadlineIsClosed()
     {
         using var harness = new RsvpHarness();

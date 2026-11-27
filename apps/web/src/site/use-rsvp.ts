@@ -1,4 +1,4 @@
-import { type RefObject, useEffect, useState } from 'react';
+import { type RefObject, useEffect, useRef, useState } from 'react';
 import {
   type ApiFailure,
   createRsvp,
@@ -106,6 +106,9 @@ export function useRsvp({ enabled, lang, deadline, anchor }: UseRsvpOptions): Us
   const [closedByApi, setClosedByApi] = useState(false);
   const [interacted, setInteracted] = useState(false);
   const [openedAt] = useState(Date.now);
+  // When the form was last shown: a new reply sends the time since then (`elapsedMs`), so the API
+  // can refuse replies filled in faster than a person could.
+  const formShownAt = useRef(0);
 
   const near = useNearViewport(anchor, enabled);
   const active = enabled && (near || requested);
@@ -225,6 +228,7 @@ export function useRsvp({ enabled, lang, deadline, anchor }: UseRsvpOptions): Us
     setRequested(true);
     setInteracted(true);
     clearFeedback();
+    formShownAt.current = performance.now();
     setPhase({ kind: 'form', mode: 'create', draft: newReply(attending) });
   };
 
@@ -234,6 +238,7 @@ export function useRsvp({ enabled, lang, deadline, anchor }: UseRsvpOptions): Us
     }
     setInteracted(true);
     clearFeedback();
+    formShownAt.current = performance.now();
     setPhase({ kind: 'form', mode: 'edit', draft: replyFromView(mine.rsvp) });
   };
 
@@ -258,11 +263,12 @@ export function useRsvp({ enabled, lang, deadline, anchor }: UseRsvpOptions): Us
       return;
     }
     setBusy(true);
-    const body = toRequest(draft, lang, website);
     const result =
       mode === 'edit' && mine !== null
-        ? await updateRsvp(body, mine.version)
-        : await createRsvp(body);
+        ? await updateRsvp(toRequest(draft, lang, website), mine.version)
+        : await createRsvp(
+            toRequest(draft, lang, website, performance.now() - formShownAt.current),
+          );
     if (result.ok) {
       setMine(result.value);
       setPhase(SAVED);

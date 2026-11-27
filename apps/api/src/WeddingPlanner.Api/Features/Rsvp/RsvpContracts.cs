@@ -11,10 +11,14 @@ namespace WeddingPlanner.Api.Features.Rsvp;
 /// <param name="People">The guest first, then the companions.</param>
 /// <param name="Message">Optional message to the couple.</param>
 /// <param name="Language">The language the guest used.</param>
-/// <param name="Website">Honeypot: must stay empty.</param>
+/// <param name="Website">Honeypot: must stay empty (<see cref="RsvpSubmissionGuard"/>).</param>
 /// <param name="DietaryConsent">
 /// Explicit consent to store the dietary data (GDPR Art. 9(2)(a)); required when the reply carries any (see
 /// <see cref="RsvpDietaryConsent"/>).
+/// </param>
+/// <param name="ElapsedMs">
+/// Milliseconds between showing the form and sending it; <c>POST</c> only, checked against the minimum fill time
+/// (<see cref="RsvpSubmissionGuard"/>).
 /// </param>
 public sealed record RsvpRequest(
     bool? Attending,
@@ -22,7 +26,8 @@ public sealed record RsvpRequest(
     string? Message,
     string? Language,
     string? Website,
-    bool? DietaryConsent = null)
+    bool? DietaryConsent = null,
+    long? ElapsedMs = null)
 {
     /// <summary>The domain draft for <see cref="RsvpValidator"/>.</summary>
     public RsvpDraft ToDraft() => new(

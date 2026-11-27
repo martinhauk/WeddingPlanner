@@ -170,6 +170,12 @@ describe('failureOf', () => {
       status: 400,
       errors: [{ field: 'people[0].name', code: 'required' }],
     });
+    const rejected = problem(400, 'submission_rejected');
+    expect(failureOf(rejected, await rejected.json())).toEqual({
+      kind: 'validation',
+      status: 400,
+      errors: [{ field: '', code: 'submission_rejected' }],
+    });
     const limited = new Response(null, { status: 429, headers: { 'Retry-After': '120' } });
     expect(failureOf(limited, undefined).retryAfterSeconds).toBe(120);
   });

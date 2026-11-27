@@ -16,11 +16,13 @@ namespace WeddingPlanner.Api.Features.Rsvp;
 /// </summary>
 /// <remarks>
 /// Order of checks (cheap ones first, I/O last): 503 <c>not_configured</c>, 403 <c>rsvp_closed</c>, body
-/// (415/413/400 <c>invalid_json</c>), 400 <c>validation_failed</c> (honeypot and dietary consent included), 409 <c>rsvp_exists</c> when
-/// the request already carries a valid <c>wp_rsvp</c> cookie, 503 <c>capacity_reached</c> at the cap. The cap is
-/// checked by counting before the insert, so two simultaneous requests may exceed it by one; it is a cost guard,
-/// not a business limit. Refusals at the cap are not logged one by one: the warning is written at most once per
-/// hour and worker instance (<see cref="RsvpLogThrottle"/>).
+/// (415/413/400 <c>invalid_json</c>), 400 <c>submission_rejected</c> (honeypot or minimum fill time,
+/// <see cref="RsvpSubmissionGuard"/>), 400 <c>validation_failed</c> (name rules and dietary consent included), 409
+/// <c>rsvp_exists</c> when the request already carries a valid <c>wp_rsvp</c> cookie, 503 <c>capacity_reached</c> at
+/// the cap. The cap is checked by counting before the insert, so two simultaneous requests may exceed it by one; it
+/// is a cost guard, not a business limit. Refusals at the cap are not logged one by one: the warning
+/// (<see cref="CapacityReachedEvent"/>, for alerts) is written at most once per hour and worker instance
+/// (<see cref="RsvpLogThrottle"/>).
 /// </remarks>
 public sealed partial class RsvpCreateFunction(
     IRsvpRepository repository,
@@ -34,6 +36,15 @@ public sealed partial class RsvpCreateFunction(
 
     /// <summary>Where the created reply can be read.</summary>
     public const string MineLocation = "/api/rsvp/me";
+
+    /// <summary>
+    /// Event name of the "reply cap reached" warning: the log's <c>EventName</c> and the first word of its message, so
+    /// an alert can match either (<c>docs/api.md</c>, "Abuse protection").
+    /// </summary>
+    public const string CapacityReachedEvent = "RsvpCapacityReached";
+
+    /// <summary>Event id of the <see cref="CapacityReachedEvent"/> warning.</summary>
+    public const int CapacityReachedEventId = 2101;
 
     [Function(FunctionName)]
     public async Task<IActionResult> Run(
@@ -60,6 +71,11 @@ public sealed partial class RsvpCreateFunction(
         if (!body.TryGetValue(out var input, out var bodyProblem))
         {
             return bodyProblem;
+        }
+
+        if (RsvpSubmissionGuard.RejectsCreate(input, settings.MinSubmitTime))
+        {
+            return RsvpSubmissionGuard.Rejected();
         }
 
         var validation = RsvpValidator.Validate(input.ToDraft(), settings.Limits);
@@ -105,6 +121,10 @@ public sealed partial class RsvpCreateFunction(
         return ApiResult.Json(StatusCodes.Status201Created, new RsvpCreatedResponse(RsvpView.From(stored.Record), version));
     }
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "RSVP capacity of {MaxActiveRsvps} replies reached; new replies are refused (logged at most once per hour).")]
+    [LoggerMessage(
+        EventId = CapacityReachedEventId,
+        EventName = CapacityReachedEvent,
+        Level = LogLevel.Warning,
+        Message = CapacityReachedEvent + ": RSVP capacity of {MaxActiveRsvps} replies reached; new replies are refused (logged at most once per hour).")]
     private static partial void LogCapacityReached(ILogger logger, int maxActiveRsvps);
 }
