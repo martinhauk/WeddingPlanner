@@ -115,16 +115,20 @@ An unknown tag is `unknown_tag` per entry; more than 10 entries are one `too_man
 
 **Names** (domain rules, `PersonNames`): fewer than 2 characters (Unicode code points, after sanitising) is
 `too_short`; a name without a letter, with `@` (or the full-width `＠`), or with a web address is `invalid`.
-A web address is `://` anywhere, `www.` at the start of a word, or a `label.tld` whose top-level domain
-is on a curated list of common ones (`com`, `net`, `org`, `io`, `co`, `me`, `shop`, `xyz`, `es`, `uk`,
-…), all lower or all upper case, not followed by a letter or digit, with or without a path
-(`example.com`, `x.io`, `spam.shop`, `EXAMPLE.COM`). Top-level domains that are also name particles or
-short names (`de`, `li`, `lu`, `hu`, `ly`, `ai`) make a domain only when nothing but punctuation or a
-path, port, query or fragment (`/`, `:`, `?`, `#`) follows and the label before the dot is no initial
-(`example.de`, `EXAMPLE.DE`, `shop.de?x`, `bit.ly/x`), so `J.de Vries`, `Mª.de los Ángeles`,
-`MA.DE LOS ANGELES` and `Wei J.LI` pass. Titles typed without spaces and initials pass, because their
-endings are not on the list or are capitalised: `Dr.med.vet.`, `Prof.Dr.`, `Dr.in`, `Anna B.Sc.`,
-`J.R.R.`. A person whose name an earlier person of the same reply already has is `duplicate` on the
+A web address is `://` anywhere, `www.` at the start of a word, or a domain `label.tld`. Any top-level
+domain makes one when a path, query, fragment or port follows (`x.ly/abc`, `J.de/x`, `example.ai:8080`).
+Without one, the top-level domain must be on a curated list of common and abuse-heavy ones (`com`, `net`,
+`org`, `io`, `co`, `shop`, `xyz`, `bond`, `lol`, `es`, `uk`, …) and not be followed by a letter or digit
+(`example.com`, `x.io`, `spam.shop`); top-level domains that are also name particles, abbreviations or
+short names (`de`, `fr`, `ch`, `li`, `lu`, `hu`, `ly`, `su`, `to`, `ai`, `asia`) make a domain only at the
+end of the name (nothing but characters other than letters and digits follow, `example.de`, `bit.ly`) and
+after a label that is no initial, so `J.de Vries`, `Mª.de los Ángeles`, `MA.DE LOS ANGELES`,
+`HR.U.FR. MÜLLER` and `Wei J.LI` pass. Case: an all-caps top-level domain counts only after an all-caps
+label (`EXAMPLE.COM`, but not `Dr.LI`, `Dr.med.LI` or `J.LINK`), a capitalised one never (`Prof.Dr.`,
+`Lic.De la Cruz`), any other casing always (`example.cOM`). A common title is never the label (`DR.LI`,
+`prof.lu`, `DR.PAGE`). Titles typed without spaces and initials pass, because their endings are not on
+the list or are capitalised: `Dr.med.vet.`, `Prof.Dr.`, `Dr.in`, `Anna B.Sc.`, `J.R.R.`. A person whose
+name an earlier person of the same reply already has is `duplicate` on the
 later one; the comparison ignores case, diacritics and punctuation (`María-José García` =
 `maria jose GARCIA`), but does not transliterate (`Müller` ≠ `Mueller`). The rules apply to `POST`,
 `PUT` and the admin edit alike; the form checks the same rules before it sends.
