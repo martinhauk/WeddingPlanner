@@ -55,6 +55,9 @@ const list: AdminList = {
   },
 };
 
+const CONSENT =
+  'Der Gast hat ausdrücklich eingewilligt, dass wir diese Angaben zum Essen speichern.';
+
 const ok = <T,>(data: T): AdminResult<T> => ({ ok: true, data });
 const fail = (
   kind: 'unauthorized' | 'forbidden' | 'not_found' | 'conflict' | 'unavailable',
@@ -183,6 +186,7 @@ describe('AdminApp', () => {
     await userEvent.clear(within(second).getByLabelText('Name'));
     await userEvent.type(within(second).getByLabelText('Name'), 'Jürgen Müller');
     await userEvent.click(within(second).getByLabelText('Vegan'));
+    await userEvent.click(within(editor).getByRole('checkbox', { name: CONSENT }));
     await userEvent.click(within(editor).getByRole('button', { name: 'Speichern' }));
 
     expect(api.update).toHaveBeenCalledWith('a1', '"v1"', {
@@ -197,6 +201,7 @@ describe('AdminApp', () => {
       ],
       message: '¡Felicidades, Anna y Ben!',
       language: 'es',
+      dietaryConsent: true,
     });
     expect(await screen.findByText('Antwort gespeichert.')).toBeInTheDocument();
     expect(screen.queryByRole('form', { name: 'Antwort bearbeiten' })).not.toBeInTheDocument();
@@ -232,6 +237,102 @@ describe('AdminApp', () => {
       ],
       language: 'es',
     });
+  });
+
+  it('asks the admin to confirm the guest consented before saving new dietary data', async () => {
+    const api = fakeApi();
+    renderApp(api);
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Antwort von Jürgen Müller bearbeiten' }),
+    );
+    const editor = screen.getByRole('form', { name: 'Antwort bearbeiten' });
+    await userEvent.click(within(editor).getByLabelText('Ja, kommt'));
+    expect(within(editor).queryByRole('checkbox', { name: CONSENT })).not.toBeInTheDocument();
+
+    await userEvent.type(within(editor).getByLabelText('Hinweis zum Essen'), 'Keine Nüsse');
+    const consent = within(editor).getByRole('checkbox', { name: CONSENT });
+    expect(consent).not.toBeChecked();
+    expect(consent).toHaveAccessibleDescription(/Nachweis aufbewahren/);
+
+    await userEvent.click(within(editor).getByRole('button', { name: 'Speichern' }));
+    expect(api.update).not.toHaveBeenCalled();
+    expect(consent).toHaveFocus();
+    expect(consent).toHaveAttribute('aria-invalid', 'true');
+    expect(consent).toHaveAccessibleDescription(/Bitte bestätigen, dass der Gast eingewilligt hat/);
+
+    await userEvent.click(consent);
+    expect(consent).toHaveAttribute('aria-invalid', 'false');
+    await userEvent.click(within(editor).getByRole('button', { name: 'Speichern' }));
+    expect(api.update).toHaveBeenCalledWith('b2', '"v2"', {
+      attending: true,
+      people: [{ id: 'p3', name: 'Jürgen Müller', dietary: { tags: [], note: 'Keine Nüsse' } }],
+      language: 'de',
+      dietaryConsent: true,
+    });
+  });
+
+  it('needs no confirmation when dietary data stays the same or is only removed', async () => {
+    const api = fakeApi();
+    renderApp(api);
+    await userEvent.click(
+      await screen.findByRole('button', {
+        name: 'Antwort von Pablo Pérez, María-José García bearbeiten',
+      }),
+    );
+    const editor = screen.getByRole('form', { name: 'Antwort bearbeiten' });
+    const first = within(editor).getByRole('group', { name: 'Person 1 (Gast)' });
+
+    await userEvent.type(within(first).getByLabelText('Name'), ' García');
+    await userEvent.click(within(first).getByLabelText('Glutenfrei'));
+    await userEvent.clear(within(first).getByLabelText('Hinweis zum Essen'));
+    // Ticking and unticking a tag again is no change either.
+    await userEvent.click(within(first).getByLabelText('Vegan'));
+    await userEvent.click(within(first).getByLabelText('Vegan'));
+    expect(within(editor).queryByRole('checkbox', { name: CONSENT })).not.toBeInTheDocument();
+    await userEvent.click(within(editor).getByRole('button', { name: 'Speichern' }));
+
+    expect(api.update).toHaveBeenCalledWith('a1', '"v1"', {
+      attending: true,
+      people: [
+        { id: 'p1', name: 'Pablo Pérez García', dietary: { tags: ['vegetarian'] } },
+        { id: 'p2', name: 'María-José García', dietary: { tags: [] } },
+      ],
+      message: '¡Felicidades, Anna y Ben!',
+      language: 'es',
+    });
+  });
+
+  it('shows the API’s request for the confirmation at the checkbox and resends with it', async () => {
+    const api = fakeApi();
+    api.update.mockResolvedValueOnce({
+      ok: false,
+      kind: 'invalid',
+      status: 400,
+      fields: ['dietaryConsent'],
+    });
+    renderApp(api);
+    await userEvent.click(
+      await screen.findByRole('button', {
+        name: 'Antwort von Pablo Pérez, María-José García bearbeiten',
+      }),
+    );
+    const editor = screen.getByRole('form', { name: 'Antwort bearbeiten' });
+    await userEvent.click(within(editor).getByRole('button', { name: 'Speichern' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Neue oder geänderte Angaben zum Essen speichern wir nur mit der ausdrücklichen Einwilligung des Gastes.',
+    );
+    const consent = within(editor).getByRole('checkbox', { name: CONSENT });
+    expect(consent).toHaveAttribute('aria-invalid', 'true');
+
+    await userEvent.click(consent);
+    await userEvent.click(within(editor).getByRole('button', { name: 'Speichern' }));
+    expect(api.update).toHaveBeenLastCalledWith(
+      'a1',
+      '"v1"',
+      expect.objectContaining({ dietaryConsent: true }),
+    );
+    expect(await screen.findByText('Antwort gespeichert.')).toBeInTheDocument();
   });
 
   it('reloads and explains when the reply changed in the meantime (412)', async () => {

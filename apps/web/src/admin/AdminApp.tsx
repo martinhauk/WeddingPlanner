@@ -6,6 +6,7 @@ import {
   type AdminResult,
   type AdminRsvp,
   type AdminRsvpUpdate,
+  DIETARY_CONSENT_FIELD,
   EXPORT_CSV_URL,
   LOGIN_URL,
   LOGOUT_URL,
@@ -38,6 +39,8 @@ export function AdminApp({ api, timeZone, confirm = defaultConfirm }: AdminAppPr
   const [editing, setEditing] = useState<AdminRsvp | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
+  /** The API asked for the dietary consent attestation on the last save of the open editor. */
+  const [consentError, setConsentError] = useState(false);
   const mounted = useRef(true);
 
   useEffect(() => {
@@ -86,7 +89,10 @@ export function AdminApp({ api, timeZone, confirm = defaultConfirm }: AdminAppPr
         await load();
         return false;
       case 'invalid':
-        setNotice({ tone: 'error', text: de.invalid });
+        setNotice({
+          tone: 'error',
+          text: result.fields?.includes(DIETARY_CONSENT_FIELD) ? de.consentRequired : de.invalid,
+        });
         return false;
       default:
         setNotice({ tone: 'error', text: de.actionFailed });
@@ -98,6 +104,9 @@ export function AdminApp({ api, timeZone, confirm = defaultConfirm }: AdminAppPr
     setBusy(true);
     setNotice(null);
     const result = await api.update(rsvp.id, rsvp.version, body);
+    setConsentError(
+      !result.ok && result.kind === 'invalid' && !!result.fields?.includes(DIETARY_CONSENT_FIELD),
+    );
     if (await settle(result, de.saved)) {
       setEditing(null);
     }
@@ -152,8 +161,12 @@ export function AdminApp({ api, timeZone, confirm = defaultConfirm }: AdminAppPr
                 key={`${editing.id}-${editing.version}`}
                 rsvp={editing}
                 saving={busy}
+                consentError={consentError}
                 onSave={(body) => void save(editing, body)}
-                onCancel={() => setEditing(null)}
+                onCancel={() => {
+                  setConsentError(false);
+                  setEditing(null);
+                }}
               />
             )}
             <RsvpTable
@@ -162,6 +175,7 @@ export function AdminApp({ api, timeZone, confirm = defaultConfirm }: AdminAppPr
               busy={busy}
               onEdit={(rsvp) => {
                 setNotice(null);
+                setConsentError(false);
                 setEditing(rsvp);
               }}
               onDelete={(rsvp) => void remove(rsvp)}

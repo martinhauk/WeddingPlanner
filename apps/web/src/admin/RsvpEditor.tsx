@@ -1,4 +1,4 @@
-import { type FormEvent, useId, useState } from 'react';
+import { type FormEvent, useId, useRef, useState } from 'react';
 import {
   type AdminRsvp,
   type AdminRsvpUpdate,
@@ -20,15 +20,47 @@ type PersonDraft = {
 export type RsvpEditorProps = {
   readonly rsvp: AdminRsvp;
   readonly saving: boolean;
+  /**
+   * The API refused the last save because new or changed dietary data came without the consent
+   * attestation (`dietaryConsent`): the checkbox is shown with its error until it is ticked.
+   */
+  readonly consentError?: boolean;
   readonly onSave: (body: AdminRsvpUpdate) => void;
   readonly onCancel: () => void;
 };
 
 let nextKey = 0;
 
+/** A note as the API compares it: NFC, whitespace runs collapsed, trimmed. */
+const normalNote = (note: string) => note.normalize('NFC').replace(/\s+/gu, ' ').trim();
+
+/**
+ * Whether `body` adds or changes dietary data compared with the stored reply, by the API's rule
+ * (`AdminDietaryConsent.AddsOrChanges`): a person (matched by id) gets a tag they did not have or a
+ * new or different note, or a new person comes with any dietary data. Removing data never counts.
+ */
+export function addsOrChangesDietary(stored: AdminRsvp, body: AdminRsvpUpdate): boolean {
+  return body.people.some((person) => {
+    const previous =
+      person.id === undefined ? undefined : stored.people.find((p) => p.id === person.id);
+    const tagAdded = person.dietary.tags.some((tag) => !previous?.dietary.tags.includes(tag));
+    const note = person.dietary.note;
+    const noteChanged =
+      note !== undefined && normalNote(note) !== normalNote(previous?.dietary.note ?? '');
+    return tagAdded || noteChanged;
+  });
+}
+
 /** Edits one reply: yes/no, people with dietary needs, and the message. */
-export function RsvpEditor({ rsvp, saving, onSave, onCancel }: RsvpEditorProps) {
+export function RsvpEditor({
+  rsvp,
+  saving,
+  consentError = false,
+  onSave,
+  onCancel,
+}: RsvpEditorProps) {
   const formId = useId();
+  const consentRef = useRef<HTMLInputElement>(null);
   const [attending, setAttending] = useState(rsvp.attending);
   const [people, setPeople] = useState<PersonDraft[]>(() =>
     rsvp.people.map((person) => ({
@@ -40,6 +72,8 @@ export function RsvpEditor({ rsvp, saving, onSave, onCancel }: RsvpEditorProps) 
     })),
   );
   const [message, setMessage] = useState(rsvp.message ?? '');
+  const [consent, setConsent] = useState(false);
+  const [consentMissing, setConsentMissing] = useState(false);
 
   const change = (key: string, update: Partial<PersonDraft>) =>
     setPeople((current) =>
@@ -51,28 +85,41 @@ export function RsvpEditor({ rsvp, saving, onSave, onCancel }: RsvpEditorProps) 
       tags: checked ? [...person.tags, tag] : person.tags.filter((value) => value !== tag),
     });
 
+  const trimmedMessage = message.trim();
+  const body: AdminRsvpUpdate = {
+    attending,
+    people: people.map((person) => {
+      const note = person.note.trim();
+      return {
+        ...(person.id === undefined ? {} : { id: person.id }),
+        name: person.name.trim(),
+        dietary: attending
+          ? {
+              tags: DIETARY_TAGS.filter((tag) => person.tags.includes(tag)),
+              ...(note === '' ? {} : { note }),
+            }
+          : { tags: [] },
+      };
+    }),
+    ...(trimmedMessage === '' ? {} : { message: trimmedMessage }),
+    language: rsvp.language,
+  };
+  // The API decides; the checkbox also appears when it asked for the attestation.
+  const askConsent = consentError || addsOrChangesDietary(rsvp, body);
+  const showConsentError = askConsent && !consent && (consentError || consentMissing);
+
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    const trimmedMessage = message.trim();
-    onSave({
-      attending,
-      people: people.map((person) => {
-        const note = person.note.trim();
-        return {
-          ...(person.id === undefined ? {} : { id: person.id }),
-          name: person.name.trim(),
-          dietary: attending
-            ? {
-                tags: DIETARY_TAGS.filter((tag) => person.tags.includes(tag)),
-                ...(note === '' ? {} : { note }),
-              }
-            : { tags: [] },
-        };
-      }),
-      ...(trimmedMessage === '' ? {} : { message: trimmedMessage }),
-      language: rsvp.language,
-    });
+    if (askConsent && !consent) {
+      setConsentMissing(true);
+      consentRef.current?.focus();
+      return;
+    }
+    onSave(askConsent ? { ...body, dietaryConsent: true } : body);
   };
+
+  const hintId = `${formId}-consent-hint`;
+  const errorId = `${formId}-consent-error`;
 
   return (
     <form className="admin-editor" aria-labelledby={`${formId}-title`} onSubmit={submit}>
@@ -176,6 +223,32 @@ export function RsvpEditor({ rsvp, saving, onSave, onCancel }: RsvpEditorProps) 
           onChange={(event) => setMessage(event.target.value)}
         />
       </label>
+
+      {askConsent && (
+        <div className={`admin-consent${showConsentError ? ' invalid' : ''}`}>
+          <label>
+            <input
+              ref={consentRef}
+              type="checkbox"
+              // Checked in `submit` (not `required`), so the message is ours and in German.
+              aria-required="true"
+              checked={consent}
+              aria-invalid={showConsentError}
+              aria-describedby={showConsentError ? `${hintId} ${errorId}` : hintId}
+              onChange={(event) => setConsent(event.target.checked)}
+            />{' '}
+            {de.editor.dietaryConsent}
+          </label>
+          <p id={hintId} className="admin-hint">
+            {de.editor.dietaryConsentHint}
+          </p>
+          {showConsentError && (
+            <p id={errorId} className="admin-field-error">
+              {de.editor.dietaryConsentMissing}
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="admin-editor-actions">
         <button type="submit" className="primary" disabled={saving}>

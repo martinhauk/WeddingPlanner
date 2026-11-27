@@ -72,6 +72,31 @@ describe('createAdminApi', () => {
     expect(result).toEqual({ ok: false, kind, status });
   });
 
+  it('passes on the fields of a validation error, never their values', async () => {
+    const problem = {
+      code: 'validation_failed',
+      errors: [
+        { field: 'dietaryConsent', code: 'required' },
+        { field: 'people[1].name', code: 'too_short' },
+        { code: 'no field' },
+      ],
+    };
+    const body = { attending: true, people: [], language: 'es', dietaryConsent: true } as const;
+
+    const result = await createAdminApi(fakeFetch(() => json(400, problem))).update(
+      'a1',
+      '"v1"',
+      body,
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      kind: 'invalid',
+      status: 400,
+      fields: ['dietaryConsent', 'people[1].name'],
+    });
+  });
+
   it('treats a redirect to the login page as signed out', async () => {
     const redirect = Response.error();
     Object.defineProperty(redirect, 'type', { value: 'opaqueredirect' });
