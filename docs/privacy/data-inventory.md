@@ -45,9 +45,11 @@ the guest (create, change, withdraw) and by an admin (change, delete).
   as dietary data is entered) and record the consent: `DietaryConsent` `true`, source `guest`, the
   time. A guest write without dietary data clears all three.
 - **Admin edits need an attestation** (`PUT /api/admin/rsvps/{id}`, `AdminDietaryConsent`). An edit
-  that adds or changes dietary data (a new tag, a new or changed note, a new person with dietary data;
-  people compared by id) must carry `dietaryConsent: true`: the admin attests that the guest
-  explicitly consented, for example in an email. Without it the API answers 400 and stores nothing;
+  that adds or changes dietary data (a new tag, a new or changed note, a new name for a person who
+  keeps dietary data, a new person with dietary data; people compared by id) must carry
+  `dietaryConsent: true`: the admin attests that the guest explicitly consented, for example in an
+  email. A rename counts because the data may now belong to someone else. Without the attestation
+  the API answers 400 and stores nothing;
   the admin editor shows the checkbox "Der Gast hat ausdrücklich eingewilligt, dass wir diese Angaben
   zum Essen speichern." as soon as such a change is made. An attested edit records source `admin` and
   the time. Unchanged or only removed dietary data needs no attestation and keeps the stored consent;
@@ -56,10 +58,12 @@ the guest (create, change, withdraw) and by an admin (change, delete).
   tick the box only with the guest's explicit consent and keep their own proof of it** (for example
   the guest's email).
 - Rows written before the source existed have no `DietaryConsentSource`/`DietaryConsentAt`; their
-  `DietaryConsent` `true` came from a guest write (only guest writes set it then). Dietary data an
-  admin entered before the attestation existed keeps `DietaryConsent` `false` until it is changed
-  with the attestation (production RSVP was still off when the attestation landed, so only e2e and
-  test data can be affected).
+  `DietaryConsent` `true` came from a guest write (only guest writes set it then). Admin edits from
+  before the attestation left the flag as it was. So on a reply without an earlier guest consent,
+  dietary data an admin entered then keeps `DietaryConsent` `false` until it is changed with the
+  attestation or the guest saves the reply. On a reply where the guest had consented in the form,
+  the guest's `true` stayed, although it records no consent for what the admin added. Production RSVP
+  was still off when the attestation landed, so only e2e and test data can be affected.
 - **No IP addresses, cookies or raw tokens are stored.** The edit token (32 random bytes) exists only
   as its SHA-256 hash (`TokenHash`), compared in constant time.
 - **Deletes are hard deletes.** A withdrawn reply (`DELETE /api/rsvp/me`) or an admin delete removes

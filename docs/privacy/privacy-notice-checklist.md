@@ -54,11 +54,13 @@ Tick each item on `test` (open `/datenschutz` there in German, English and Spani
       the food, that the guest answers for companions with their agreement, and that consent can be
       withdrawn.
 - [ ] **Admin edits need an attestation, enforced by the API.** When an admin adds or changes dietary
-      data (a tag, a note, a new person with dietary data), the admin editor shows the checkbox "Der
-      Gast hat ausdrücklich eingewilligt, dass wir diese Angaben zum Essen speichern." and
-      `PUT /api/admin/rsvps/{id}` refuses the edit without it (400). The reply then records that and
-      when an admin attested (`DietaryConsentSource` `admin`), but not which admin and not the
-      guest's proof. Agree among the admins: **tick it only with that guest's explicit consent, and
+      data (a tag, a note, a new name for a person who keeps dietary data, a new person with dietary
+      data), the admin editor shows the checkbox "Der Gast hat ausdrücklich eingewilligt, dass wir
+      diese Angaben zum Essen speichern." and `PUT /api/admin/rsvps/{id}` refuses the edit without it
+      (400). The reply then records that and when an admin attested (`DietaryConsentSource`
+      `admin`), but not which admin and not the guest's proof. To replace a companion, remove the
+      person and add the new one, so their dietary data does not move to someone else. Agree among
+      the admins: **tick it only with that guest's explicit consent, and
       keep your own proof of it** (for example their email or message). The notice's "What data we
       process" says so too: dietary details given another way (for example by email) are entered
       only with explicit consent, and the consent, its time and where it was given are recorded.

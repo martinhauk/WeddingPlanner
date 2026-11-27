@@ -352,14 +352,18 @@ changes** dietary data must carry `dietaryConsent: true`, the admin's attestatio
 explicitly consented (Art. 9(2)(a) GDPR); without it the answer is 400 `validation_failed` with
 `dietaryConsent` / `required`, as for a guest, and nothing is stored. "Adds or changes" compares each
 person by `id` with the stored reply: a tag that person did not have, a note that is new or different,
-or a new person (no or unknown `id`) with any dietary data. Removing tags, notes or people, renaming
-people and changing the answer or message need no attestation. Results: attested additions or changes
-store `DietaryConsent` with source `admin` and the time (which admin is not stored; `UpdatedBy` is not
-implemented); unchanged or only removed data keeps the stored consent, source and time, and an
-attestation sent anyway is ignored (it never replaces a guest's own consent); a reply left without
-dietary data (all removed, or now a "no") has no consent. The check runs after `If-Match` (428 / 412
-first). The admin editor asks for the attestation with a checkbox as soon as an edit adds or changes
-dietary data. `totals`: `replies`, `yes`, `no`, `attendingPeople` (headcount),
+a new name (after sanitising) for a person who still has any dietary data (the data may now belong to
+someone else, for example when an admin types a new companion into an existing slot), or a new person
+(no or unknown `id`) with any dietary data. Removing tags, notes or people, renaming people without
+dietary data and changing the answer or message need no attestation. Results: attested additions or
+changes store `DietaryConsent` with source `admin` and the time (which admin is not stored;
+`UpdatedBy` is not implemented); unchanged or only removed data keeps the stored consent, source and
+time, and an attestation sent anyway is ignored (it never replaces a guest's own consent); a reply
+left without dietary data (all removed, or now a "no") has no consent. The check runs after
+`If-Match` (428 / 412 first). The admin editor asks for the attestation with a checkbox as soon as an
+edit adds or changes dietary data by the same rule (`addsOrChangesDietary`). When the API still asks
+for it, the checkbox stays required only while the answer and the people are the ones it refused; a
+hidden checkbox is unticked. `totals`: `replies`, `yes`, `no`, `attendingPeople` (headcount),
 `declinedPeople`, `dietary` (attending people per tag: `vegetarian`, `vegan`, `glutenFree`,
 `lactoseFree`), `dietaryNotes`, `messages`.
 
