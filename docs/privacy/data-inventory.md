@@ -55,13 +55,13 @@ the guest (create, change, withdraw) and by an admin (change, delete).
   the admin editor shows the checkbox "Der Gast hat ausdrücklich eingewilligt, dass wir diese Angaben
   zum Essen speichern." as soon as such a change is made. An attested edit records source `admin` and
   the time as the latest consent, and keeps the guest's own consent time (`DietaryConsentGuestAt`):
-  when an admin fixes a typo in the name of a person with dietary data, the record shows both the
-  guest's consent in the form and the admin's attestation. Unchanged or only removed dietary data
-  needs no attestation and keeps the stored consent; no dietary data left clears it, including the
-  guest's consent time. The system records **that and when** an admin attested, **not which
-  admin** (no admin identity is stored, see `UpdatedBy` below) and not the guest's proof: **admins
-  tick the box only with the guest's explicit consent and keep their own proof of it** (for example
-  the guest's email).
+  when an admin fixes a typo in the name of a person with dietary data, the stored row (table and
+  backups) keeps both the guest's consent in the form and the admin's attestation; the admin view
+  does not show them. Unchanged or only removed dietary data needs no attestation and keeps the
+  stored consent; no dietary data left clears it, including the guest's consent time. The system
+  records **that and when** an admin attested, **not which admin** (no admin identity is stored,
+  see `UpdatedBy` below) and not the guest's proof: **admins tick the box only with the guest's
+  explicit consent and keep their own proof of it** (for example the guest's email).
 - Rows written before `DietaryConsentGuestAt` existed have none; on such a row with source `guest`,
   `DietaryConsentAt` is the guest's consent time, and an admin edit copies it into
   `DietaryConsentGuestAt` before an attestation replaces the source.

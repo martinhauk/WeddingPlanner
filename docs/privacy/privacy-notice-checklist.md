@@ -62,11 +62,12 @@ Tick each item on `test` (open `/datenschutz` there in German, English and Spani
       person and add the new one, so their dietary data does not move to someone else. Fixing a
       typo in the name of a person with dietary data asks for the confirmation too (the system
       cannot tell a typo from another person); the guest's own consent time from the form is kept
-      (`DietaryConsentGuestAt`), so the reply shows both. Agree among the admins: **tick it only
-      with that guest's explicit consent, and keep your own proof of it** (for example their email
-      or message). The notice's "What data we
-      process" says so too: dietary details given another way (for example by email) are entered
-      only with explicit consent, and the consent, its time and where it was given are recorded.
+      (`DietaryConsentGuestAt`), so the stored row (table and backups) keeps both times; the admin
+      view does not show them. Agree among the admins: **tick it only with that guest's explicit
+      consent, and keep your own proof of it** (for example their email or message). The notice's
+      "What data we process" says so too: dietary details given another way (for example by
+      email) are entered only with explicit consent, and the consent, its time and where it was
+      given are recorded.
 - [ ] Dietary details go only to the kitchen or caterer, with names only (the notice's "purpose"
       paragraph says so). Decide how you pass them on (the CSV export leaves the system: keep it
       safe and delete it after the wedding).
@@ -92,10 +93,10 @@ request before it is stored in Germany; telemetry and backups stay in Germany.
       example in the USA; Microsoft is certified under the **EU-U.S. Data Privacy Framework**
       (adequacy decision, Art. 45 GDPR), and the **standard contractual clauses** apply to every
       transfer outside the EU (Art. 46 GDPR). When `swaLocation` or `dataLocation` is outside the
-      EU, the paragraph also names that region and says that the replies always go there; check
-      that it names West US 2 (or your `swaLocation`). Lead decision in #95, revertible by the
-      owner: before, the paragraph appeared only when a region was outside the EU, although the
-      notice says the pages come from a worldwide network.
+      EU, the paragraph also names that region and says that the replies are always sent there;
+      check that it names West US 2 (or your `swaLocation`). Lead decision in #95, revertible by
+      the owner: before, the paragraph appeared only when a region was outside the EU, although
+      the notice says the pages come from a worldwide network.
 - [ ] **Open question: should the dietary consent sentence mention the US processing?** The transfer
       itself rests on the adequacy decision and the clauses, not on consent, and the notice
       explains it. Mentioning it in the consent sentence too ("…processed on Microsoft servers,

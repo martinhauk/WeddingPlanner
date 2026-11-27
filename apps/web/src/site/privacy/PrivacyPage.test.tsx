@@ -248,17 +248,17 @@ describe('PrivacyPage', () => {
     [
       'de',
       'Hosting und Dienstleister',
-      'Auch die Azure-Region East US 2 (Virginia, USA) liegt außerhalb der EU; eure Antworten gehen also in jedem Fall dorthin. Microsoft ist nach dem EU-U.S. Data Privacy Framework zertifiziert',
+      'Die Azure-Region East US 2 (Virginia, USA) liegt ebenfalls außerhalb der EU; dorthin werden eure Antworten in jedem Fall übermittelt. Microsoft ist nach dem EU-U.S. Data Privacy Framework zertifiziert',
     ],
     [
       'en',
       'Hosting and service providers',
-      'The Azure region East US 2 (Virginia, USA) is outside the EU, too, so your replies always go there. Microsoft is certified under the EU-U.S. Data Privacy Framework',
+      'The Azure region East US 2 (Virginia, USA) is also outside the EU, and your replies are always sent there. Microsoft is certified under the EU-U.S. Data Privacy Framework',
     ],
     [
       'es',
       'Alojamiento y proveedores',
-      'La región de Azure East US 2 (Virginia, EE. UU.) también está fuera de la UE, así que vuestras respuestas llegan allí en todo caso. Microsoft está certificada conforme al Marco de Privacidad de Datos UE-EE. UU.',
+      'La región de Azure East US 2 (Virginia, EE. UU.) también está fuera de la UE, y vuestras respuestas se envían allí en todo caso. Microsoft está certificada conforme al Marco de Privacidad de Datos UE-EE. UU.',
     ],
   ] as const)(
     'names an API region in the USA in the transfer paragraph (%s)',
@@ -274,13 +274,13 @@ describe('PrivacyPage', () => {
   it('names every region outside the EU once', () => {
     const { unmount } = renderPage({ regions: { app: 'eastasia', data: 'somewhere1' } });
     expect(transferParagraph('Hosting und Dienstleister')).toContain(
-      'Auch die Azure-Regionen East Asia (Hongkong) und somewhere1 liegen außerhalb der EU;',
+      'Die Azure-Regionen East Asia (Hongkong) und somewhere1 liegen ebenfalls außerhalb der EU;',
     );
     unmount();
     renderPage({ regions: { app: 'eastus2', data: 'eastus2' }, lang: 'en' });
     const paragraph = transferParagraph('Hosting and service providers');
     expect(paragraph).toContain(
-      'The Azure region East US 2 (Virginia, USA) is outside the EU, too',
+      'The Azure region East US 2 (Virginia, USA) is also outside the EU',
     );
     expect(paragraph.match(/East US 2/g)).toHaveLength(1);
   });

@@ -129,14 +129,14 @@ export const privacyText = {
     es: 'La red mundial de Microsoft incluye también servidores fuera de la UE, por ejemplo en EE. UU., así que vuestros datos también pueden transferirse allí.',
   },
   transferRegionOne: {
-    de: 'Auch die Azure-Region {regions} liegt außerhalb der EU; eure Antworten gehen also in jedem Fall dorthin.',
-    en: 'The Azure region {regions} is outside the EU, too, so your replies always go there.',
-    es: 'La región de Azure {regions} también está fuera de la UE, así que vuestras respuestas llegan allí en todo caso.',
+    de: 'Die Azure-Region {regions} liegt ebenfalls außerhalb der EU; dorthin werden eure Antworten in jedem Fall übermittelt.',
+    en: 'The Azure region {regions} is also outside the EU, and your replies are always sent there.',
+    es: 'La región de Azure {regions} también está fuera de la UE, y vuestras respuestas se envían allí en todo caso.',
   },
   transferRegionMany: {
-    de: 'Auch die Azure-Regionen {regions} liegen außerhalb der EU; eure Antworten gehen also in jedem Fall dorthin.',
-    en: 'The Azure regions {regions} are outside the EU, too, so your replies always go there.',
-    es: 'Las regiones de Azure {regions} también están fuera de la UE, así que vuestras respuestas llegan allí en todo caso.',
+    de: 'Die Azure-Regionen {regions} liegen ebenfalls außerhalb der EU; dorthin werden eure Antworten in jedem Fall übermittelt.',
+    en: 'The Azure regions {regions} are also outside the EU, and your replies are always sent there.',
+    es: 'Las regiones de Azure {regions} también están fuera de la UE, y vuestras respuestas se envían allí en todo caso.',
   },
   transferBasis: {
     de: 'Microsoft ist nach dem EU-U.S. Data Privacy Framework zertifiziert, für das ein Angemessenheitsbeschluss der EU-Kommission besteht (Art. 45 DSGVO). Für jede Übermittlung in ein Land außerhalb der EU gelten außerdem die Standardvertragsklauseln der EU-Kommission (Art. 46 DSGVO).',
