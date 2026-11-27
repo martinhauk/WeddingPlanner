@@ -183,6 +183,19 @@ deploy logs print codes, counts and hashes, never content or hostnames.
 `test` gets the same backups and retention as production. Clear test replies before the invitations
 go out and on the deletion date, like production.
 
+## Guests' rights: how each one is served
+
+| Right                               | While RSVP is open                                         | After the deadline                                                                    |
+| ----------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Access (Art. 15)                    | The guest sees their reply (cookie or personal link)       | Read-only on the page; anything else by email: an admin reads it in the admin area    |
+| Rectification (Art. 16)             | The guest changes it                                       | An admin changes it (`PUT /api/admin/rsvps/{id}`; admins may edit after the deadline) |
+| Erasure, withdrawal (Art. 17, 7(3)) | The guest withdraws the reply: deleted at once             | An admin deletes it (`DELETE /api/admin/rsvps/{id}`, a hard delete)                   |
+| Portability (Art. 20)               | On request: the admin's CSV export, cut to that guest      | The same                                                                              |
+| Backups                             | Deleted data leaves the backups within 30 days (see above) | The same                                                                              |
+
+Requests reach the couple through `privacy.email`. There is no self-service erasure after the
+deadline; that is a manual admin step, so answer such requests within a month (Art. 12(3)).
+
 ## Deletion procedure (owner)
 
 On or before `privacy.deleteBy`:
