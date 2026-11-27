@@ -18,6 +18,11 @@ chats.
 | Restore drill            | every e2e deploy, after the smoke test            | `drill`   | e2e              | after the export, before the restore; a failure fails the e2e job           |
 | Manual backup or restore | when you need it (`scripts/ops/restore-table.sh`) | `manual`  | any              | by hand (`check --backup-id`); a restore checks every file before it writes |
 
+Production is switched off until there is a customer
+([ADR 0012](../adr/0012-production-off-until-first-customer.md)): while the repository variable
+`PRODUCTION_ENABLED` is not `true`, production is neither deployed nor backed up (`backup.yml` runs
+for test only).
+
 - **Pre-deploy:** [`_deploy-environment.yml`](../../.github/workflows/_deploy-environment.yml)
   first deploys the backup store ([`infra/app/backup.bicep`](../../infra/app/backup.bicep), which
   touches neither the app nor the data), then exports every table, reads that backup back and

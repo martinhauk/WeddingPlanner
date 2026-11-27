@@ -18,6 +18,10 @@ its content, branch names, tokens or `gh` output into issues, PRs or chats.
 | `repository_dispatch` type `instance-updated` | test → production (approval)                  | `client_payload.instance_sha`, else `main` |
 | manual run of `deploy` (`workflow_dispatch`)  | `all`, one environment, `test-and-production` | `instance-ref` input, else `main`          |
 
+- **production** is switched off until there is a customer
+  ([ADR 0012](../adr/0012-production-off-until-first-customer.md)): it runs only while the
+  repository variable `PRODUCTION_ENABLED` is `true`. Otherwise every trigger above deploys without
+  it, with a notice and a summary line; a run that selects only production deploys nothing.
 - **e2e** always deploys `samples/instance/`; **test** and **production** always deploy the instance
   repo. Each environment is a call of
   [`_deploy-environment.yml`](../../.github/workflows/_deploy-environment.yml) from
@@ -119,8 +123,8 @@ Rules the workflow enforces:
 
 ### Production approvals
 
-Every production deploy waits for the owner's approval (GitHub Environment `production`), including
-content-only deploys and rollbacks. Deploys of one environment never run at the same time (one concurrency group per environment, a running deploy is never
+While production is switched on, every production deploy waits for the owner's approval (GitHub
+Environment `production`), including content-only deploys and rollbacks. Deploys of one environment never run at the same time (one concurrency group per environment, a running deploy is never
 cancelled): a newer deploy queues behind the running or waiting one and replaces an older queued
 one, whose run then shows as cancelled. To ship the newest commit, **reject** older waiting
 production deploys and approve the newest. Pending approvals expire after 30 days.

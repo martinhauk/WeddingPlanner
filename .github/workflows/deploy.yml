@@ -11,7 +11,10 @@
 #                key); runs after e2e succeeded or was not selected.
 # - production:  the same instance repo, pinned to the instance commit test deployed in this run;
 #                runs after test succeeded or was not selected, and waits for the owner's approval
-#                (GitHub Environment `production`).
+#                (GitHub Environment `production`). Switched off until there is a customer
+#                (ADR 0012): it runs only while the REPOSITORY variable PRODUCTION_ENABLED is
+#                'true'. Otherwise the plan drops it with a notice and a summary line, and the job is
+#                skipped without naming the environment (naming it would create it again).
 # Each environment is a call of _deploy-environment.yml, which skips cleanly while its environment
 # has no Azure variables (or no INSTANCE_REPO) and fails on a missing or invalid instance.
 # Backups (docs/runbooks/backup-restore.md): test and production export every table to their own
@@ -20,7 +23,7 @@
 # so a broken backup or restore path stops the promotion before test. Nightly: backup.yml.
 #
 # Triggers:
-# - push to main:           e2e -> test -> production.
+# - push to main:           e2e -> test -> production (production only while it is switched on).
 # - repository_dispatch:    type `instance-updated` (the instance repo changed): test -> production.
 #                           Optional client_payload.instance_sha pins the instance commit.
 # - workflow_dispatch:      run from main. `environment` picks all, one environment or test and
@@ -87,6 +90,7 @@ jobs:
       e2e: ${{ steps.plan.outputs.e2e }}
       test: ${{ steps.plan.outputs.test }}
       production: ${{ steps.plan.outputs.production }}
+      environments: ${{ steps.plan.outputs.environments }}
       instance-ref: ${{ steps.plan.outputs.instance-ref }}
     steps:
       - name: Check out (commit graph of every branch and tag, no file history)
@@ -104,6 +108,7 @@ jobs:
           INPUT_REF: ${{ inputs.ref }}
           INPUT_INSTANCE_REF: ${{ inputs.instance-ref }}
           PAYLOAD_INSTANCE_SHA: ${{ github.event.client_payload.instance_sha }}
+          PRODUCTION_ENABLED: ${{ vars.PRODUCTION_ENABLED }}
         run: |
           fail() { echo "::error::$1"; exit 1; }
           # The GitHub Environments accept deployments from main only.
@@ -133,6 +138,20 @@ jobs:
             *) fail "unsupported event $EVENT" ;;
           esac
           selected() { [[ " $envs " == *" $1 "* ]]; }
+
+          # Production is switched off until there is a customer (ADR 0012): drop it unless the
+          # repository variable PRODUCTION_ENABLED is 'true'. Not a failure, so every trigger and
+          # dispatch input keeps working; test still deploys.
+          production_off=false
+          if selected production && [ "$PRODUCTION_ENABLED" != true ]; then
+            production_off=true
+            kept=""
+            for env in $envs; do
+              if [ "$env" != production ]; then kept="$kept $env"; fi
+            done
+            envs=${kept# }
+            echo "::notice::production is switched off (repository variable PRODUCTION_ENABLED is not 'true'); it is not deployed."
+          fi
 
           # Instance ref: a full commit SHA or a branch name of the instance repo.
           if [ -n "$instance_ref" ] && ! [[ $instance_ref =~ ^[0-9a-f]{40}$ ]]; then
@@ -175,7 +194,7 @@ jobs:
             branches=$(git for-each-ref --contains "$sha" --format='%(refname)' refs/remotes/origin |
               grep -cv '/HEAD$' || true)
             [ "$branches" -gt 0 ] || fail "the commit is on no branch of this repository"
-            echo "::warning::deploying ${sha:0:7}, which is not on main, to: $envs"
+            echo "::warning::deploying ${sha:0:7}, which is not on main, to: ${envs:-no environment}"
           fi
 
           {
@@ -183,18 +202,24 @@ jobs:
             for env in e2e test production; do
               if selected "$env"; then echo "$env=true"; else echo "$env=false"; fi
             done
+            echo "environments=$envs"
             echo "instance-ref=$instance_ref"
           } >>"$GITHUB_OUTPUT"
-          echo "commit ${sha:0:7} (on main: $on_main) -> $envs"
+          echo "commit ${sha:0:7} (on main: $on_main) -> ${envs:-no environment}"
           {
             echo "### deploy plan"
             echo "- commit: \`${sha:0:7}\`"
-            echo "- environments: $envs"
+            echo "- environments: ${envs:-none}"
+            if [ "$production_off" = true ]; then
+              echo "- production: switched off (repository variable PRODUCTION_ENABLED)"
+            fi
           } >>"$GITHUB_STEP_SUMMARY"
 
   ci:
     name: ci
     needs: plan
+    # Nothing to deploy (only production was selected while it is switched off): no CI run.
+    if: needs.plan.outputs.environments != ''
     permissions:
       contents: read
     uses: ./.github/workflows/ci.yml
@@ -249,9 +274,11 @@ jobs:
       - e2e
       - test
     # After ci and test succeeded, or when test was not selected; e2e likewise. Then the approval.
+    # Only while production is switched on (ADR 0012); the plan already drops it otherwise, and the
+    # variable is checked again here so a re-run after switching it off cannot create the environment.
     if: >-
       ${{ !cancelled() && needs.plan.result == 'success' && needs.ci.result == 'success'
-      && needs.plan.outputs.production == 'true'
+      && needs.plan.outputs.production == 'true' && vars.PRODUCTION_ENABLED == 'true'
       && (needs.e2e.result == 'success' || (needs.e2e.result == 'skipped' && needs.plan.outputs.e2e != 'true'))
       && (needs.test.result == 'success' || (needs.test.result == 'skipped' && needs.plan.outputs.test != 'true')) }}
     permissions:

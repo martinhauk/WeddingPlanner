@@ -3,7 +3,9 @@
 # - uptime:      every 6 hours, e2e, test and production: home page 200, /version.json with a commit
 #                SHA and the right instance kind, /api/health 200 (or the edge lockdown). Keeps ONE
 #                open issue labelled `incident` in step with the failing environments, naming only
-#                the environments, and fails the run while an environment is down.
+#                the environments, and fails the run while an environment is down. Production only
+#                while the REPOSITORY variable PRODUCTION_ENABLED is 'true' (ADR 0012: switched off
+#                until there is a customer); otherwise the summary says it is switched off.
 # - cold-start:  every 3 hours, e2e only, at least 1.5 hours after the last uptime check: durations
 #                of the first /api/health, /api/rsvp/status and a warm /api/health, in the job
 #                summary.
@@ -67,7 +69,15 @@ jobs:
           UPTIME_HOST_E2E: ${{ secrets.UPTIME_HOST_E2E }}
           UPTIME_HOST_TEST: ${{ secrets.UPTIME_HOST_TEST }}
           UPTIME_HOST_PRODUCTION: ${{ secrets.UPTIME_HOST_PRODUCTION }}
-        run: scripts/ops/uptime.sh check
+          PRODUCTION_ENABLED: ${{ vars.PRODUCTION_ENABLED }}
+        run: |
+          envs=(--env e2e --env test)
+          if [ "$PRODUCTION_ENABLED" = true ]; then
+            envs+=(--env production)
+          else
+            echo "production: switched off (repository variable PRODUCTION_ENABLED)" >>"$GITHUB_STEP_SUMMARY"
+          fi
+          scripts/ops/uptime.sh check "${envs[@]}"
 
       - name: Open, update or close the incident issue
         # Only after a complete check that reached at least one environment, and only from main.

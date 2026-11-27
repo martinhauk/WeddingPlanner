@@ -99,7 +99,9 @@ the subscription stops serving until the month resets. There is nothing to lock 
 
 ### Environment down
 
-The `uptime` workflow checks e2e, test and production every 6 hours and keeps **one** issue labelled
+The `uptime` workflow checks e2e, test and production every 6 hours (production only while the
+repository variable `PRODUCTION_ENABLED` is `true`,
+[ADR 0012](../adr/0012-production-off-until-first-customer.md)) and keeps **one** issue labelled
 `incident` open while an environment is down. The issue names only the environments; the job
 summary of the failing run shows which check failed (`home`, `version.json` or `/api/health`, as
 status codes).

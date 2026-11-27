@@ -39,7 +39,7 @@ flowchart LR
   api --> tables[(Table Storage)]
   api --> insights[Application Insights]
   instance[(Private instance repo<br/>content + config)] -->|baked at deploy| deploy
-  deploy[GitHub Actions<br/>build once] -->|OIDC| e2e[e2e] --> test[test] -->|owner approval| prod[production]
+  deploy[GitHub Actions<br/>build once] -->|OIDC| e2e[e2e] --> test[test] -.->|owner approval<br/>switched off for now| prod[production]
 ```
 
 Details: [docs/architecture.md](docs/architecture.md) and the decision records in
@@ -52,7 +52,8 @@ Details: [docs/architecture.md](docs/architecture.md) and the decision records i
   Azure Table Storage; xUnit.
 - **Content:** Zod schemas with generated JSON Schemas; content and images baked into the static
   build.
-- **Infrastructure:** Bicep, GitHub Actions with OIDC, three environments (e2e, test, production).
+- **Infrastructure:** Bicep, GitHub Actions with OIDC, three environments (e2e, test, production;
+  production is switched off until there is a customer).
 - **End-to-end:** Playwright across a phone, tablet and desktop device matrix, with screenshots.
 
 ## Repo map
@@ -112,9 +113,12 @@ then invite the admins.
 ## Release flow
 
 Every merge to `main` is built once and promoted: **e2e** (sample content, write-path tests) →
-**test** (real content, owner acceptance) → **production** (owner approval for every deploy,
-including content-only deploys and rollbacks). Guest-visible features ship dark behind feature flags.
-See [ADR 0004](docs/adr/0004-environments-e2e-test-production.md) and
+**test** (content from the private instance repo, owner acceptance) → **production** (owner
+approval for every deploy, including content-only deploys and rollbacks). There is no live customer
+yet, so **production is switched off**: it runs only while the repository variable
+`PRODUCTION_ENABLED` is `true`, and e2e and test both run on the fictional sample couple
+([ADR 0012](docs/adr/0012-production-off-until-first-customer.md)). Guest-visible features ship
+dark behind feature flags. See [ADR 0004](docs/adr/0004-environments-e2e-test-production.md) and
 [feature flags](docs/conventions/feature-flags.md).
 
 ## Content editing
