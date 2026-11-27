@@ -6,9 +6,12 @@ import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import {
+  checkBackup,
+  checkSummary,
   exportBackup,
   type Log,
   listBackups,
+  ReadDeniedError,
   restoreBackup,
   runDrill,
   verifyBackup,
@@ -24,6 +27,13 @@ Commands:
            --label L          backup label: deploy, nightly, manual, ... (default manual)
            --table-prefix P   only tables whose names start with P
            --no-source        the environment has no data account yet: write an empty manifest
+  check    Read a written backup back and compare it with its own manifest; touches no table.
+           Every listed file must exist and match its size and SHA-256, gunzip, parse, and match
+           the row count and content hash; the manifest must exist and no other file may be in
+           the folder. Needs only blob read on the backups; a tables connection is ignored.
+           --backup-id ID     backup to check (required)
+           Exit 0 ok, 1 a problem (FAILED, one code per table), 3 this identity may not read the
+           backups (403 AuthorizationPermissionMismatch).
   restore  Restore a backup into tables (upsert). Checks every file before writing anything.
            --backup-id ID     backup to restore (required, see list)
            --table-prefix P   restore into P<Table> instead of the original names (drills)
@@ -43,8 +53,12 @@ Connections (connection strings only via the environment, never as arguments):
            --container NAME / BACKUP_CONTAINER (default ${DEFAULT_CONTAINER}),
            --create-container (local use: create the container if it is missing)
 Output: --json prints the result as JSON on stdout (the log goes to stderr); --quiet prints no
-        table lines or row counts (export prints only the backup id and the number of tables).
-Nothing printed contains account names, endpoints or row contents.`;
+        table lines or row counts (export prints only the backup id and the number of tables;
+        check only "backup <id>: ok (<n> tables)", or FAILED with a failure code per table:
+        size, sha256, gzip, json, entity, rows, content, missing; manifest: missing or invalid;
+        unlisted files: <count>).
+Nothing printed contains account names, endpoints or row contents.
+Exit codes: 0 ok, 1 failure, 2 usage error, 3 (check) no read access to the backups.`;
 
 class UsageError extends Error {
   override name = 'UsageError';
@@ -160,6 +174,13 @@ export async function main(argv: readonly string[], env: Env = process.env): Pro
         output(manifest);
         return 0;
       }
+      case 'check': {
+        if (!values['backup-id']) throw new UsageError('--backup-id is required');
+        const result = await checkBackup(store, { backupId: values['backup-id'] }, log);
+        for (const line of checkSummary(result)) print(line);
+        output(result);
+        return result.ok ? 0 : 1;
+      }
       case 'restore':
       case 'verify': {
         if (!values['backup-id']) throw new UsageError('--backup-id is required');
@@ -220,6 +241,10 @@ export async function main(argv: readonly string[], env: Env = process.env): Pro
     ) {
       console.error(`error: ${redact(message, secrets)}\n\n${USAGE}`);
       return 2;
+    }
+    if (error instanceof ReadDeniedError) {
+      console.error(`error: ${message}`);
+      return 3;
     }
     console.error(`error: ${redact(message, secrets)}`);
     return 1;

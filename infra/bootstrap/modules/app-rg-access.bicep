@@ -20,7 +20,7 @@ param ownerPrincipalType string
 @description('Principal id of the nightly backup identity (id-<slug>-<env>-backup); empty for e2e.')
 param backupPrincipalId string = ''
 
-@description('Name (GUID) of the custom write-only backup role; empty for e2e.')
+@description('Name (GUID) of the custom backup role (write new blobs, read them back, no delete); empty for e2e.')
 param backupWriterRoleId string = ''
 
 // Built-in role definition ids.
@@ -65,8 +65,41 @@ var assignments = [
   }
 ]
 
-// The nightly backup identity can only read: the resource group's deployments (to find the
-// account names), the tables, and write new blobs (no read, no delete).
+// Role assignment condition (ABAC, condition version 2.0) on the Backup Writer assignment. Writes
+// are not affected. "Read a blob" (every blob read except List Blobs) is allowed only for the
+// current version of a blob in the container table-backups, never for a previous version (which
+// would hold an overwritten original); "List blobs" only in that container. The patterns are from
+// Microsoft Learn, "Example Azure role assignment conditions for Blob Storage" (read only current
+// blob versions; read or list blobs in named containers). 'table-backups' is the container of
+// infra/app/backup.bicep (variable containerName); infra/bootstrap/tests/run.sh checks that both
+// agree and that the condition stays exactly this.
+var backupReadCondition = '''
+(
+ (
+  !(ActionMatches{'Microsoft.Storage/storageAccounts/blobServices/containers/blobs/read'} AND NOT SubOperationMatches{'Blob.List'})
+ )
+ OR
+ (
+  @Resource[Microsoft.Storage/storageAccounts/blobServices/containers:name] StringEquals 'table-backups'
+  AND
+  @Resource[Microsoft.Storage/storageAccounts/blobServices/containers/blobs:isCurrentVersion] BoolEquals true
+ )
+)
+AND
+(
+ (
+  !(ActionMatches{'Microsoft.Storage/storageAccounts/blobServices/containers/blobs/read'} AND SubOperationMatches{'Blob.List'})
+ )
+ OR
+ (
+  @Resource[Microsoft.Storage/storageAccounts/blobServices/containers:name] StringEquals 'table-backups'
+ )
+)
+'''
+
+// The nightly backup identity can read the resource group's deployments (to find the account
+// names) and the tables, write new blobs, and read back current backups (the nightly check); it
+// can delete nothing and write no table.
 var backupAssignments = empty(backupPrincipalId)
   ? []
   : [
@@ -86,7 +119,8 @@ var backupAssignments = empty(backupPrincipalId)
         principalId: backupPrincipalId
         principalType: 'ServicePrincipal'
         roleId: backupWriterRoleId
-        description: 'WeddingPlanner backup identity: write new backup blobs only'
+        description: 'WeddingPlanner backup identity: write new backup blobs, read current backups back'
+        condition: backupReadCondition
       }
     ]
 
@@ -106,6 +140,8 @@ resource roleAssignments 'Microsoft.Authorization/roleAssignments@2022-04-01' = 
       principalId: assignment.principalId
       principalType: assignment.principalType
       description: assignment.description
+      condition: assignment.?condition
+      conditionVersion: empty(assignment.?condition) ? null : '2.0'
     }
   }
 ]

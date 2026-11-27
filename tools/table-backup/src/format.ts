@@ -121,12 +121,45 @@ export function encodeTable(entities: readonly BackupEntity[]): EncodedTable {
   };
 }
 
+/**
+ * Why a table file does not match its manifest entry. `check` prints these codes; none of them
+ * carries row contents or counts.
+ *   size, sha256   the stored bytes differ from the manifest (length, SHA-256)
+ *   gzip           not a gzip file
+ *   json, entity   a line is not JSON, or not a typed entity
+ *   rows, content  the row count or the content hash differs from the manifest
+ */
+export type TableFileProblemCode =
+  | 'size'
+  | 'sha256'
+  | 'gzip'
+  | 'json'
+  | 'entity'
+  | 'rows'
+  | 'content';
+
+export interface TableFileProblem {
+  code: TableFileProblemCode;
+  /** For local logs only: may hold row counts (never row contents). */
+  message: string;
+}
+
+export class TableFileError extends BackupFormatError {
+  override name = 'TableFileError';
+  readonly code: TableFileProblemCode;
+
+  constructor(code: TableFileProblemCode, message: string) {
+    super(message);
+    this.code = code;
+  }
+}
+
 export function decodeTable(gzip: Buffer, where: string): BackupEntity[] {
   let text: string;
   try {
     text = gunzipSync(gzip).toString('utf8');
   } catch {
-    throw new BackupFormatError(`${where}: not a gzip file`);
+    throw new TableFileError('gzip', `${where}: not a gzip file`);
   }
   const entities: BackupEntity[] = [];
   let lineNumber = 0;
@@ -137,28 +170,64 @@ export function decodeTable(gzip: Buffer, where: string): BackupEntity[] {
     try {
       parsed = JSON.parse(line);
     } catch {
-      throw new BackupFormatError(`${where}: line ${lineNumber} is not JSON`);
+      throw new TableFileError('json', `${where}: line ${lineNumber} is not JSON`);
     }
-    entities.push(parseBackupEntity(parsed, `${where}: line ${lineNumber}`));
+    try {
+      entities.push(parseBackupEntity(parsed, `${where}: line ${lineNumber}`));
+    } catch (error) {
+      if (error instanceof BackupFormatError) throw new TableFileError('entity', error.message);
+      throw error;
+    }
   }
   return entities;
 }
 
-/** Checks a downloaded table file against its manifest entry and decodes it. */
-export function readTableFile(table: ManifestTable, gzip: Buffer): BackupEntity[] {
-  if (gzip.length !== table.bytes || sha256Hex(gzip) !== table.sha256) {
-    throw new BackupFormatError(`${table.name}: the file does not match the manifest (sha256)`);
+/**
+ * Checks a downloaded table file against its manifest entry: byte size and SHA-256 of the stored
+ * file, then (independently, so a recompressed but intact file is told apart from changed data)
+ * gunzip, every line, the row count and the content hash. Returns every problem found; the
+ * entities only when the file could be decoded.
+ */
+export function inspectTableFile(
+  table: ManifestTable,
+  gzip: Buffer,
+): { entities: BackupEntity[] | undefined; problems: TableFileProblem[] } {
+  const problems: TableFileProblem[] = [];
+  const mismatch = (what: string) =>
+    `${table.name}: the file does not match the manifest (${what})`;
+  if (gzip.length !== table.bytes) problems.push({ code: 'size', message: mismatch('size') });
+  if (sha256Hex(gzip) !== table.sha256) {
+    problems.push({ code: 'sha256', message: mismatch('sha256') });
   }
-  const entities = decodeTable(gzip, table.name);
+  let entities: BackupEntity[];
+  try {
+    entities = decodeTable(gzip, table.name);
+  } catch (error) {
+    if (!(error instanceof TableFileError)) throw error;
+    problems.push({ code: error.code, message: error.message });
+    return { entities: undefined, problems };
+  }
   if (entities.length !== table.rows) {
-    throw new BackupFormatError(
-      `${table.name}: ${entities.length} rows, the manifest says ${table.rows}`,
-    );
+    problems.push({
+      code: 'rows',
+      message: `${table.name}: ${entities.length} rows, the manifest says ${table.rows}`,
+    });
   }
   if (contentHash(entities) !== table.contentSha256) {
-    throw new BackupFormatError(`${table.name}: content hash does not match the manifest`);
+    problems.push({
+      code: 'content',
+      message: `${table.name}: content hash does not match the manifest`,
+    });
   }
-  return entities;
+  return { entities, problems };
+}
+
+/** Checks a downloaded table file against its manifest entry and decodes it (restore). */
+export function readTableFile(table: ManifestTable, gzip: Buffer): BackupEntity[] {
+  const { entities, problems } = inspectTableFile(table, gzip);
+  const [first] = problems;
+  if (first) throw new TableFileError(first.code, first.message);
+  return entities ?? [];
 }
 
 export function tableFile(name: string): string {

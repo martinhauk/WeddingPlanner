@@ -6,11 +6,12 @@
 # the read-only deploy key into $RUNNER_TEMP/instance, outside the workspace (test, production;
 # production: only commits on the instance repo's main) -> strict content validation -> derive the
 # Bicep parameters from instance.json environments.<env> -> OIDC login -> backup store
-# (infra/app/backup.bicep, additive) -> test/production: table backup BEFORE anything else changes
-# (a failed backup stops the deploy) -> app infra -> build web (bake + vite, DEPLOY_ENV = the
-# environment) and API -> upload with a deploy token fetched at runtime -> read-only smoke test
-# (version.json SHA and content hash gate, home page, health ping) -> e2e: restore drill (export,
-# restore into a temporary table prefix, compare counts and content hashes, delete the copies).
+# (infra/app/backup.bicep, additive) -> test/production: table backup BEFORE anything else changes,
+# then read back and checked against its manifest (a failed backup or check stops the deploy) ->
+# app infra -> build web (bake + vite, DEPLOY_ENV = the environment) and API -> upload with a
+# deploy token fetched at runtime -> read-only smoke test (version.json SHA and content hash gate,
+# home page, health ping) -> e2e: restore drill (export, check the backup, restore into a temporary
+# table prefix, compare counts and content hashes, delete the copies).
 # Backups go to the environment's own backup storage account, never to pipeline artifacts (this
 # repository is public). Runbook: docs/runbooks/backup-restore.md.
 #
@@ -295,6 +296,7 @@ jobs:
           echo "BACKUP_ACCOUNT=$account" >>"$GITHUB_ENV"
 
       - name: Back up the tables (before anything changes the environment)
+        id: backup
         if: steps.gate.outputs.run == 'true' && inputs.environment != 'e2e'
         run: |
           # The data account is the one storage account named st... in the resource group (naming
@@ -316,8 +318,24 @@ jobs:
             --backup-account "$BACKUP_ACCOUNT" --json >"$RUNNER_TEMP/backup-manifest.json"
           id=$(jq -er '.backupId' "$RUNNER_TEMP/backup-manifest.json")
           rm -f "$RUNNER_TEMP/backup-manifest.json"
+          echo "id=$id" >>"$GITHUB_OUTPUT"
           echo "### $DEPLOY_ENV pre-deploy backup" >>"$GITHUB_STEP_SUMMARY"
           echo "- backup id: \`$id\`" >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Check the backup (read it back and compare it with its manifest)
+        if: steps.gate.outputs.run == 'true' && inputs.environment != 'e2e'
+        env:
+          BACKUP_ID: ${{ steps.backup.outputs.id }}
+        run: |
+          # Reads every file of the backup just written (deploy identity: Storage Blob Data
+          # Contributor) and checks the manifest, sizes, SHA-256, gzip, every line, row counts and
+          # content hashes, and that no file is missing or unlisted. No table is touched. --quiet
+          # prints "backup <id>: ok (<n> tables)" or a failure code per table, never row counts.
+          # Any failure (exit 1, or 3 for no read access) fails the job: nothing is deployed.
+          [ -n "$BACKUP_ID" ] || { echo "::error::the backup step reported no backup id"; exit 1; }
+          node tools/table-backup/src/cli.ts check --quiet --backup-id "$BACKUP_ID" \
+            --backup-account "$BACKUP_ACCOUNT"
+          echo "- backup check: passed" >>"$GITHUB_STEP_SUMMARY"
 
       - name: Deploy app infrastructure
         if: steps.gate.outputs.run == 'true'
@@ -488,7 +506,7 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Restore drill (export, restore into a temporary prefix, compare, clean up)
+      - name: Restore drill (export, check, restore into a temporary prefix, compare, clean up)
         if: steps.gate.outputs.run == 'true' && inputs.environment == 'e2e'
         run: |
           # e2e holds fictional data only. The drill writes temporary tables, which needs table
