@@ -3,7 +3,13 @@
 import { gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { type BackupEntity, BackupFormatError } from '../src/edm.ts';
-import { encodeTable, type Manifest, sha256Hex, tableFile } from '../src/format.ts';
+import {
+  encodeTable,
+  MAX_DECOMPRESSED_BYTES,
+  type Manifest,
+  sha256Hex,
+  tableFile,
+} from '../src/format.ts';
 import {
   type CheckResult,
   checkBackup,
@@ -17,6 +23,7 @@ import type { BackupStore, TableStore } from '../src/storage.ts';
 class MemoryStore {
   readonly files = new Map<string, Buffer>();
   listError: unknown;
+  getError: ((path: string) => unknown) | undefined;
 
   async put(path: string, data: Buffer): Promise<void> {
     if (this.files.has(path)) throw new Error('exists');
@@ -24,6 +31,8 @@ class MemoryStore {
   }
 
   async get(path: string): Promise<Buffer> {
+    const error = this.getError?.(path);
+    if (error) throw error;
     const data = this.files.get(path);
     if (!data) throw new Error(`backup file ${path} not found`);
     return Buffer.from(data);
@@ -66,6 +75,21 @@ const source = {
 } as unknown as TableStore;
 
 const quiet = () => {};
+
+/** What Azure answers when the role (or its condition) does not allow the request. */
+const denied = () =>
+  Object.assign(new Error('This request is not authorized to perform this operation'), {
+    statusCode: 403,
+    code: 'AuthorizationPermissionMismatch',
+  });
+
+/**
+ * The same refusal for a HEAD request (downloadToBuffer asks for the blob's properties first): no
+ * body, so the SDK sets no `code` and no message and keeps the x-ms-error-code header in
+ * `details.errorCode`.
+ */
+const deniedHead = (errorCode = 'AuthorizationPermissionMismatch') =>
+  Object.assign(new Error(''), { statusCode: 403, code: undefined, details: { errorCode } });
 
 async function written(): Promise<{ store: MemoryStore; manifest: Manifest }> {
   const store = new MemoryStore();
@@ -148,7 +172,7 @@ describe('check', () => {
     expect(JSON.stringify(result)).not.toMatch(/rows|"3"|:3\b/);
   });
 
-  it('fails a corrupted gzip file (the manifest unchanged)', async () => {
+  it('fails a corrupted gzip file (the manifest unchanged) without unpacking it', async () => {
     const { store, manifest } = await written();
     const path = `${manifest.backupId}/${tableFile('Rsvps')}`;
     const broken = Buffer.from(store.files.get(path) ?? Buffer.alloc(0));
@@ -156,23 +180,36 @@ describe('check', () => {
     store.files.set(path, broken);
     const result = await check(store, manifest.backupId);
     expect(result.ok).toBe(false);
-    expect(problemsOf(result, 'Rsvps')).toEqual(['sha256', 'gzip']);
+    expect(problemsOf(result, 'Rsvps')).toEqual(['sha256']);
     expect(problemsOf(result, 'Guests')).toEqual([]);
     expect(checkSummary(result)).toEqual([
       `backup ${manifest.backupId}: FAILED`,
-      '  Rsvps: sha256, gzip',
+      '  Rsvps: sha256',
     ]);
   });
 
-  it('fails a truncated file on size, SHA-256 and gzip', async () => {
+  it('fails a truncated file on size and SHA-256', async () => {
     const { store, manifest } = await written();
     const path = `${manifest.backupId}/${tableFile('Guests')}`;
     store.files.set(path, (store.files.get(path) ?? Buffer.alloc(0)).subarray(0, 10));
-    expect(problemsOf(await check(store, manifest.backupId), 'Guests')).toEqual([
-      'size',
-      'sha256',
-      'gzip',
-    ]);
+    expect(problemsOf(await check(store, manifest.backupId), 'Guests')).toEqual(['size', 'sha256']);
+  });
+
+  it('fails a file that unpacks to far more than allowed, without running out of memory', async () => {
+    // Concatenated gzip members of 32 MiB of zeros each: 288 MiB from a few hundred KB. The
+    // manifest is updated to match, as a forged one would be, so only the unpacking can catch it.
+    const member = gzipSync(Buffer.alloc(32 * 1024 * 1024));
+    const bomb = Buffer.concat(Array.from({ length: 9 }, () => member));
+    const { store, manifest } = await written();
+    replaceFile(store, manifest, 'Rsvps', bomb, true);
+    const lines: string[] = [];
+    const result = await checkBackup(
+      store as unknown as BackupStore,
+      { backupId: manifest.backupId },
+      (l) => lines.push(l),
+    );
+    expect(problemsOf(result, 'Rsvps')).toEqual(['gzip']);
+    expect(lines).toContain(`  Rsvps: unpacks to more than ${MAX_DECOMPRESSED_BYTES} bytes`);
   });
 
   it('fails a changed row, also when the file size and SHA-256 were updated to match', async () => {
@@ -181,12 +218,12 @@ describe('check', () => {
     ) as BackupEntity[];
     const gzip = encodeTable(changed).gzip;
 
+    // The stored bytes no longer match: reported, and the file is not unpacked.
     const plain = await written();
     replaceFile(plain.store, plain.manifest, 'Rsvps', gzip, false);
     const problems = problemsOf(await check(plain.store, plain.manifest.backupId), 'Rsvps');
     expect(problems).toContain('sha256');
-    expect(problems).toContain('content');
-    expect(problems).not.toContain('rows');
+    expect(problems).not.toContain('content');
 
     const resigned = await written();
     replaceFile(resigned.store, resigned.manifest, 'Rsvps', gzip, true);
@@ -269,12 +306,9 @@ describe('check', () => {
     ]);
   });
 
-  it('reports an identity without blob read as ReadDeniedError, other errors as they are', async () => {
+  it('reports an identity that may not list the backup as ReadDeniedError, other errors as they are', async () => {
     const { store, manifest } = await written();
-    store.listError = Object.assign(new Error('This request is not authorized'), {
-      statusCode: 403,
-      code: 'AuthorizationPermissionMismatch',
-    });
+    store.listError = denied();
     await expect(check(store, manifest.backupId)).rejects.toThrow(ReadDeniedError);
     const network = Object.assign(new Error('This request is not authorized'), {
       statusCode: 403,
@@ -282,6 +316,72 @@ describe('check', () => {
     });
     store.listError = network;
     await expect(check(store, manifest.backupId)).rejects.toBe(network);
+  });
+
+  it('fails (never skips) when the manifest cannot be read after the folder was listed', async () => {
+    const { store, manifest } = await written();
+    store.getError = (path) => (path.endsWith('/manifest.json') ? denied() : undefined);
+    const result = await check(store, manifest.backupId);
+    expect(result).toMatchObject({ ok: false, manifest: 'denied', tables: [] });
+    expect(checkSummary(result)).toEqual([
+      `backup ${manifest.backupId}: FAILED`,
+      '  manifest: denied',
+    ]);
+  });
+
+  it('fails (never skips) when a table file cannot be read after the folder was listed', async () => {
+    const { store, manifest } = await written();
+    store.getError = (path) => (path.endsWith('/tables/Rsvps.jsonl.gz') ? denied() : undefined);
+    const result = await check(store, manifest.backupId);
+    expect(result.ok).toBe(false);
+    expect(problemsOf(result, 'Rsvps')).toEqual(['denied']);
+    expect(problemsOf(result, 'Guests')).toEqual([]);
+    expect(checkSummary(result)).toEqual([
+      `backup ${manifest.backupId}: FAILED`,
+      '  Rsvps: denied',
+    ]);
+
+    // Any other refusal of a read passes through as an error, as before.
+    const other = Object.assign(new Error('Server failed to authenticate the request'), {
+      statusCode: 403,
+      code: 'AuthenticationFailed',
+    });
+    store.getError = () => other;
+    await expect(check(store, manifest.backupId)).rejects.toBe(other);
+  });
+
+  it('treats a refused HEAD request (code only in details.errorCode) like a refused GET', async () => {
+    const { store, manifest } = await written();
+    store.getError = (path) => (path.endsWith('/manifest.json') ? deniedHead() : undefined);
+    const noManifest = await check(store, manifest.backupId);
+    expect(noManifest).toMatchObject({ ok: false, manifest: 'denied', tables: [] });
+    expect(checkSummary(noManifest)).toEqual([
+      `backup ${manifest.backupId}: FAILED`,
+      '  manifest: denied',
+    ]);
+
+    store.getError = (path) =>
+      path.endsWith('/tables/Guests.jsonl.gz') ? deniedHead() : undefined;
+    const noTable = await check(store, manifest.backupId);
+    expect(problemsOf(noTable, 'Guests')).toEqual(['denied']);
+    expect(problemsOf(noTable, 'Rsvps')).toEqual([]);
+    expect(checkSummary(noTable)).toEqual([
+      `backup ${manifest.backupId}: FAILED`,
+      '  Guests: denied',
+    ]);
+
+    // Another code in the header, or a 403 without any code, passes through as an error.
+    const other = deniedHead('AuthenticationFailed');
+    store.getError = () => other;
+    await expect(check(store, manifest.backupId)).rejects.toBe(other);
+    const bare = Object.assign(new Error(''), { statusCode: 403, details: {} });
+    store.getError = () => bare;
+    await expect(check(store, manifest.backupId)).rejects.toBe(bare);
+
+    // A listing refused that way is still "no read access yet".
+    store.getError = () => undefined;
+    store.listError = deniedHead();
+    await expect(check(store, manifest.backupId)).rejects.toThrow(ReadDeniedError);
   });
 
   it('refuses an invalid backup id before any request', async () => {

@@ -103,6 +103,7 @@ public sealed class AdminDietaryConsentTests
     public async Task RenamingAPersonWhoKeepsDietaryDataNeedsTheAttestation()
     {
         using var harness = new RsvpHarness();
+        var consentedAt = harness.Time.GetUtcNow();
         await harness.PostAsync(Reply(Person("Pablo Pérez", tags: ["vegetarian"], note: "Sin nueces"), Person("Jürgen Müller")) with { DietaryConsent = true });
         var (id, version, people) = await First(harness);
         harness.Time.Advance(TimeSpan.FromDays(1));
@@ -119,6 +120,60 @@ public sealed class AdminDietaryConsentTests
         stored.Answer.People[0].Name.ShouldBe("María-José García");
         stored.DietaryConsentSource.ShouldBe(DietaryConsentSource.Admin);
         stored.DietaryConsentAt.ShouldBe(harness.Time.GetUtcNow());
+        stored.DietaryConsentGuestAt.ShouldBe(consentedAt, "the guest's own consent in the form stays on record");
+    }
+
+    [Fact]
+    public async Task FixingANameTypoWithTheAttestationKeepsTheGuestsOwnConsentTime()
+    {
+        using var harness = new RsvpHarness();
+        var consentedAt = harness.Time.GetUtcNow();
+        await harness.PostAsync(Reply(Person("Pablo Perez", tags: ["vegetarian"], note: "Sin nueces")) with { DietaryConsent = true });
+        var (id, version, people) = await First(harness);
+        Stored(harness).DietaryConsentGuestAt.ShouldBe(consentedAt);
+        harness.Time.Advance(TimeSpan.FromDays(3));
+
+        // A typo fix of a person with dietary data needs the attestation (the API cannot tell it from a new person) ...
+        var fixedName = Reply(Person("Pablo Pérez", people[0], ["vegetarian"], "Sin nueces"));
+        Errors(await harness.AdminPutAsync(id, fixedName, version)).ShouldBe(["dietaryConsent:required"]);
+        var attested = await harness.AdminPutAsync(id, fixedName with { DietaryConsent = true }, version);
+
+        // ... which records the admin's attestation as the latest consent and keeps the guest's own consent time.
+        attested.Response.StatusCode.ShouldBe(StatusCodes.Status200OK);
+        var stored = Stored(harness);
+        stored.Answer.People[0].Name.ShouldBe("Pablo Pérez");
+        stored.DietaryConsent.ShouldBeTrue();
+        stored.DietaryConsentSource.ShouldBe(DietaryConsentSource.Admin);
+        stored.DietaryConsentAt.ShouldBe(harness.Time.GetUtcNow());
+        stored.DietaryConsentGuestAt.ShouldBe(consentedAt);
+
+        // Later admin edits that leave the dietary data alone keep both.
+        harness.Time.Advance(TimeSpan.FromDays(1));
+        var newVersion = TestHttp.ReadJson(attested).GetProperty("rsvp").GetProperty("version").GetString();
+        (await harness.AdminPutAsync(id, fixedName with { Message = "¡Gracias!" }, newVersion)).Response.StatusCode.ShouldBe(StatusCodes.Status200OK);
+        Stored(harness).DietaryConsentSource.ShouldBe(DietaryConsentSource.Admin);
+        Stored(harness).DietaryConsentGuestAt.ShouldBe(consentedAt);
+    }
+
+    [Fact]
+    public void AnAttestationKeepsTheGuestsConsentTimeOfARowWrittenBeforeThatTimeWasStored()
+    {
+        var consentedAt = DateTimeOffset.UnixEpoch.AddDays(10);
+        var now = consentedAt.AddDays(5);
+        RsvpAnswer Answer(string name) => new(true, [new RsvpPerson("p1", name, [DietaryTags.Vegan], null)], null, "es");
+        // Written between the source column and the guest time column: source guest, no DietaryConsentGuestAt.
+        var current = new RsvpRecord("0123456789abcdef0123456789abcdef", Answer("Pablo Perez"), new string('a', 64), consentedAt, consentedAt,
+            DietaryConsent: true, DietaryConsentSource: DietaryConsentSource.Guest, DietaryConsentAt: consentedAt);
+
+        var attested = AdminDietaryConsent.Apply(current, current with { Answer = Answer("Pablo Pérez"), UpdatedAt = now }, attestation: true, now).ShouldNotBeNull();
+        attested.DietaryConsentSource.ShouldBe(DietaryConsentSource.Admin);
+        attested.DietaryConsentAt.ShouldBe(now);
+        attested.DietaryConsentGuestAt.ShouldBe(consentedAt);
+
+        // An earlier admin attestation is not a guest consent.
+        var adminOnly = current with { DietaryConsentSource = DietaryConsentSource.Admin };
+        AdminDietaryConsent.Apply(adminOnly, adminOnly with { Answer = Answer("Pablo Pérez") }, attestation: true, now)
+            .ShouldNotBeNull().DietaryConsentGuestAt.ShouldBeNull();
     }
 
     [Fact]
@@ -200,6 +255,26 @@ public sealed class AdminDietaryConsentTests
         stored.DietaryConsent.ShouldBeFalse();
         stored.DietaryConsentSource.ShouldBeNull();
         stored.DietaryConsentAt.ShouldBeNull();
+        stored.DietaryConsentGuestAt.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task RemovingAllDietaryDataAfterAnAttestationClearsTheGuestsConsentTimeToo()
+    {
+        using var harness = new RsvpHarness();
+        await harness.PostAsync(Reply(Person("Pablo Pérez", tags: ["vegan"])) with { DietaryConsent = true });
+        var (id, version, people) = await First(harness);
+        var attested = await harness.AdminPutAsync(id, Reply(Person("Pablo Pérez", people[0], ["vegan", "glutenFree"])) with { DietaryConsent = true }, version);
+        Stored(harness).DietaryConsentGuestAt.ShouldNotBeNull();
+
+        var newVersion = TestHttp.ReadJson(attested).GetProperty("rsvp").GetProperty("version").GetString();
+        (await harness.AdminPutAsync(id, Reply(Person("Pablo Pérez", people[0])), newVersion)).Response.StatusCode.ShouldBe(StatusCodes.Status200OK);
+
+        var stored = Stored(harness);
+        stored.DietaryConsent.ShouldBeFalse();
+        stored.DietaryConsentSource.ShouldBeNull();
+        stored.DietaryConsentAt.ShouldBeNull();
+        stored.DietaryConsentGuestAt.ShouldBeNull();
     }
 
     [Fact]
@@ -218,6 +293,7 @@ public sealed class AdminDietaryConsentTests
         guestEdit.Response.StatusCode.ShouldBe(StatusCodes.Status200OK);
         Stored(harness).DietaryConsentSource.ShouldBe(DietaryConsentSource.Guest);
         Stored(harness).DietaryConsentAt.ShouldBe(harness.Time.GetUtcNow());
+        Stored(harness).DietaryConsentGuestAt.ShouldBe(harness.Time.GetUtcNow());
     }
 
     [Fact]

@@ -61,6 +61,7 @@ public sealed class AdminApiIntegrationTests
         stored.Value.GetBoolean("DietaryConsent").ShouldBe(true);
         stored.Value.GetString("DietaryConsentSource").ShouldBe("admin");
         stored.Value.GetDateTimeOffset("DietaryConsentAt").ShouldBe(harness.Time.GetUtcNow());
+        stored.Value.GetDateTimeOffset("DietaryConsentGuestAt").ShouldBeNull("the guest never consented in the form");
 
         (await harness.AdminDeleteAsync(id, version)).Response.StatusCode.ShouldBe(StatusCodes.Status412PreconditionFailed);
         (await harness.AdminDeleteAsync(id, newVersion)).Response.StatusCode.ShouldBe(StatusCodes.Status204NoContent);

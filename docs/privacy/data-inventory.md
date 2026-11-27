@@ -34,6 +34,7 @@ the guest (create, change, withdraw) and by an admin (change, delete).
 | `People[].note`                              | Free text: allergies, intolerances (health data) | Food planning (only for a "yes")         | Art. 9(2)(a) GDPR (explicit) |
 | `DietaryConsent`                             | `true` while stored dietary data has consent     | Proof of consent (Art. 7(1) GDPR)        | Art. 6(1)(c) GDPR            |
 | `DietaryConsentSource`, `DietaryConsentAt`   | `guest` (form) or `admin` (attested), time (UTC) | Proof of consent (Art. 7(1) GDPR)        | Art. 6(1)(c) GDPR            |
+| `DietaryConsentGuestAt`                      | When the guest consented in the form (UTC)       | Proof of consent (Art. 7(1) GDPR)        | Art. 6(1)(c) GDPR            |
 | `Message`                                    | Optional free text to the couple                 | Personal message                         | Art. 6(1)(a) GDPR            |
 | `Language`                                   | `de`, `en` or `es`                               | Answering in the guest's language        | Art. 6(1)(b) GDPR            |
 | `CreatedAt`, `UpdatedAt`                     | Timestamps (UTC)                                 | Deadline handling, support               | Art. 6(1)(b) GDPR            |
@@ -43,7 +44,8 @@ the guest (create, change, withdraw) and by an admin (change, delete).
 - Dietary data is dropped for a "no". **Guest writes** (`POST /api/rsvp`, `PUT /api/rsvp/me`) store it
   only with `dietaryConsent: true` (the API answers 400 otherwise; the form asks for consent as soon
   as dietary data is entered) and record the consent: `DietaryConsent` `true`, source `guest`, the
-  time. A guest write without dietary data clears all three.
+  time, and the same time as the guest's own consent (`DietaryConsentGuestAt`). A guest write
+  without dietary data clears all four.
 - **Admin edits need an attestation** (`PUT /api/admin/rsvps/{id}`, `AdminDietaryConsent`). An edit
   that adds or changes dietary data (a new tag, a new or changed note, a new name for a person who
   keeps dietary data, a new person with dietary data; people compared by id) must carry
@@ -52,11 +54,17 @@ the guest (create, change, withdraw) and by an admin (change, delete).
   the API answers 400 and stores nothing;
   the admin editor shows the checkbox "Der Gast hat ausdrücklich eingewilligt, dass wir diese Angaben
   zum Essen speichern." as soon as such a change is made. An attested edit records source `admin` and
-  the time. Unchanged or only removed dietary data needs no attestation and keeps the stored consent;
-  no dietary data left clears it. The system records **that and when** an admin attested, **not which
-  admin** (no admin identity is stored, see `UpdatedBy` below) and not the guest's proof: **admins
-  tick the box only with the guest's explicit consent and keep their own proof of it** (for example
-  the guest's email).
+  the time as the latest consent, and keeps the guest's own consent time (`DietaryConsentGuestAt`):
+  when an admin fixes a typo in the name of a person with dietary data, the stored row (table and
+  backups) keeps both the guest's consent in the form and the admin's attestation; the admin view
+  does not show them. Unchanged or only removed dietary data needs no attestation and keeps the
+  stored consent; no dietary data left clears it, including the guest's consent time. The system
+  records **that and when** an admin attested, **not which admin** (no admin identity is stored,
+  see `UpdatedBy` below) and not the guest's proof: **admins tick the box only with the guest's
+  explicit consent and keep their own proof of it** (for example the guest's email).
+- Rows written before `DietaryConsentGuestAt` existed have none; on such a row with source `guest`,
+  `DietaryConsentAt` is the guest's consent time, and an admin edit copies it into
+  `DietaryConsentGuestAt` before an attestation replaces the source.
 - Rows written before the source existed have no `DietaryConsentSource`/`DietaryConsentAt`; their
   `DietaryConsent` `true` came from a guest write (only guest writes set it then). Admin edits from
   before the attestation left the flag as it was. So on a reply without an earlier guest consent,
@@ -153,8 +161,12 @@ guest or admin uses).
 
 - **Dietary data passes through the United States** when `swaLocation` is a US region (West US 2 by
   default): the managed functions that receive and validate a reply run there, while the reply is
-  stored only in `dataLocation` (Germany). The notice covers this with the transfer clause (EU-U.S.
-  Data Privacy Framework plus standard contractual clauses); see the checklist.
+  stored only in `dataLocation` (Germany). The notice covers this with the transfer paragraph
+  (EU-U.S. Data Privacy Framework plus standard contractual clauses), which also names that region
+  and links where the safeguards are published (the Commission's SCC page, Microsoft's Data
+  Protection Addendum, the Data Privacy Framework list; plain links, nothing loads before a click);
+  see the checklist. The paragraph is shown even when both regions are in the EU, because the SWA
+  edge that delivers the pages and takes the requests is a worldwide network.
 - The `/api/health` keep-warm ping (only while RSVP is on) and `/version.json` carry no personal data
   beyond the technical request metadata every request has (IP address, user agent at the edge).
 - External links (Google Maps directions, WhatsApp, playlists, hotel sites) send nothing until the

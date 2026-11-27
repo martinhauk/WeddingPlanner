@@ -25,7 +25,10 @@ node tools/table-backup/src/cli.ts --help
   and content hash, and no unlisted file is in the folder. It needs only blob read on the backups.
   `--quiet` prints `backup <id>: ok (<n> tables)` or `FAILED` with a failure code per table
   (codes: [runbook](../../docs/runbooks/backup-restore.md#checking-a-written-backup)); exit 1 on
-  a problem, 3 when the identity may not read the backups. The drill runs it after its export.
+  a problem, 3 only when listing the backup folder is refused (no blob read yet). A read refused
+  after the listing worked is the failure code `denied`. The drill runs it after its export.
+- **Unpacking:** a file whose size or SHA-256 differs from the manifest is never unpacked, and
+  every other file unpacks to at most 256 MiB (`MAX_DECOMPRESSED_BYTES`), in `check` and `restore`.
 - **Restore safety:** every file is checked against the manifest before anything is written;
   target tables that already hold rows are refused unless `--force`; `--dry-run` writes nothing;
   `--table-prefix` restores a copy next to the live tables.

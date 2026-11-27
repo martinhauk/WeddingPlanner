@@ -114,25 +114,45 @@ export async function readManifest(store: BackupStore, backupId: string): Promis
   return parseManifest(text, backupId);
 }
 
-/** The identity may not read the backup store (403 AuthorizationPermissionMismatch). */
+/**
+ * The identity may not list the backup folder at all (403 AuthorizationPermissionMismatch on the
+ * first request): it has no blob read yet. The nightly job skips the check then (exit 3).
+ */
 export class ReadDeniedError extends Error {
   override name = 'ReadDeniedError';
 }
 
+/**
+ * A 403 AuthorizationPermissionMismatch from Blob Storage. A request with an XML error body (the
+ * listing, a GET) carries the code in `code`; a HEAD request has no body, so the SDK leaves `code`
+ * unset and keeps the code of the x-ms-error-code header in `details.errorCode`. Reading a blob
+ * starts with such a HEAD (downloadToBuffer asks for the properties first).
+ */
 function isPermissionMismatch(error: unknown): boolean {
   if (typeof error !== 'object' || error === null) return false;
-  const e = error as { statusCode?: unknown; code?: unknown };
-  return e.statusCode === 403 && e.code === 'AuthorizationPermissionMismatch';
+  const e = error as { statusCode?: unknown; code?: unknown; details?: unknown };
+  if (e.statusCode !== 403) return false;
+  if (e.code === 'AuthorizationPermissionMismatch') return true;
+  const details = e.details as { errorCode?: unknown } | null | undefined;
+  return typeof details === 'object' && details?.errorCode === 'AuthorizationPermissionMismatch';
 }
 
-/** Per table: what `check` found. `missing`: the manifest lists the file, the folder lacks it. */
-export type CheckProblemCode = TableFileProblemCode | 'missing';
+/**
+ * Per table: what `check` found. `missing`: the manifest lists the file, the folder lacks it.
+ * `denied`: the folder could be listed, but reading the file was refused (403
+ * AuthorizationPermissionMismatch), for example by a broken read clause of the role assignment's
+ * condition. That is a failure, never "no read access yet".
+ */
+export type CheckProblemCode = TableFileProblemCode | 'missing' | 'denied';
 
 export interface CheckResult {
   backupId: string;
   ok: boolean;
-  /** `missing`: no manifest.json (an incomplete backup, or no backup with this id at all). */
-  manifest: 'ok' | 'missing' | 'invalid';
+  /**
+   * `missing`: no manifest.json (an incomplete backup, or no backup with this id at all).
+   * `denied`: the folder could be listed, but reading the manifest was refused (see `denied` above).
+   */
+  manifest: 'ok' | 'missing' | 'invalid' | 'denied';
   /** Every table of the manifest; never row contents or row counts. */
   tables: { name: string; ok: boolean; problems: CheckProblemCode[] }[];
   /** Files in the backup folder that the manifest does not list (paths inside the folder). */
@@ -145,6 +165,10 @@ export interface CheckResult {
  * SHA-256, gunzip, parse line by line into typed entities, and match the row count and content
  * hash; no other file may be in the folder. Needs only blob read (list and get) on the backups.
  * The log may name tables and row counts (local use); the result never holds counts.
+ *
+ * Only a refused first request (listing the folder) throws ReadDeniedError: the identity has no
+ * blob read at all yet. A read refused after the listing worked is reported as `denied`, a failed
+ * check, because then the access rules are broken rather than not yet in place.
  */
 export async function checkBackup(
   store: BackupStore,
@@ -160,43 +184,48 @@ export async function checkBackup(
     tables: [],
     unlisted: [],
   };
+  const folder = `${backupId}/`;
+  let listed: { name: string }[];
   try {
-    const folder = `${backupId}/`;
-    const present = new Set(
-      (await store.list(folder)).map((blob) => blob.name.slice(folder.length)),
-    );
-    if (!present.has(MANIFEST_FILE)) {
-      log(present.size === 0 ? 'no backup with this id' : 'no manifest: the backup is incomplete');
-      return result;
-    }
-    let manifest: Manifest;
-    try {
-      manifest = await readManifest(store, backupId);
-    } catch (error) {
-      if (!(error instanceof BackupFormatError)) throw error;
-      result.manifest = 'invalid';
-      log(error.message);
-      return result;
-    }
-    result.manifest = 'ok';
-    const expected = new Set<string>([MANIFEST_FILE]);
-    for (const table of manifest.tables) {
-      expected.add(table.file);
-      let problems: CheckProblemCode[] = ['missing'];
-      if (present.has(table.file)) problems = await checkTableFile(store, backupId, table, log);
-      else log(`  ${table.name}: the file is missing`);
-      result.tables.push({ name: table.name, ok: problems.length === 0, problems });
-    }
-    result.unlisted = [...present].filter((path) => !expected.has(path)).sort();
-    for (const path of result.unlisted) log(`  unlisted file ${JSON.stringify(path)}`);
-    result.ok = result.tables.every((t) => t.ok) && result.unlisted.length === 0;
-    return result;
+    listed = await store.list(folder);
   } catch (error) {
     if (isPermissionMismatch(error)) {
       throw new ReadDeniedError('this identity may not read the backups (blob read is missing)');
     }
     throw error;
   }
+  const present = new Set(listed.map((blob) => blob.name.slice(folder.length)));
+  if (!present.has(MANIFEST_FILE)) {
+    log(present.size === 0 ? 'no backup with this id' : 'no manifest: the backup is incomplete');
+    return result;
+  }
+  let manifest: Manifest;
+  try {
+    manifest = await readManifest(store, backupId);
+  } catch (error) {
+    if (isPermissionMismatch(error)) {
+      result.manifest = 'denied';
+      log('reading the manifest was refused although the folder could be listed');
+      return result;
+    }
+    if (!(error instanceof BackupFormatError)) throw error;
+    result.manifest = 'invalid';
+    log(error.message);
+    return result;
+  }
+  result.manifest = 'ok';
+  const expected = new Set<string>([MANIFEST_FILE]);
+  for (const table of manifest.tables) {
+    expected.add(table.file);
+    let problems: CheckProblemCode[] = ['missing'];
+    if (present.has(table.file)) problems = await checkTableFile(store, backupId, table, log);
+    else log(`  ${table.name}: the file is missing`);
+    result.tables.push({ name: table.name, ok: problems.length === 0, problems });
+  }
+  result.unlisted = [...present].filter((path) => !expected.has(path)).sort();
+  for (const path of result.unlisted) log(`  unlisted file ${JSON.stringify(path)}`);
+  result.ok = result.tables.every((t) => t.ok) && result.unlisted.length === 0;
+  return result;
 }
 
 async function checkTableFile(
@@ -205,7 +234,15 @@ async function checkTableFile(
   table: ManifestTable,
   log: Log,
 ): Promise<CheckProblemCode[]> {
-  const { problems } = inspectTableFile(table, await store.get(`${backupId}/${table.file}`));
+  let gzip: Buffer;
+  try {
+    gzip = await store.get(`${backupId}/${table.file}`);
+  } catch (error) {
+    if (!isPermissionMismatch(error)) throw error;
+    log(`  ${table.name}: reading the file was refused although the folder could be listed`);
+    return ['denied'];
+  }
+  const { problems } = inspectTableFile(table, gzip);
   if (problems.length === 0) log(`  ${table.name}: ok, ${table.rows} row(s)`);
   for (const problem of problems) log(`  ${problem.message}`);
   return problems.map((problem) => problem.code);

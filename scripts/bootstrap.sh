@@ -45,7 +45,9 @@
 #   6. test/production: the GitHub Environment backup-ENV for the nightly backup
 #      (.github/workflows/backup.yml): branch main only, no reviewer (a scheduled run cannot wait
 #      for one), no admin bypass, and the four AZURE_* variables of the backup identity, which can
-#      only read tables and write new backups (docs/runbooks/backup-restore.md).
+#      read tables, write new backup blobs and read back the current versions of blobs in the
+#      table-backups container (a role assignment condition), but can neither delete blobs nor
+#      write tables (docs/runbooks/backup-restore.md).
 #
 # Requires: az (with Bicep), gh, jq, and for test/production git and ssh-keygen. Compatible with
 # the bash 3.2 that ships with macOS. Runbook: docs/runbooks/azure-onboarding.md
@@ -574,7 +576,7 @@ deploy_core() {
   rm -f "$params"
   applied "deployment $DEPLOYMENT_NAME: $APP_RG (delete lock), $OPS_RG, $IDENTITY with federated credential $CREDENTIAL, $ACTION_GROUP, RBAC"
   if [ -n "$BACKUP_ENV" ]; then
-    applied "backup identity $BACKUP_IDENTITY with federated credential $BACKUP_CREDENTIAL (read tables, write new backups only)"
+    applied "backup identity $BACKUP_IDENTITY with federated credential $BACKUP_CREDENTIAL (read tables, write new backups, read back current backups; no delete)"
   fi
 }
 

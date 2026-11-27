@@ -122,10 +122,18 @@ export function encodeTable(entities: readonly BackupEntity[]): EncodedTable {
 }
 
 /**
+ * Upper bound for the decompressed size of one table file (check and restore). The tables hold a
+ * few hundred replies at most, so a real file stays far below it; the cap only keeps a file that
+ * unpacks to far more than it should (a gzip bomb behind a forged manifest) from exhausting memory.
+ */
+export const MAX_DECOMPRESSED_BYTES = 256 * 1024 * 1024;
+
+/**
  * Why a table file does not match its manifest entry. `check` prints these codes; none of them
  * carries row contents or counts.
- *   size, sha256   the stored bytes differ from the manifest (length, SHA-256)
- *   gzip           not a gzip file
+ *   size, sha256   the stored bytes differ from the manifest (length, SHA-256); such a file is
+ *                  not unpacked at all
+ *   gzip           not a gzip file, or it unpacks to more than MAX_DECOMPRESSED_BYTES
  *   json, entity   a line is not JSON, or not a typed entity
  *   rows, content  the row count or the content hash differs from the manifest
  */
@@ -154,11 +162,18 @@ export class TableFileError extends BackupFormatError {
   }
 }
 
-export function decodeTable(gzip: Buffer, where: string): BackupEntity[] {
+export function decodeTable(
+  gzip: Buffer,
+  where: string,
+  maxBytes: number = MAX_DECOMPRESSED_BYTES,
+): BackupEntity[] {
   let text: string;
   try {
-    text = gunzipSync(gzip).toString('utf8');
-  } catch {
+    text = gunzipSync(gzip, { maxOutputLength: maxBytes }).toString('utf8');
+  } catch (error) {
+    if ((error as { code?: unknown })?.code === 'ERR_BUFFER_TOO_LARGE') {
+      throw new TableFileError('gzip', `${where}: unpacks to more than ${maxBytes} bytes`);
+    }
     throw new TableFileError('gzip', `${where}: not a gzip file`);
   }
   const entities: BackupEntity[] = [];
@@ -184,13 +199,16 @@ export function decodeTable(gzip: Buffer, where: string): BackupEntity[] {
 
 /**
  * Checks a downloaded table file against its manifest entry: byte size and SHA-256 of the stored
- * file, then (independently, so a recompressed but intact file is told apart from changed data)
- * gunzip, every line, the row count and the content hash. Returns every problem found; the
- * entities only when the file could be decoded.
+ * file first. A file that fails either is reported with those codes and not unpacked (its bytes
+ * are not the ones the export wrote, so nothing in it is trusted, and it could be a gzip bomb).
+ * Otherwise it is gunzipped (at most `maxBytes`), every line is parsed, and the row count and the
+ * content hash are compared. Returns every problem found; the entities only when the file could
+ * be decoded.
  */
 export function inspectTableFile(
   table: ManifestTable,
   gzip: Buffer,
+  maxBytes: number = MAX_DECOMPRESSED_BYTES,
 ): { entities: BackupEntity[] | undefined; problems: TableFileProblem[] } {
   const problems: TableFileProblem[] = [];
   const mismatch = (what: string) =>
@@ -199,9 +217,10 @@ export function inspectTableFile(
   if (sha256Hex(gzip) !== table.sha256) {
     problems.push({ code: 'sha256', message: mismatch('sha256') });
   }
+  if (problems.length > 0) return { entities: undefined, problems };
   let entities: BackupEntity[];
   try {
-    entities = decodeTable(gzip, table.name);
+    entities = decodeTable(gzip, table.name, maxBytes);
   } catch (error) {
     if (!(error instanceof TableFileError)) throw error;
     problems.push({ code: error.code, message: error.message });
@@ -223,8 +242,12 @@ export function inspectTableFile(
 }
 
 /** Checks a downloaded table file against its manifest entry and decodes it (restore). */
-export function readTableFile(table: ManifestTable, gzip: Buffer): BackupEntity[] {
-  const { entities, problems } = inspectTableFile(table, gzip);
+export function readTableFile(
+  table: ManifestTable,
+  gzip: Buffer,
+  maxBytes: number = MAX_DECOMPRESSED_BYTES,
+): BackupEntity[] {
+  const { entities, problems } = inspectTableFile(table, gzip, maxBytes);
   const [first] = problems;
   if (first) throw new TableFileError(first.code, first.message);
   return entities ?? [];

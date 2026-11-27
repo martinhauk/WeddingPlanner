@@ -10,14 +10,17 @@ namespace WeddingPlanner.Api.Features.Admin.Rsvps;
 /// changes</b> dietary data must carry <c>dietaryConsent: true</c>: the admin attests that the guest explicitly
 /// consented (GDPR Art. 9(2)(a)). Without it the edit is 400 <c>validation_failed</c> with <c>dietaryConsent</c> /
 /// <c>required</c>, the same error a guest gets. The attestation is recorded as <see cref="DietaryConsentSource.Admin"/>
-/// with its time; which admin is not stored.
+/// with its time; which admin is not stored. The guest's own consent in the form
+/// (<see cref="RsvpRecord.DietaryConsentGuestAt"/>) is never changed by an admin edit, only cleared with the data.
 /// </summary>
 /// <remarks>
 /// <list type="bullet">
-///   <item>Added or changed (see <see cref="AddsOrChanges"/>) and attested: consent from an admin, now.</item>
+///   <item>Added or changed (see <see cref="AddsOrChanges"/>) and attested: consent from an admin, now; the guest's own
+///   consent time stays (for example when an admin fixes a typo in the name of a person with dietary data).</item>
 ///   <item>Unchanged, or only removed, with some dietary data left: the stored consent, source and time stay as they
 ///   are (no attestation needed; one sent anyway is ignored, so it never replaces a guest's own consent).</item>
-///   <item>No dietary data left: no consent (flag, source and time cleared), as after a guest write.</item>
+///   <item>No dietary data left: no consent (flag, source, time and the guest's consent time cleared), as after a
+///   guest write.</item>
 /// </list>
 /// </remarks>
 public static class AdminDietaryConsent
@@ -72,6 +75,7 @@ public static class AdminDietaryConsent
             return RsvpDietaryConsent.WithoutConsent(record);
         }
 
+        var guestConsentAt = RsvpDietaryConsent.GuestConsentAt(current);
         if (!AddsOrChanges(current.Answer, record.Answer))
         {
             return record with
@@ -79,11 +83,18 @@ public static class AdminDietaryConsent
                 DietaryConsent = current.DietaryConsent,
                 DietaryConsentSource = current.DietaryConsentSource,
                 DietaryConsentAt = current.DietaryConsentAt,
+                DietaryConsentGuestAt = guestConsentAt,
             };
         }
 
         return attestation == true
-            ? record with { DietaryConsent = true, DietaryConsentSource = DietaryConsentSource.Admin, DietaryConsentAt = now }
+            ? record with
+            {
+                DietaryConsent = true,
+                DietaryConsentSource = DietaryConsentSource.Admin,
+                DietaryConsentAt = now,
+                DietaryConsentGuestAt = guestConsentAt,
+            }
             : null;
     }
 }
