@@ -185,14 +185,6 @@ public sealed class RsvpMineFunctions(IRsvpRepository repository, RsvpSettings s
         return ApiResult.Empty(StatusCodes.Status204NoContent);
     }
 
-    private ApiResult Mine(HttpResponse response, RsvpCredential credential, StoredRsvp stored)
-    {
-        RsvpCookies.Set(response, credential, stored.Record.Answer.Attending, settings.CookieLifetime);
-        var version = RsvpHttp.PublicETag(stored.ETag);
-        response.Headers.ETag = version;
-
-        var deadline = settings.Deadline;
-        var open = deadline?.IsOpenAt(timeProvider.GetUtcNow()) ?? false;
-        return ApiResult.Json(StatusCodes.Status200OK, new RsvpMineResponse(RsvpView.From(stored.Record), version, open, deadline?.Utc.UtcDateTime));
-    }
+    private ApiResult Mine(HttpResponse response, RsvpCredential credential, StoredRsvp stored) =>
+        RsvpHttp.Mine(response, credential, stored, settings, timeProvider.GetUtcNow());
 }

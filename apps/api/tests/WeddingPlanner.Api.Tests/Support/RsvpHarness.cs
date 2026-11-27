@@ -62,6 +62,8 @@ internal sealed class RsvpHarness : IDisposable
 
     public RsvpStatusFunction StatusFunction() => ActivatorUtilities.CreateInstance<RsvpStatusFunction>(Services);
 
+    public RsvpClaimFunction ClaimFunction() => ActivatorUtilities.CreateInstance<RsvpClaimFunction>(Services);
+
     /// <summary>
     /// A fill time well above the minimum (<c>Rsvp__MinSubmitMs</c>), which <see cref="PostAsync"/> adds to a body
     /// without <c>elapsedMs</c>, as the web form does.
@@ -101,6 +103,18 @@ internal sealed class RsvpHarness : IDisposable
         await RunAsync(httpContext, request => MineFunctions().Delete(request, CancellationToken.None));
         return httpContext;
     }
+
+    /// <summary><c>POST /api/rsvp/claim</c> with <c>{editToken}</c> (or <paramref name="rawBody"/>).</summary>
+    public async Task<HttpContext> ClaimAsync(string? editToken, string? cookie = null, string? rawBody = null)
+    {
+        var httpContext = TestHttp.Request("POST", "/api/rsvp/claim", rawBody is null ? new { editToken } : null, rawBody, cookie: cookie);
+        await RunAsync(httpContext, request => ClaimFunction().Run(request, CancellationToken.None));
+        return httpContext;
+    }
+
+    /// <summary>The edit token from the 201 of <see cref="PostAsync"/>.</summary>
+    public static string EditToken(HttpContext created) =>
+        TestHttp.ReadJson(created).GetProperty("editToken").GetString() ?? throw new InvalidOperationException("no editToken");
 
     /// <summary><c>GET /api/rsvp/status</c>.</summary>
     public async Task<HttpContext> GetStatusAsync()

@@ -36,6 +36,14 @@ public sealed class RsvpApiIntegrationTests
         updated.Response.StatusCode.ShouldBe(StatusCodes.Status200OK);
         (await harness.PutMineAsync(cookie, RsvpHarness.SampleBody(), etag)).Response.StatusCode.ShouldBe(StatusCodes.Status412PreconditionFailed);
 
+        // The personal edit link opened in another browser: the claim sets the same cookies and shows the change.
+        var editToken = RsvpHarness.EditToken(created);
+        var claimed = await harness.ClaimAsync(editToken);
+        claimed.Response.StatusCode.ShouldBe(StatusCodes.Status200OK);
+        TestHttp.CookieHeader(claimed).ShouldBe(cookie.Replace("wp_rsvp_state=yes", "wp_rsvp_state=no", StringComparison.Ordinal));
+        claimed.Response.Headers.ETag.ToString().ShouldBe(updated.Response.Headers.ETag.ToString());
+        (await harness.ClaimAsync(editToken.Split('.')[0] + "." + new string('A', 43))).Response.StatusCode.ShouldBe(StatusCodes.Status404NotFound);
+
         var entities = await ReadAllAsync(store.Table);
         var entity = entities.ShouldHaveSingleItem();
         entity.GetBoolean("Attending").ShouldBe(false);
@@ -47,6 +55,7 @@ public sealed class RsvpApiIntegrationTests
         deleted.Response.StatusCode.ShouldBe(StatusCodes.Status204NoContent);
         (await ReadAllAsync(store.Table)).ShouldBeEmpty();
         (await harness.GetMineAsync(cookie)).Response.StatusCode.ShouldBe(StatusCodes.Status404NotFound);
+        (await harness.ClaimAsync(editToken)).Response.StatusCode.ShouldBe(StatusCodes.Status404NotFound, "withdrawing invalidates the link");
     }
 
     [Fact]

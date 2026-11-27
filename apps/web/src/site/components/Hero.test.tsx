@@ -1,7 +1,60 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { act, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { RSVP_STATE_EVENT } from '../api/rsvp-client.ts';
+import { mockApi, setStateCookie } from '../test/fake-api.ts';
 import { content } from '../test/fixture.ts';
 import { Hero, heroImages } from './Hero.tsx';
+
+afterEach(() => {
+  setStateCookie(null);
+  vi.unstubAllGlobals();
+});
+
+describe('Hero: the reply of this browser', () => {
+  it.each([
+    ['de', 'yes', 'Ihr habt zugesagt.', 'Antwort ändern'],
+    ['de', 'no', 'Ihr habt abgesagt.', 'Antwort ändern'],
+    ['en', 'yes', 'You said yes.', 'Change reply'],
+    ['en', 'no', 'You said no.', 'Change reply'],
+    ['es', 'yes', 'Habéis dicho que sí.', 'Cambiar respuesta'],
+    ['es', 'no', 'Habéis dicho que no.', 'Cambiar respuesta'],
+  ] as const)(
+    '%s, %s: says so and links to the RSVP section to change it',
+    (lang, state, said, change) => {
+      const api = mockApi({});
+      setStateCookie(state);
+      render(<Hero content={content} lang={lang} rsvpId="rsvp" />);
+      expect(screen.getByText(said)).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: change })).toHaveAttribute('href', '#rsvp');
+      expect(screen.queryByRole('link', { name: 'Zusagen' })).toBeNull();
+      expect(api.calls).toEqual([]);
+    },
+  );
+
+  it('follows the state cookie when an RSVP call changes it', () => {
+    render(<Hero content={content} lang="de" rsvpId="rsvp" />);
+    expect(screen.getByRole('link', { name: 'Zusagen' })).toBeInTheDocument();
+
+    setStateCookie('no');
+    act(() => {
+      window.dispatchEvent(new Event(RSVP_STATE_EVENT));
+    });
+    expect(screen.getByText('Ihr habt abgesagt.')).toBeInTheDocument();
+
+    setStateCookie(null);
+    act(() => {
+      window.dispatchEvent(new Event(RSVP_STATE_EVENT));
+    });
+    expect(screen.getByRole('link', { name: 'Zusagen' })).toBeInTheDocument();
+  });
+
+  it('shows no reply state while RSVP is off', () => {
+    setStateCookie('yes');
+    render(<Hero content={content} lang="de" rsvpId={undefined} />);
+    expect(screen.queryByText('Ihr habt zugesagt.')).toBeNull();
+    expect(screen.queryByRole('link')).toBeNull();
+  });
+});
 
 describe('Hero', () => {
   it('shows up to two decorative photos side by side behind the names', () => {

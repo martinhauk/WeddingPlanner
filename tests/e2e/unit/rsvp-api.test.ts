@@ -120,6 +120,37 @@ test('a seeded reply is served to a returning guest', async () => {
   });
 });
 
+test('the edit token of a new reply claims it in another browser until it is withdrawn', async () => {
+  const { api, call } = fakeApi();
+  const other = fakeApi();
+  const rsvp = await installFakeRsvpApi(api);
+  await rsvp.attach(other.api);
+
+  const created = await call('POST', '/api/rsvp', YES_REQUEST);
+  const { editToken } = created.json as { editToken: string };
+  assert.match(editToken, /^[0-9a-f]{32}\.[A-Za-z0-9_-]{43}$/);
+  assert.equal(rsvp.editToken(), editToken);
+
+  const claimed = await other.call('POST', '/api/rsvp/claim', { editToken });
+  assert.equal(claimed.status, 200);
+  assert.equal((claimed.json as { version: string }).version, '"v1"');
+  const wrong = `${editToken.slice(0, 33)}${'A'.repeat(43)}`;
+  assert.equal((await other.call('POST', '/api/rsvp/claim', { editToken: wrong })).status, 404);
+
+  assert.equal((await call('DELETE', '/api/rsvp/me', undefined, '"v1"')).status, 204);
+  assert.equal((await other.call('POST', '/api/rsvp/claim', { editToken })).status, 404);
+  assert.deepEqual(
+    rsvp.writes().map((write) => `${write.method} ${write.path}`),
+    [
+      'POST /api/rsvp',
+      'POST /api/rsvp/claim',
+      'POST /api/rsvp/claim',
+      'DELETE /api/rsvp/me',
+      'POST /api/rsvp/claim',
+    ],
+  );
+});
+
 test('the stored reply keeps given ids, assigns new ones and drops empty fields', () => {
   const reply = replyFromRequest(
     {

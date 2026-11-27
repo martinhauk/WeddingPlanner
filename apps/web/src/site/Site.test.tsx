@@ -78,6 +78,23 @@ describe('Site', () => {
     }
   });
 
+  it('opens the RSVP section for a personal edit link, and calls no API before it is in view', () => {
+    const scrolled: string[] = [];
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function scrollIntoView(this: Element) {
+      scrolled.push(this.id);
+    };
+    window.location.hash = `#edit=1b86eb8e593b91c86f2d8d37d4fd593a.${'A'.repeat(43)}`;
+    try {
+      render(<Site content={content} build={build} initialLanguage="de" />);
+      expect(scrolled).toEqual(['rsvp']);
+      expect(api.calls).toEqual([]);
+    } finally {
+      Element.prototype.scrollIntoView = original;
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  });
+
   it('repeats the deep-link jump while the page resizes, until the visitor scrolls', () => {
     const scrolled: string[] = [];
     const original = Element.prototype.scrollIntoView;

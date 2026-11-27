@@ -1,6 +1,7 @@
 import type { SiteContent } from '@weddingplanner/content';
 import { useEffect, useMemo, useState } from 'react';
 import { useApiKeepWarm } from './api/keep-warm.ts';
+import { parseEditLink } from './api/rsvp-client.ts';
 import { Header } from './components/Header.tsx';
 import { Hero, heroImages } from './components/Hero.tsx';
 import { formatDate } from './format.ts';
@@ -41,6 +42,16 @@ export function Site({ content, build, initialLanguage }: SiteProps) {
   const [privacyPage] = useState(() => isPrivacyPath(window.location.pathname));
   const couple = t(content.couple, lang);
   const title = privacyPage ? `${t(privacyText.title, lang)} · ${couple}` : couple;
+  // The hero button and the highlighted nav entry only while replies can be sent.
+  const rsvpId = build.features.rsvp
+    ? content.sections.find((section) => section.type === 'rsvp' && isShown(section))?.id
+    : undefined;
+  // The section a deep link jumps to: the fragment itself, or for a personal edit link
+  // (/#edit=<id>.<token>) the RSVP section, which claims the reply and removes the fragment.
+  const [deepLinkId] = useState(() => {
+    const hash = window.location.hash;
+    return parseEditLink(hash) === null ? hash.slice(1) : (rsvpId ?? '');
+  });
 
   useEffect(() => {
     document.documentElement.lang = lang;
@@ -60,7 +71,7 @@ export function Site({ content, build, initialLanguage }: SiteProps) {
   // DEEP_LINK_SETTLE_MS pass, the jump is repeated when the page resizes and when a scroll the
   // visitor did not cause moves the target (at most DEEP_LINK_MAX_JUMPS times).
   useEffect(() => {
-    const id = window.location.hash.slice(1);
+    const id = deepLinkId;
     const target = id === '' ? null : document.getElementById(id);
     if (target === null || typeof target.scrollIntoView !== 'function') {
       return;
@@ -97,7 +108,7 @@ export function Site({ content, build, initialLanguage }: SiteProps) {
       window.addEventListener(type, stop, { passive: true });
     }
     return stop;
-  }, []);
+  }, [deepLinkId]);
 
   // Keeps the API warm for the RSVP form; without the feature (or on the privacy page, which has no
   // form) the page calls no API at all.
@@ -105,10 +116,6 @@ export function Site({ content, build, initialLanguage }: SiteProps) {
 
   const ctx: SectionContext = { lang, content, build };
   const nav = useMemo(() => navItems(content, lang), [content, lang]);
-  // The hero button and the highlighted nav entry only while replies can be sent.
-  const rsvpId = build.features.rsvp
-    ? content.sections.find((section) => section.type === 'rsvp' && isShown(section))?.id
-    : undefined;
 
   // The header spans the full width; the page itself is a column when the theme sets a frame.
   return (

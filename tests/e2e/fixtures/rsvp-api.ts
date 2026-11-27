@@ -3,8 +3,9 @@ import type { ApiMocks, MockResponse } from './api-mocks.ts';
 
 /**
  * An in-memory RSVP API for the device suite (contract: docs/api.md): `GET /api/rsvp/status`,
- * `POST /api/rsvp`, and `GET|PUT|DELETE /api/rsvp/me` for this browser's own reply. It keeps one
- * reply, checks `If-Match` like the API, and records every write. Fictional data only.
+ * `POST /api/rsvp` (with the edit token), `POST /api/rsvp/claim`, and `GET|PUT|DELETE
+ * /api/rsvp/me` for this browser's own reply. It keeps one reply, checks `If-Match` like the API,
+ * and records every write. Fictional data only.
  */
 
 export type RsvpPerson = {
@@ -76,9 +77,19 @@ export type FakeRsvpApi = {
   readonly seed: (reply: RsvpView, options?: { readonly open?: boolean }) => void;
   /** The reply stored now, if any. */
   readonly stored: () => RsvpView | undefined;
-  /** Every POST, PUT and DELETE so far, in order. */
+  /** Every POST, PUT and DELETE so far, in order (from every attached browser context). */
   readonly writes: () => readonly RsvpWrite[];
+  /** The edit token of the stored reply (`<id>.<token>`), as the create returned it. */
+  readonly editToken: () => string | undefined;
+  /**
+   * Serves the same in-memory API to another browser context (its own `installApiMocks`), e.g. a
+   * fresh browser that opens the personal edit link.
+   */
+  readonly attach: (api: ApiMocks) => Promise<void>;
 };
+
+/** The secret half of every edit token the fake API issues (43 base64url characters, fictional). */
+const EDIT_SECRET = `e2e_${'x'.repeat(39)}`;
 
 function problem(status: number, code: string): MockResponse {
   return {
@@ -131,7 +142,12 @@ export function rsvpStateCookie(origin: string, state: 'yes' | 'no') {
   return { name: 'wp_rsvp_state', value: state, url: origin } as const;
 }
 
-/** Registers the RSVP routes on the harness's API mocks. */
+/**
+ * Registers the RSVP routes on the harness's API mocks. The cookies are not modelled: `GET /me`
+ * answers the stored reply to any browser, and the page knows of a reply only through the state
+ * cookie a spec sets, or through a create or a claim (`POST /api/rsvp/claim` checks the edit token
+ * of the stored reply). Every attached browser context shares the one stored reply.
+ */
 export async function installFakeRsvpApi(api: ApiMocks): Promise<FakeRsvpApi> {
   let flags: RsvpStatusFlags = OPEN;
   let reply: RsvpView | undefined;
@@ -140,6 +156,7 @@ export async function installFakeRsvpApi(api: ApiMocks): Promise<FakeRsvpApi> {
   const writes: RsvpWrite[] = [];
 
   const etag = () => `"v${version}"`;
+  const editToken = () => (reply === undefined ? undefined : `${reply.id}.${EDIT_SECRET}`);
   const mine = (): MockResponse => ({
     status: 200,
     headers: { etag: etag() },
@@ -152,45 +169,61 @@ export async function installFakeRsvpApi(api: ApiMocks): Promise<FakeRsvpApi> {
     return body;
   };
 
-  await api.mock('GET', '/api/rsvp/status', () => ({
-    json: {
-      ...flags,
-      deadline: SAMPLE_DEADLINE_UTC,
-      timeZone: 'Europe/Berlin',
-      limits: RSVP_LIMITS,
-    },
-  }));
+  const register = async (target: ApiMocks) => {
+    await target.mock('GET', '/api/rsvp/status', () => ({
+      json: {
+        ...flags,
+        deadline: SAMPLE_DEADLINE_UTC,
+        timeZone: 'Europe/Berlin',
+        limits: RSVP_LIMITS,
+      },
+    }));
 
-  await api.mock('POST', '/api/rsvp', (request) => {
-    const body = record(request);
-    if (!flags.open) return problem(403, 'rsvp_closed');
-    if (reply !== undefined) return problem(409, 'rsvp_exists');
-    reply = replyFromRequest(body, 'e2e0000000000000000000000000beef');
-    replyOpen = true;
-    version = 1;
-    return { ...mine(), status: 201 };
-  });
+    await target.mock('POST', '/api/rsvp', (request) => {
+      const body = record(request);
+      if (!flags.open) return problem(403, 'rsvp_closed');
+      if (reply !== undefined) return problem(409, 'rsvp_exists');
+      reply = replyFromRequest(body, 'e2e0000000000000000000000000beef');
+      replyOpen = true;
+      version = 1;
+      return {
+        status: 201,
+        headers: { etag: etag() },
+        json: { rsvp: reply, version: etag(), editToken: editToken() },
+      };
+    });
 
-  await api.mock('GET', '/api/rsvp/me', () =>
-    reply === undefined ? problem(404, 'not_found') : mine(),
-  );
+    // Wrong, malformed and withdrawn links all answer the same 404, like the API.
+    await target.mock('POST', '/api/rsvp/claim', (request) => {
+      const body = record(request) as { readonly editToken?: unknown } | undefined;
+      return reply !== undefined && body?.editToken === editToken()
+        ? mine()
+        : problem(404, 'not_found');
+    });
 
-  await api.mock('PUT', '/api/rsvp/me', (request) => {
-    const body = record(request);
-    if (reply === undefined) return problem(404, 'not_found');
-    if (request.headers()['if-match'] !== etag()) return problem(412, 'version_mismatch');
-    reply = replyFromRequest(body, reply.id);
-    version += 1;
-    return mine();
-  });
+    await target.mock('GET', '/api/rsvp/me', () =>
+      reply === undefined ? problem(404, 'not_found') : mine(),
+    );
 
-  await api.mock('DELETE', '/api/rsvp/me', (request) => {
-    record(request);
-    if (reply === undefined) return problem(404, 'not_found');
-    if (request.headers()['if-match'] !== etag()) return problem(412, 'version_mismatch');
-    reply = undefined;
-    return { status: 204 };
-  });
+    await target.mock('PUT', '/api/rsvp/me', (request) => {
+      const body = record(request);
+      if (reply === undefined) return problem(404, 'not_found');
+      if (request.headers()['if-match'] !== etag()) return problem(412, 'version_mismatch');
+      reply = replyFromRequest(body, reply.id);
+      version += 1;
+      return mine();
+    });
+
+    await target.mock('DELETE', '/api/rsvp/me', (request) => {
+      record(request);
+      if (reply === undefined) return problem(404, 'not_found');
+      if (request.headers()['if-match'] !== etag()) return problem(412, 'version_mismatch');
+      reply = undefined;
+      return { status: 204 };
+    });
+  };
+
+  await register(api);
 
   return {
     setStatus: (next) => {
@@ -203,5 +236,7 @@ export async function installFakeRsvpApi(api: ApiMocks): Promise<FakeRsvpApi> {
     },
     stored: () => reply,
     writes: () => [...writes],
+    editToken,
+    attach: register,
   };
 }

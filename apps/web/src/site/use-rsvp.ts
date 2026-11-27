@@ -1,11 +1,16 @@
-import { type RefObject, useEffect, useRef, useState } from 'react';
+import { type RefObject, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import {
   type ApiFailure,
+  claimRsvp,
   createRsvp,
   deleteRsvp,
+  editLinkFor,
   type FieldError,
   getMine,
   getStatus,
+  parseEditLink,
+  RSVP_STATE_EVENT,
+  type RsvpCreated,
   type RsvpLimits,
   type RsvpMine,
   type RsvpState,
@@ -30,13 +35,23 @@ export type RsvpPhase =
   | { readonly kind: 'choose' }
   /** The state cookie says there is a reply; it loads once the section is near the viewport. */
   | { readonly kind: 'stored' }
+  /** The page was opened with a personal edit link; it is claimed once the section is near. */
+  | { readonly kind: 'claiming' }
   | { readonly kind: 'loadFailed'; readonly error: ApiFailure }
   | { readonly kind: 'form'; readonly mode: 'create' | 'edit'; readonly draft: Reply }
   /** The thank-you with the own reply. */
   | { readonly kind: 'saved' };
 
 /** Short messages after an action (announced politely). */
-export type RsvpNotice = 'withdrawn' | 'alreadyAnswered' | 'conflict' | 'replyGone';
+export type RsvpNotice =
+  | 'withdrawn'
+  | 'alreadyAnswered'
+  | 'conflict'
+  | 'replyGone'
+  /** An edit link moved the reply into this browser. */
+  | 'claimed'
+  /** An edit link that is wrong, incomplete or of a withdrawn reply (never says which). */
+  | 'linkInvalid';
 
 export type UseRsvpOptions = {
   /** `features.rsvp` of the build: when off, nothing is read and nothing is called. */
@@ -53,6 +68,11 @@ export type UseRsvp = {
   /** The state cookie as it was when the page loaded. */
   readonly stored: RsvpState | null;
   readonly mine: RsvpMine | null;
+  /**
+   * The personal edit link of the reply this page has just created (shown until it is withdrawn);
+   * `null` otherwise, also for a returning guest (the API returns it only once).
+   */
+  readonly editLink: string | null;
   /** The section is near the viewport or the guest pressed a button: the API may be called. */
   readonly active: boolean;
   readonly busy: boolean;
@@ -84,25 +104,66 @@ export type UseRsvp = {
 
 const CHOOSE: RsvpPhase = { kind: 'choose' };
 const STORED: RsvpPhase = { kind: 'stored' };
+const CLAIMING: RsvpPhase = { kind: 'claiming' };
 const SAVED: RsvpPhase = { kind: 'saved' };
 
 /** An unplaced validation finding: the form shows its general message. */
 const INVALID: readonly FieldError[] = [{ field: '', code: 'invalid' }];
 
+function subscribeToRsvpState(onChange: () => void): () => void {
+  window.addEventListener(RSVP_STATE_EVENT, onChange);
+  return () => window.removeEventListener(RSVP_STATE_EVENT, onChange);
+}
+
 /**
- * State and API calls of the RSVP section. On page load it reads only the `wp_rsvp_state` cookie;
- * the API is called once the section comes near the viewport or the guest presses a button.
+ * The `wp_rsvp_state` cookie (`yes`, `no` or `null`), re-read whenever an RSVP call may have changed
+ * it. Reads only the cookie: no API call.
+ */
+export function useRsvpState(): RsvpState | null {
+  return useSyncExternalStore(
+    subscribeToRsvpState,
+    () => readRsvpState(),
+    () => null,
+  );
+}
+
+/**
+ * Removes a personal edit link from the address bar (and so from the history entry), keeping the
+ * path and query. The fragment never reaches a server; this keeps it off screenshots and shared
+ * URLs too.
+ */
+function forgetEditLink(): void {
+  if (parseEditLink(window.location.hash) !== null) {
+    const { pathname, search } = window.location;
+    window.history.replaceState(window.history.state, '', `${pathname}${search}`);
+  }
+}
+
+/**
+ * State and API calls of the RSVP section. On page load it reads only the `wp_rsvp_state` cookie
+ * and the URL fragment; the API is called once the section comes near the viewport or the guest
+ * presses a button. A personal edit link (`#edit=<id>.<token>`) is then claimed for this browser
+ * (`POST /api/rsvp/claim`) and removed from the address bar.
  */
 export function useRsvp({ enabled, lang, deadline, anchor }: UseRsvpOptions): UseRsvp {
   const [stored] = useState(() => (enabled ? readRsvpState() : null));
-  const [phase, setPhase] = useState<RsvpPhase>(stored === null ? CHOOSE : STORED);
+  const [link] = useState(() => (enabled ? parseEditLink(window.location.hash) : null));
+  // The token still to claim; cleared once the API has answered for good.
+  const [claimToken, setClaimToken] = useState(() => link?.token ?? null);
+  const [phase, setPhase] = useState<RsvpPhase>(
+    claimToken !== null ? CLAIMING : stored === null ? CHOOSE : STORED,
+  );
   const [mine, setMine] = useState<RsvpMine | null>(null);
+  const [editLink, setEditLink] = useState<string | null>(null);
   const [status, setStatus] = useState<RsvpStatus | null>(null);
   const [requested, setRequested] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiFailure | null>(null);
   const [fieldErrors, setFieldErrors] = useState<readonly FieldError[]>([]);
-  const [notice, setNotice] = useState<RsvpNotice | null>(null);
+  // A malformed edit link is reported at once; no API call can make it work.
+  const [notice, setNotice] = useState<RsvpNotice | null>(
+    link !== null && link.token === null ? 'linkInvalid' : null,
+  );
   const [closedByApi, setClosedByApi] = useState(false);
   const [interacted, setInteracted] = useState(false);
   const [openedAt] = useState(Date.now);
@@ -112,6 +173,43 @@ export function useRsvp({ enabled, lang, deadline, anchor }: UseRsvpOptions): Us
 
   const near = useNearViewport(anchor, enabled);
   const active = enabled && (near || requested);
+
+  useEffect(() => {
+    if (link !== null && link.token === null) {
+      forgetEditLink();
+    }
+  }, [link]);
+
+  // Opened with a personal edit link: claim the reply for this browser.
+  const claimNow = active && phase.kind === 'claiming' && claimToken !== null;
+  useEffect(() => {
+    if (!claimNow || claimToken === null) {
+      return undefined;
+    }
+    const controller = new AbortController();
+    void claimRsvp(claimToken, controller.signal).then((result) => {
+      if (controller.signal.aborted) {
+        return;
+      }
+      if (result.ok) {
+        setClaimToken(null);
+        forgetEditLink();
+        setMine(result.value);
+        setPhase(SAVED);
+        setNotice('claimed');
+      } else if (result.error.kind === 'notFound') {
+        // Wrong, incomplete or withdrawn: say so, and carry on with this browser's own reply.
+        setClaimToken(null);
+        forgetEditLink();
+        setPhase(stored === null ? CHOOSE : STORED);
+        setNotice('linkInvalid');
+      } else {
+        // Offline, rate-limited or unavailable: keep the link for "try again".
+        setPhase({ kind: 'loadFailed', error: result.error });
+      }
+    });
+    return () => controller.abort();
+  }, [claimNow, claimToken, stored]);
 
   // A returning guest: load the own reply.
   const loadMine = active && phase.kind === 'stored';
@@ -182,6 +280,7 @@ export function useRsvp({ enabled, lang, deadline, anchor }: UseRsvpOptions): Us
       setNotice(next);
     } else if (result.error.kind === 'notFound') {
       setMine(null);
+      setEditLink(null);
       setPhase(CHOOSE);
       setNotice('replyGone');
     } else {
@@ -205,6 +304,7 @@ export function useRsvp({ enabled, lang, deadline, anchor }: UseRsvpOptions): Us
         if (mode === 'edit') {
           // The reply was deleted elsewhere: keep the entries and let the guest send them anew.
           setMine(null);
+          setEditLink(null);
           setPhase({
             kind: 'form',
             mode: 'create',
@@ -270,7 +370,11 @@ export function useRsvp({ enabled, lang, deadline, anchor }: UseRsvpOptions): Us
             toRequest(draft, lang, website, performance.now() - formShownAt.current),
           );
     if (result.ok) {
-      setMine(result.value);
+      const { editToken, ...saved }: RsvpCreated = result.value;
+      setMine(saved);
+      if (editToken !== undefined) {
+        setEditLink(editLinkFor(editToken));
+      }
       setPhase(SAVED);
     } else {
       await onWriteFailure(result.error, mode, draft);
@@ -287,7 +391,9 @@ export function useRsvp({ enabled, lang, deadline, anchor }: UseRsvpOptions): Us
     setBusy(true);
     const result = await deleteRsvp(mine.version);
     if (result.ok || result.error.kind === 'notFound') {
+      // The API deleted the reply, so its edit link no longer works either.
       setMine(null);
+      setEditLink(null);
       setPhase(CHOOSE);
       setNotice('withdrawn');
     } else if (result.error.kind === 'conflict') {
@@ -308,13 +414,14 @@ export function useRsvp({ enabled, lang, deadline, anchor }: UseRsvpOptions): Us
   const retry = () => {
     setRequested(true);
     setInteracted(true);
-    setPhase(STORED);
+    setPhase(claimToken !== null ? CLAIMING : STORED);
   };
 
   return {
     phase,
     stored,
     mine,
+    editLink,
     active,
     busy,
     error,
