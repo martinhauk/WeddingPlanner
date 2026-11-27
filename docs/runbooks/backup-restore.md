@@ -25,14 +25,17 @@ chats.
   site. **A failed backup or a failed check fails the job**, so nothing is deployed; production
   never runs after a failed test job. The first deploy of an environment has no data account yet:
   it writes a backup with an empty manifest, which passes the check with 0 tables. The job summary
-  shows the backup id and `backup check: passed`.
+  shows the backup id and `backup check: passed`, or `backup check: FAILED` next to an error
+  annotation "Backup check failed" on the run (the failure codes are in the step log).
 - **Nightly:** [`backup.yml`](../../.github/workflows/backup.yml) runs on a schedule (and by hand:
   Actions → backup → Run workflow), exports every table and checks the new backup the same way. A
-  failed check fails the run. Until the owner has re-run the bootstrap after the backup identity
-  got blob read (see [Who can do what](#who-can-do-what)), the check is skipped with a notice and
-  the summary says `backup check: skipped`. GitHub disables schedules in public repositories after
-  60 days without activity; re-enable the workflow then. A failed run is mailed to whoever last
-  changed the workflow file.
+  failed check fails the run, with the same annotation and `backup check: FAILED` in the summary.
+  Only while the backup identity may not even list the backup folder (the owner has not re-run the
+  bootstrap since the identity got blob read, see [Who can do what](#who-can-do-what)) is the
+  check skipped with a notice, and the summary says `backup check: skipped`. A read refused after
+  the listing worked fails the run (code `denied`). GitHub disables schedules in public
+  repositories after 60 days without activity; re-enable the workflow then. A failed run is mailed
+  to whoever last changed the workflow file.
 - **Restore drill:** see [The restore drill](#the-restore-drill).
 
 ## Where the backups are
@@ -61,18 +64,28 @@ no table and needs only blob read on the backups. It fails when:
 | ------------------- | ----------------------------------------------------------------------------------- |
 | `manifest: missing` | no `manifest.json` in the folder: an incomplete backup, or no backup with this id   |
 | `manifest: invalid` | the manifest is not valid (format, hashes, totals, names, a foreign backup id)      |
+| `manifest: denied`  | the folder could be listed, but reading the manifest was refused (see below)        |
 | `missing`           | the manifest lists a table file that is not in the folder                           |
-| `size`, `sha256`    | the stored file differs from the manifest (byte size, SHA-256)                      |
-| `gzip`              | the file does not gunzip                                                            |
+| `denied`            | the folder could be listed, but reading the table file was refused (see below)      |
+| `size`, `sha256`    | the stored file differs from the manifest (byte size, SHA-256); it is not unpacked  |
+| `gzip`              | the file does not gunzip, or it would unpack to more than 256 MiB                   |
 | `json`, `entity`    | a line is not JSON, or not a typed entity                                           |
 | `rows`, `content`   | the decoded rows differ from the manifest (row count, content hash of the rows)     |
 | `unlisted files: n` | the folder holds files the manifest does not list (only counted, names not printed) |
 
-All table-file checks run for every file, so `size, sha256` alone means "recompressed, same rows",
-while `content` means changed data. CI runs it with `--quiet`, which prints only
-`backup <id>: ok (<n> tables)` or `backup <id>: FAILED` with one line of codes per table, never
-row counts, row contents or account names. Exit codes: 0 ok, 1 a problem (or an error), 3 the
-identity may not read the backups (`AuthorizationPermissionMismatch`).
+A file whose size or SHA-256 differs from the manifest is reported with those codes and **not
+unpacked**: its bytes are not the ones the export wrote, so nothing in it is trusted (and it could
+be a gzip bomb). Every other file is unpacked with a ceiling of 256 MiB (the tables hold a few
+hundred replies, far below it), so even a file that matches a forged manifest cannot exhaust
+memory. A restore runs the same checks before it writes anything. CI runs `check` with `--quiet`,
+which prints only `backup <id>: ok (<n> tables)` or `backup <id>: FAILED` with one line of codes
+per table, never row counts, row contents or account names.
+
+Exit codes: 0 ok, 1 a problem (or an error), 3 the identity may not list the backup folder
+(`AuthorizationPermissionMismatch` on the first request: it has no blob read yet). Only that first
+request can give 3. A read refused **after** the listing worked (`denied`) is a failure with exit
+1: the identity has read access, but the read clause of its role assignment condition is broken,
+and a nightly job that skipped on it would never check a backup again without anyone noticing.
 
 By hand, with `az login` and Storage Blob Data Reader (or more) on the backup account, from the
 repository root (do not paste the account name anywhere):
@@ -287,12 +300,25 @@ scripts/bootstrap.sh --env test --instance <instance checkout>
 scripts/bootstrap.sh --env production --instance <instance checkout>
 ```
 
+**Run both bootstraps right after each other.** The custom role "WeddingPlanner Backup Writer"
+exists once per subscription and is shared by test and production; the condition sits on each
+environment's own role assignment. So the first re-run (say for test) updates the shared role, and
+blob read applies at once to the backup identities of **both** environments, but only test's
+assignment gets the condition. Until the production bootstrap adds production's condition, the
+production backup identity may read every blob in the production app resource group, including
+previous versions and other containers. Re-run the second bootstrap straight after the first,
+and in the same way after any later change to the role. If an environment has no backup identity
+yet (its bootstrap never ran, so there is no `id-<slug>-<env>-backup` and no assignment), there
+is no such window for it; its first bootstrap creates the assignment with the condition.
+
 Until then the nightly job skips with a notice (a backup environment without Azure variables) or
 skips only the check with a notice (a backup identity whose role lacks blob read: the tool exits
-with 3 on `AuthorizationPermissionMismatch`). If the check notice stays after the re-run (allow a
-few minutes for RBAC to replicate), the role or its condition did not apply: look at the role
-assignment of `id-<slug>-<env>-backup` in the portal (Access control → Role assignments →
-Condition). The pre-deploy backup and check and the drill need no bootstrap change.
+with 3 when listing the backup folder is refused with `AuthorizationPermissionMismatch`). If the
+check notice stays after the re-run (allow a few minutes for RBAC to replicate), the role or its
+condition did not apply: look at the role assignment of `id-<slug>-<env>-backup` in the portal
+(Access control → Role assignments → Condition). If the run fails instead with `denied` (or
+`manifest: denied`), listing works but reading does not: the read clause of the condition is
+wrong. The pre-deploy backup and check and the drill need no bootstrap change.
 
 ## Restore
 
@@ -356,13 +382,15 @@ leftovers of an aborted drill never end up in a backup; delete such leftovers by
 ## Tests
 
 - `pnpm --filter @weddingplanner/table-backup test`: unit tests (every property type round trip,
-  manifest and hashes, the non-empty target guard, `check` against an in-memory store: a good
+  manifest and hashes, the non-empty target guard, a file that fails its size or SHA-256 is never
+  unpacked, the unpack ceiling against a gzip bomb, `check` against an in-memory store: a good
   backup, a corrupted gzip, a changed or removed row, a missing file, a missing or invalid
-  manifest, an extra file, no read access) and, with Azurite running (`pnpm storage:up`),
-  integration tests: seed → export → wipe → restore → deep-equal, `--dry-run` changes nothing,
-  `--table-prefix` copy, the drill (also one whose backup fails the check), and `check` through the
-  CLI with `--quiet` against real blobs (the same failure cases). Without Azurite they are skipped
-  unless `TABLE_BACKUP_REQUIRE_AZURITE=1`.
+  manifest, an extra file, no read access at all, a read refused after the listing) and, with
+  Azurite running (`pnpm storage:up`), integration tests: seed → export → wipe → restore →
+  deep-equal, `--dry-run` changes nothing, `--table-prefix` copy, the drill (also one whose backup
+  fails the check), and `check` through the CLI with `--quiet` against real blobs (the same failure
+  cases, and exit 3 only when listing is refused, with SAS connections that may read but not list,
+  or list but not read). Without Azurite they are skipped unless `TABLE_BACKUP_REQUIRE_AZURITE=1`.
 - `scripts/ops/tests/restore-table/run.sh`: the restore script against a fake `az` and `node`.
 - `infra/app/tests/run.sh`: the backup store template (`tests/backup.jq`).
 - `infra/bootstrap/tests/run.sh`: the custom role (write and read blobs, no delete, no table data)

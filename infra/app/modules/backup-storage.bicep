@@ -22,7 +22,9 @@
 //   - the app resource group's CanNotDelete lock (infra/bootstrap): the account cannot be deleted
 //     by anyone without removing the lock first;
 //   - Microsoft Entra ID only: shared key access is off, so no account key can read or write it;
-//     the nightly identity can only write new blobs (no read, no delete);
+//     the nightly identity can write new blobs and read back only the current versions of
+//     blobs in table-backups (a role assignment condition, infra/bootstrap); it cannot delete
+//     blobs or write tables;
 //   - blob versioning: an overwrite keeps the original as a previous version;
 //   - soft delete for blobs and containers (`softDeleteDays`), permanent delete off: anything
 //     deleted by hand or by mistake stays recoverable for that long.
