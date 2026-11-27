@@ -74,10 +74,6 @@ function cspAllows(config: SwaConfig, directive: string, url: string): boolean {
   });
 }
 
-/** The URL shape of the click-to-load map in the one-pager (neutral coordinates). */
-const OSM_EMBED_URL =
-  'https://www.openstreetmap.org/export/embed.html?bbox=-0.008,-0.004,0.008,0.004&layer=mapnik&marker=0,0';
-
 describe('buildSwaConfig: platform and auth', () => {
   it('runs the API on .NET 10 isolated', () => {
     expect(normal.platform.apiRuntime).toBe('dotnet-isolated:10.0');
@@ -191,7 +187,7 @@ describe('buildSwaConfig: headers', () => {
     ]);
     expect(csp.get('default-src')).toBe("'self'");
     expect(csp.get('img-src')).toBe("'self' data: https://tile.openstreetmap.org");
-    expect(csp.get('frame-src')).toBe('https://www.openstreetmap.org');
+    expect(csp.get('frame-src')).toBe("'none'");
     expect(csp.get('style-src')).toBe("'self' 'unsafe-inline'");
     expect(csp.get('frame-ancestors')).toBe("'none'");
     expect(csp.get('object-src')).toBe("'none'");
@@ -224,20 +220,24 @@ describe('buildSwaConfig: headers', () => {
     }
   });
 
-  it('frames only the OpenStreetMap embed, over https', () => {
-    expect(cspAllows(normal, 'frame-src', OSM_EMBED_URL)).toBe(true);
+  it('frames nothing: the map draws OpenStreetMap tiles as images, no page has a frame', () => {
     for (const frame of [
-      // Neither the site itself nor any other map provider or scheme.
+      // Not the site itself, not OpenStreetMap's embed, no other map provider or scheme.
       '/index.html',
       '/admin/',
+      'https://www.openstreetmap.org/export/embed.html?bbox=-0.008,-0.004,0.008,0.004&layer=mapnik',
       'http://www.openstreetmap.org/export/embed.html',
-      'https://openstreetmap.org/export/embed.html',
       'https://tile.openstreetmap.org/0/0/0.png',
       'https://www.google.com/maps/embed?pb=x',
       'data:text/html,<p>x</p>',
     ]) {
       expect(cspAllows(normal, 'frame-src', frame), frame).toBe(false);
     }
+    // The tiles stay allowed as images, over https only.
+    expect(cspAllows(normal, 'img-src', 'https://tile.openstreetmap.org/16/34567/22345.png')).toBe(
+      true,
+    );
+    expect(cspAllows(normal, 'img-src', 'http://tile.openstreetmap.org/0/0/0.png')).toBe(false);
     // Our own pages still may not be framed by anyone.
     expect(cspDirectives(normal).get('frame-ancestors')).toBe("'none'");
     expect(normal.globalHeaders['X-Frame-Options']).toBe('DENY');
