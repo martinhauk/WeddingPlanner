@@ -47,11 +47,18 @@ Tick each item on `test` (open `/datenschutz` there in German, English and Spani
 
 ### 3. Dietary data (Art. 9 GDPR)
 
-- [ ] The form asks for explicit consent as soon as any dietary data is entered (a tag or a note),
-      stores it only for people who attend, and the API refuses dietary data without consent. Read the
-      consent sentence under the dietary fields in all three languages; it names what is stored, that
-      it is used only to plan the food, that the guest answers for companions with their agreement,
-      and that consent can be withdrawn.
+- [ ] The guest form asks for explicit consent as soon as any dietary data is entered (a tag or a
+      note), stores it only for people who attend, and the guest API (`POST /api/rsvp`,
+      `PUT /api/rsvp/me`) refuses dietary data without consent. Read the consent sentence under the
+      dietary fields in all three languages; it names what is stored, that it is used only to plan
+      the food, that the guest answers for companions with their agreement, and that consent can be
+      withdrawn.
+- [ ] **Admin edits are not checked.** The admin editor can add or change tags and notes, and
+      `PUT /api/admin/rsvps/{id}` neither asks for consent nor updates the stored `DietaryConsent`
+      flag (it keeps the old value). Agree among the admins: **enter dietary data for a guest only
+      with that guest's explicit consent, and keep your own proof of it** (for example their email or
+      message), because the system does not record it for admin edits. A follow-up for the API is
+      open.
 - [ ] Dietary details go only to the kitchen or caterer, with names only (the notice's "purpose"
       paragraph says so). Decide how you pass them on (the CSV export leaves the system: keep it
       safe and delete it after the wedding).
@@ -60,6 +67,9 @@ Tick each item on `test` (open `/datenschutz` there in German, English and Spani
       free-text note. Gluten-free and lactose-free can reveal health data; vegetarian and vegan can
       hint at beliefs. Default: keep asking for consent for tags too (the cautious choice). Change it
       only on qualified advice; it would need a code change and a new notice text.
+- [ ] Optional: the consent sentence says the data is used "only to plan the food" but does not name
+      the kitchen or caterer as a recipient. If you pass dietary details on, consider naming the
+      recipient there too (a change to `dietConsent` in `apps/web/src/site/ui.ts`).
 
 ### 4. Dietary data passes through the United States
 
@@ -89,9 +99,9 @@ request before it is stored in Germany; telemetry and backups stay in Germany.
       the wedding. Put the date in your calendar together with the deletion procedure in the
       [data inventory](data-inventory.md#deletion-procedure-owner).
 - [ ] Backups: the notice promises the sentence quoted below (section "How long we keep data"). The
-      infrastructure keeps every backup copy at most 28 days
-      ([runbook](../runbooks/backup-restore.md#retention-and-protection)), **but only once the old
-      immutability (WORM) policy is deleted** in test and production (one-time step in the
+      infrastructure keeps every backup copy 27 to 29 days at most, depending on how Azure counts
+      days ([runbook](../runbooks/backup-restore.md#retention-and-protection)), **but only once the
+      old immutability (WORM) policy is deleted** in test and production (one-time step in the
       runbook). Make sure no `privacy.extra` paragraph promises anything else about backups.
 - [ ] Withdrawing a reply deletes it at once; erasure requests by email: delete the reply in the
       admin area, answer "deleted now, gone from the backups within 30 days" (runbook, "Erasure
@@ -117,6 +127,8 @@ The backup sentence to check (de, then en; es says the same):
       browser then fetches images from servers of the **OpenStreetMap Foundation (United Kingdom)**
       and sends them the IP address, and that the UK has an adequacy decision.
 - [ ] The note under each "Show map" button says the same in short and links the notice.
+- [ ] Optional: `tile.openstreetmap.org` is served through a content delivery network on OSMF's
+      behalf. Compare the notice's wording with OSMF's own privacy policy and tile usage policy.
 - [ ] External links (Google Maps directions, WhatsApp, playlists) send nothing before a click.
 
 ### 8. Cookies and local storage
@@ -126,9 +138,14 @@ The backup sentence to check (de, then en; es says the same):
 - [ ] Admins only: Static Web Apps sets `StaticWebAppsAuthCookie` when an admin signs in. Guests never
       get it; the notice need not list it, but the record of processing may.
 - [ ] If map consent is ever remembered (`wp.mapConsent`, planned), the notice must list it first.
-- [ ] Consider one sentence about the **personal edit link** (`/#edit=…`): it works like the cookie,
-      anyone who has it can see and change that reply, and it stays valid until the reply is
-      withdrawn. The built-in text does not mention it yet (a change to `privacy-text.ts`).
+- [ ] **Required before production RSVP: the built-in text must mention the personal edit link**
+      (`/#edit=…`): it works like the cookie, anyone who has it can see and change that reply, and it
+      stays valid until the reply is withdrawn. Two sentences of the built-in text are wrong without
+      it (a follow-up changes `apps/web/src/site/privacy/privacy-text.ts`; check it landed):
+  - `cookieRsvp` says `wp_rsvp` is set only when the guest sends a reply ("wird erst beim Absenden
+    gesetzt", "is set only when you send your reply"). Opening a personal link sets it too.
+  - The closing cookie paragraph says that after deleting cookies "only we can change a saved reply
+    for you". The guest can still change it through the personal link.
 
 ### 9. Languages
 

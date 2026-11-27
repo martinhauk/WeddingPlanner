@@ -13,9 +13,12 @@ file and the notice text in the same commit.
 Terms: the **couple** are the controllers (named in `site-content.json` `privacy.controllers`); the
 **operator** runs the Azure subscription and the deploy (often one of the couple); **Microsoft** is the
 processor (Azure, Art. 28 GDPR). Regions come from `instance.json`: `swaLocation` (site and API; the
-sample and `infra/app/main.bicep` default to `westus2`, West US 2) and `dataLocation` (all data at
-rest; default `germanywestcentral`, Germany West Central). Both are named in the notice
-(`{appRegion}`, `{dataRegion}` from `build.json` `regions`).
+sample and `infra/app/main.bicep` default to `westus2`, West US 2) and `dataLocation` (guest replies,
+telemetry and backups at rest; default `germanywestcentral`, Germany West Central). Both are named
+in the notice (`{appRegion}`, `{dataRegion}` from `build.json` `regions`). Not everything is in
+`dataLocation`: the admins' SWA role invitations (email addresses) belong to the Static Web App
+resource, and the baked site content (the couple's names, photos, places) is served from its global
+edge (see "Other places").
 
 ## Guest replies: table `Rsvps`
 
@@ -29,21 +32,30 @@ the guest (create, change, withdraw) and by an admin (change, delete).
 | `Attending`, `PersonCount`, `AttendingCount` | Yes or no, number of people                      | Guest list, planning                     | Art. 6(1)(a), 6(1)(b) GDPR   |
 | `People[].tags`                              | vegetarian, vegan, glutenFree, lactoseFree       | Food planning (only for a "yes")         | Art. 9(2)(a) GDPR (explicit) |
 | `People[].note`                              | Free text: allergies, intolerances (health data) | Food planning (only for a "yes")         | Art. 9(2)(a) GDPR (explicit) |
-| `DietaryConsent`                             | `true` when dietary data was stored with consent | Proof of consent (Art. 7(1) GDPR)        | Art. 6(1)(c) GDPR            |
+| `DietaryConsent`                             | `true` after guest consent (guest writes only)   | Proof of consent (Art. 7(1) GDPR)        | Art. 6(1)(c) GDPR            |
 | `Message`                                    | Optional free text to the couple                 | Personal message                         | Art. 6(1)(a) GDPR            |
 | `Language`                                   | `de`, `en` or `es`                               | Answering in the guest's language        | Art. 6(1)(b) GDPR            |
 | `CreatedAt`, `UpdatedAt`                     | Timestamps (UTC)                                 | Deadline handling, support               | Art. 6(1)(b) GDPR            |
 | `TokenHash`, row key, `People[].id`          | SHA-256 of the edit token, random ids            | Letting the guest change their own reply | Art. 6(1)(b) GDPR            |
 | `SchemaVersion`                              | Format version                                   | Technical                                | (no personal data)           |
 
-- Dietary data is dropped for a "no" and is stored only with `dietaryConsent: true` (the API answers
-  400 otherwise; the form asks for consent as soon as dietary data is entered).
+- Dietary data is dropped for a "no". **Guest writes** (`POST /api/rsvp`, `PUT /api/rsvp/me`) store it
+  only with `dietaryConsent: true` (the API answers 400 otherwise; the form asks for consent as soon
+  as dietary data is entered) and set `DietaryConsent` accordingly.
+- **Admin edits do not check or record consent.** The admin editor can add or change tags and notes;
+  `PUT /api/admin/rsvps/{id}` never asks for `dietaryConsent` and keeps the reply's old
+  `DietaryConsent` flag. So an admin can store Art. 9 data while the flag says `false`. Until the API
+  records it: **admins enter dietary data only with the guest's explicit consent and keep their own
+  proof of it** (for example the guest's email), because an admin edit does not update the flag. A
+  follow-up for the API is open (consent check or attestation on admin writes).
 - **No IP addresses, cookies or raw tokens are stored.** The edit token (32 random bytes) exists only
   as its SHA-256 hash (`TokenHash`), compared in constant time.
 - **Deletes are hard deletes.** A withdrawn reply (`DELETE /api/rsvp/me`) or an admin delete removes
-  the entity at once; there are no soft-deleted rows today. `UpdatedBy`/`DeletedBy` (planned: `guest`
-  or the admin's identity, i.e. an email address) and admin soft delete with a 30-day purge are not
-  implemented yet ([`docs/api.md`](../api.md), "Not implemented yet"); add them here when they land.
+  the entity at once; there are no soft-deleted rows today. Planned in the open issues #32 (S2-06)
+  and #56 (S3-02), not implemented yet: the audit fields `UpdatedBy` and `DeletedBy` (`guest`, or
+  the signed-in admin's email address) and a soft delete for admin deletes only, purged after 30
+  days (a guest's own withdrawal stays a hard delete). [`docs/api.md`](../api.md) ("Not implemented
+  yet") lists `UpdatedBy`. Add them here when they land.
 - **Retention:** until the guest withdraws the reply (deleted at once) or, at the latest, the deletion
   date `privacy.deleteBy` (default: the last day of the third month after the wedding,
   `privacyDeleteBy` in `@weddingplanner/content`). Backups: at most 30 days longer (see below).
@@ -95,14 +107,20 @@ content, from the architecture and API plan; check the fields again when the adm
   never `Expires` or `Domain`; cleared with `Max-Age=0`),
   [`RsvpOptions.cs`](../../apps/api/src/WeddingPlanner.Api/Features/Rsvp/RsvpOptions.cs) (default 365
   days; no app setting overrides it today), [`i18n.ts`](../../apps/web/src/site/i18n.ts) (`wp.lang`).
-- Both cookies are set only when a reply is sent or claimed, refreshed (a new `Max-Age`) whenever the
-  page reads or changes the reply, and cleared when the reply is withdrawn.
+- Both cookies are set only when a reply is sent or claimed (a personal link opened), refreshed (a
+  new `Max-Age`) whenever the page reads or changes the reply, and cleared when the reply is
+  withdrawn or when a request with a stale cookie finds no reply (404, `RsvpHttp.NotFound`).
 - **Map consent is not stored:** the click-to-load map asks again on every visit. A planned
   `wp.mapConsent` (`localStorage`, #36) must be added here and to the notice when it lands.
 - **Admins only:** signing in to `/admin` (Microsoft account, SWA provider `aad`) makes the platform
   set its session cookie `StaticWebAppsAuthCookie` (HttpOnly, set and cleared by Static Web Apps at
   `/.auth/login/aad` and `/.auth/logout`; attributes and lifetime are Microsoft's). Guests never get
   it. Basis: § 25(2) no. 2 TDDDG (needed for the sign-in the admin asked for).
+- **e2e only:** `wp_probe` (value `1`, `HttpOnly; Secure; SameSite=Strict; Path=/api/health`,
+  `Max-Age` 60 seconds) is set by `GET /api/health/probe`, a platform probe that is off by default
+  and switched on only in e2e (`HealthProbe__Enabled`, `infra/app/main.bicep`). Only the probe
+  smoke script calls it ([ADR 0011](../adr/0011-client-ip.md)); the page never does, and in test and
+  production it answers 404 and sets nothing.
 
 No other cookies, no tracking, no consent banner (every entry is strictly necessary for a function the
 guest or admin uses).
@@ -123,9 +141,12 @@ guest or admin uses).
 - The `/api/health` keep-warm ping (only while RSVP is on) and `/version.json` carry no personal data
   beyond the technical request metadata every request has (IP address, user agent at the edge).
 - External links (Google Maps directions, WhatsApp, playlists, hotel sites) send nothing until the
-  guest opens them. Fonts and images are self-hosted; the CSP allows no other third-party origin. The
-  map tiles are requested with `Referrer-Policy: strict-origin-when-cross-origin`, so OSM sees only
-  the site's origin.
+  guest opens them. Fonts and images are self-hosted. The CSP
+  ([`build-swa-config.ts`](../../apps/web/swa-config/build-swa-config.ts)) allows two third-party
+  origins: `img-src https://tile.openstreetmap.org` for the map tiles, and
+  `frame-src https://www.openstreetmap.org`, which nothing uses (the map draws tiles, no page has an
+  iframe; a follow-up drops it). The map tiles are requested with
+  `Referrer-Policy: strict-origin-when-cross-origin`, so OSM sees only the site's origin.
 
 ## Telemetry and logs
 
@@ -136,6 +157,12 @@ Application Insights and Log Analytics in `dataLocation` ([`monitoring.bicep`](.
   [`apps/api/CLAUDE.md`](../../apps/api/CLAUDE.md));
 - **IP masking is on:** `DisableIpMasking: false` on the Application Insights component, so the
   client IP is never stored (checked by `infra/app/tests/template.jq`);
+- request telemetry of the Functions host records each request's URL path. Guest routes carry no
+  id; the admin routes `PUT` and `DELETE /api/admin/rsvps/{id}` carry the reply's random id
+  (pseudonymous: no name, but it identifies one reply in the tables);
+- sampling: host requests are never sampled out (`excludedTypes: Request` in `host.json`); worker
+  traces are rate-limited to 5 per second unless an `OTEL_TRACES_SAMPLER` app setting says otherwise
+  (`Program.cs`);
 - abuse signals are counts only: event **2101 `RsvpCapacityReached`** (the reply cap; the cap number
   only) and **2102 `RsvpSubmissionsRejected`** (number of refused new replies per reason: honeypot,
   fill time, name rules), each at most once per hour and worker instance;
@@ -151,8 +178,9 @@ nightly identity can only write new blobs.
 
 **Retention:** a lifecycle rule deletes backups, their previous versions and snapshots after 18 days;
 deleted blobs stay soft-deleted for 7 days. Worst case 18 + up to 3 lifecycle runs (each at most a day
-apart) + 7 = **at most 28 days** after a backup was written, within the notice's promise ("backups are
-kept for at most 30 days"). There is no immutability (WORM) policy, because lifecycle delete does not
+apart) + 7 = **28 days** after a backup was written, or 29 if Azure counts the 18-day threshold only
+in whole days (Microsoft Learn does not say), within the notice's promise ("backups are kept for at
+most 30 days"). There is no immutability (WORM) policy, because lifecycle delete does not
 work in an immutable container; the arithmetic, its sources and the one-time owner step to remove the
 old policy are in the [runbook](../runbooks/backup-restore.md#retention-and-protection).
 
