@@ -112,7 +112,24 @@ public sealed record RsvpDietaryView(IReadOnlyList<string> Tags, string? Note)
 /// <summary>Body of 201 from <c>POST /api/rsvp</c>.</summary>
 /// <param name="Rsvp">The created reply.</param>
 /// <param name="Version">The reply's entity tag (the <c>ETag</c> header value, quotes included) for <c>If-Match</c>.</param>
-public sealed record RsvpCreatedResponse(RsvpView Rsvp, string Version);
+/// <param name="EditToken">
+/// The secret of the personal edit link, <c>&lt;rsvpId&gt;.&lt;token&gt;</c>: the same credential as the <c>wp_rsvp</c>
+/// cookie (<see cref="RsvpCredential"/>). The page shows it once as <c>&lt;site origin&gt;/#edit=&lt;editToken&gt;</c>, and
+/// <c>POST /api/rsvp/claim</c> turns it into the cookies of another browser. Returned only here; never logged.
+/// </param>
+public sealed record RsvpCreatedResponse(RsvpView Rsvp, string Version, string EditToken)
+{
+    /// <summary>Never prints the edit token or personal data (records print every member by default).</summary>
+    public override string ToString() => $"RsvpCreatedResponse {{ Rsvp = {Rsvp} }}";
+}
+
+/// <summary>Body of <c>POST /api/rsvp/claim</c>.</summary>
+/// <param name="EditToken">The secret of the personal edit link, <c>&lt;rsvpId&gt;.&lt;token&gt;</c>.</param>
+public sealed record RsvpClaimRequest(string? EditToken)
+{
+    /// <summary>Never prints the edit token.</summary>
+    public override string ToString() => nameof(RsvpClaimRequest);
+}
 
 /// <summary>Body of <c>GET</c> and <c>PUT /api/rsvp/me</c>.</summary>
 /// <param name="Rsvp">The caller's reply.</param>

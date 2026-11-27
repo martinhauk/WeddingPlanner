@@ -24,6 +24,7 @@ public sealed class RsvpFunctionCatalogTests
     [InlineData(typeof(RsvpMineFunctions), nameof(RsvpMineFunctions.Update), "RsvpUpdateMine", "put", "rsvp/me")]
     [InlineData(typeof(RsvpMineFunctions), nameof(RsvpMineFunctions.Delete), "RsvpDeleteMine", "delete", "rsvp/me")]
     [InlineData(typeof(RsvpStatusFunction), nameof(RsvpStatusFunction.Run), "RsvpStatus", "get", "rsvp/status")]
+    [InlineData(typeof(RsvpClaimFunction), nameof(RsvpClaimFunction.Run), "RsvpClaim", "post", "rsvp/claim")]
     public void DeclaresTheRoute(Type type, string methodName, string functionName, string httpMethod, string route)
     {
         var method = type.GetMethod(methodName).ShouldNotBeNull();
@@ -45,7 +46,7 @@ public sealed class RsvpFunctionCatalogTests
             .Select(entry => entry.Function?.Name ?? string.Empty)
             .ToList();
 
-        functionNames.Count.ShouldBe(5);
+        functionNames.Count.ShouldBe(6);
         functionNames.ShouldAllBe(name => FeatureMap.ForFunction(name) == ApiFeature.Rsvp);
     }
 
@@ -53,7 +54,7 @@ public sealed class RsvpFunctionCatalogTests
     public async Task TheGateAnswers404ForEveryRsvpFunctionWhileTheFlagIsOff()
     {
         var gate = new FeatureGateMiddleware(Microsoft.Extensions.Options.Options.Create(new FeaturesOptions()));
-        foreach (var name in new[] { "RsvpCreate", "RsvpGetMine", "RsvpUpdateMine", "RsvpDeleteMine", "RsvpStatus" })
+        foreach (var name in new[] { "RsvpCreate", "RsvpGetMine", "RsvpUpdateMine", "RsvpDeleteMine", "RsvpStatus", "RsvpClaim" })
         {
             var httpContext = Support.TestFunctionContext.CreateHttpContext();
             var ran = false;

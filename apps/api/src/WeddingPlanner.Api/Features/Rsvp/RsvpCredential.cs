@@ -8,8 +8,9 @@ namespace WeddingPlanner.Api.Features.Rsvp;
 
 /// <summary>
 /// The secret that lets a browser read, change and delete its own reply: <c>&lt;rsvpId&gt;.&lt;token&gt;</c>, the value
-/// of the <c>wp_rsvp</c> cookie. The id is 16 random bytes as lower-case hex; the token is 32 random bytes as
-/// base64url. Only the SHA-256 hash of the token is stored, and it is compared in constant time.
+/// of the <c>wp_rsvp</c> cookie and of the personal edit link (<c>/#edit=&lt;rsvpId&gt;.&lt;token&gt;</c>). The id is 16
+/// random bytes as lower-case hex; the token is 32 random bytes (256 bits) as base64url. Only the SHA-256 hash of the
+/// token is stored, and it is compared in constant time.
 /// </summary>
 public sealed partial class RsvpCredential
 {
@@ -19,10 +20,18 @@ public sealed partial class RsvpCredential
         Token = token;
     }
 
+    /// <summary>
+    /// A random hash no token matches (in practice): compared against when a reply id is unknown, so a lookup does the
+    /// same hashing work whether or not the id exists.
+    /// </summary>
+    public static string DecoyHash { get; } = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(SHA256.HashSizeInBytes));
+
     /// <summary>The reply id (row key).</summary>
     public string RsvpId { get; }
 
-    /// <summary>The cookie value <c>&lt;rsvpId&gt;.&lt;token&gt;</c>.</summary>
+    /// <summary>
+    /// The cookie value <c>&lt;rsvpId&gt;.&lt;token&gt;</c>, which is also the edit token of the personal edit link.
+    /// </summary>
     public string CookieValue => $"{RsvpId}.{Token}";
 
     /// <summary>Lower-case hex SHA-256 of the token: the only form in which the token is stored.</summary>
