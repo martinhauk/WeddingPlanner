@@ -43,10 +43,16 @@ export const ui = {
   website: { de: 'Website', en: 'Website', es: 'Web' },
   route: { de: 'Route planen', en: 'Directions', es: 'Cómo llegar' },
   showMap: { de: 'Karte anzeigen', en: 'Show map', es: 'Mostrar mapa' },
+  /** Under the map button; `{link}` becomes the link to the privacy notice (`mapPrivacyLink`). */
   mapNote: {
-    de: 'Lädt Kartenbilder von OpenStreetMap.',
-    en: 'Loads map images from OpenStreetMap.',
-    es: 'Carga imágenes de OpenStreetMap.',
+    de: 'Die Karte lädt Bilder von Servern der OpenStreetMap Foundation (Vereinigtes Königreich), die dabei eure IP-Adresse erhalten. Mehr in der {link}.',
+    en: 'The map loads images from servers of the OpenStreetMap Foundation (United Kingdom), which receive your IP address. More in our {link}.',
+    es: 'El mapa carga imágenes de servidores de la OpenStreetMap Foundation (Reino Unido), que reciben vuestra dirección IP. Más información en nuestra {link}.',
+  },
+  mapPrivacyLink: {
+    de: 'Datenschutzerklärung',
+    en: 'privacy notice',
+    es: 'política de privacidad',
   },
   mapOf: { de: 'Karte', en: 'Map', es: 'Mapa' },
   largerMap: { de: 'Größere Karte', en: 'Larger map', es: 'Mapa más grande' },

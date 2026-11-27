@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
+import { fill } from '../fill.tsx';
 import { type Lang, t } from '../i18n.ts';
 import { osmUrl, TILE_SIZE, tilesAround } from '../osm.ts';
+import { PRIVACY_PATH } from '../privacy/route.ts';
 import { ui } from '../ui.ts';
 
 export type OsmMapProps = {
@@ -13,17 +15,29 @@ export type OsmMapProps = {
 
 /**
  * Click-to-load map from OpenStreetMap tiles. Nothing is requested from OpenStreetMap until the
- * guest asks for the map (the CSP allows tile images, no frames).
+ * guest asks for the map (the CSP allows tile images, no frames). The note under the button says
+ * who receives the guest's IP address then (the OpenStreetMap Foundation) and links the privacy
+ * notice; it sits outside the button, because a link must not be inside one.
  */
 export function OsmMap({ lat, lng, name, lang }: OsmMapProps) {
   const [shown, setShown] = useState(false);
+  const noteId = useId();
   if (!shown) {
     return (
       <div className="map">
-        <button type="button" className="map-load" onClick={() => setShown(true)}>
+        <button
+          type="button"
+          className="map-load"
+          aria-describedby={noteId}
+          onClick={() => setShown(true)}
+        >
           {t(ui.showMap, lang)}
-          <small>{t(ui.mapNote, lang)}</small>
         </button>
+        <p className="map-note" id={noteId}>
+          {fill(t(ui.mapNote, lang), {
+            link: <a href={PRIVACY_PATH}>{t(ui.mapPrivacyLink, lang)}</a>,
+          })}
+        </p>
       </div>
     );
   }

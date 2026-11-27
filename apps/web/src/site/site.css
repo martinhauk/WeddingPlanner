@@ -911,7 +911,9 @@ p {
   cursor: pointer;
 }
 
-.map-load small {
+.map-note,
+.map-credit {
+  margin-top: 0.3rem;
   color: var(--muted);
   font-size: 0.75rem;
 }
@@ -937,12 +939,6 @@ p {
   border-radius: 50% 50% 50% 0;
   transform: rotate(-45deg);
   box-shadow: 0 1px 3px rgb(0 0 0 / 35%);
-}
-
-.map-credit {
-  margin-top: 0.3rem;
-  color: var(--muted);
-  font-size: 0.75rem;
 }
 
 /* Maps and directions line up at the bottom of cards side by side. */

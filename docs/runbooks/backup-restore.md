@@ -50,23 +50,137 @@ checks all three before it writes anything.
 
 ## Retention and protection
 
-| Protection                                    | Effect                                                                               |
-| --------------------------------------------- | ------------------------------------------------------------------------------------ |
-| Container immutability policy (WORM), 30 days | No one can delete a backup blob or lose its content for 30 days after it was written |
-| Blob versioning, 30-day soft delete           | Deleted blobs and containers stay recoverable for 30 days after the WORM period      |
-| Lifecycle rule, 180 days                      | Backups (and their versions) are deleted 180 days after they were written            |
-| Entra ID only (shared key off)                | No account key or SAS can reach the backups                                          |
-| Delete lock on `rg-<slug>-<env>` (bootstrap)  | The account, container and policy cannot be deleted without removing the lock first  |
+The privacy notice promises guests that **backups are kept for at most 30 days**, so data deleted
+from the tables disappears from the backups within 30 days too (built-in text, section "How long we
+keep data"). The backup store is built so that every copy of a backup is gone within that time:
+
+| Setting                                      | Value    | Effect                                                                                  |
+| -------------------------------------------- | -------- | --------------------------------------------------------------------------------------- |
+| Lifecycle rule `delete-old-backups`          | 18 days  | Deletes backups, their previous versions and snapshots once they are older than 18 days |
+| Blob soft delete (permanent delete off)      | 7 days   | A deleted blob or version stays recoverable for 7 days, then it is gone for good        |
+| Container soft delete                        | 7 days   | A deleted container stays recoverable for 7 days                                        |
+| Blob versioning                              | on       | Overwriting a backup keeps the original as a previous version                           |
+| Entra ID only (shared key off)               |          | No account key or SAS can reach the backups                                             |
+| Delete lock on `rg-<slug>-<env>` (bootstrap) |          | The account cannot be deleted without removing the lock first                           |
+| Container immutability policy (WORM)         | **none** | See [why there is no WORM policy](#why-there-is-no-worm-policy)                         |
+
+### The arithmetic (worst case)
+
+A backup blob written at day 0 is gone, including every copy, by:
+
+| Step                                                                                            | Days   |
+| ----------------------------------------------------------------------------------------------- | ------ |
+| The lifecycle rule applies once the blob is older than the threshold                            | 18     |
+| The next lifecycle run deletes the current version (runs start at most 24 h after the last one) | + 1    |
+| With versioning on, that delete leaves a previous version; the next run deletes it              | + 1    |
+| The deleted version stays soft-deleted, then Azure deletes it permanently                       | + 7    |
+| **Total**                                                                                       | **27** |
+| A blob that was ever overwritten needs one more run (old versions go first)                     | 28     |
+
+Microsoft Learn does not say whether "more than 18 days" is counted in whole days. If it is, add
+one day: 28, or 29 for an overwritten blob. That leaves 1 to 3 days for runs that start late or take
+longer. `infra/app/tests/backup.jq` fails if the threshold plus one day plus three runs plus soft
+delete exceeds 30 days. Sources (Microsoft Learn):
+
+- Lifecycle: "Lifecycle management can take up to 24 hours to begin processing after the prior run
+  is completed"; a new or changed policy takes up to 24 hours to take effect (lifecycle management
+  performance characteristics and overview).
+- An action runs when the number of days that have passed _exceeds_ the threshold; rules for
+  previous versions count from the version's creation time ("when the blob was first written, not
+  when the version became a previous version"); the current version is deleted only after its
+  previous versions and snapshots (lifecycle policy structure).
+- With versioning, deleting the current version makes it a previous version; deleting a previous
+  version soft-deletes it, and it is permanently deleted when the soft delete period ends (blob
+  versioning, soft delete for blobs). A lifecycle delete is subject to soft delete like any other
+  delete.
+- A changed soft delete period applies to deletions after the change; blobs deleted before keep the
+  period that applied then (soft delete for blobs and containers). After this change, anything
+  soft-deleted under the old 30-day setting can stay up to 30 days; that was before RSVP opened.
+
+**Deploys and the lifecycle run.** Every deploy of an environment redeploys `backup.bicep`, which
+writes the lifecycle policy again even when nothing changed. Microsoft Learn says an active policy
+"is interrupted if changes are made to the policy" and that "policy changes and updates can also
+take up to 24 hours to go into effect" (lifecycle overview, performance characteristics). It does
+not say whether an unchanged write counts as a change. If it does, many deploys in a row could
+delay deletions beyond the slack above. So run the check command below after a week with many
+deploys as well, not only monthly. (A possible follow-up: write the policy only when it changes.)
+
+**Undelete restarts the clock.** Restoring a soft-deleted backup (Undelete Blob, container
+restore) brings it back as a normal blob; the next lifecycle run deletes it again and it is
+soft-deleted for another 7 days. Undelete only to restore data, and delete the restored copy (and
+any `inspect…` tables) right after.
+
+### Why there is no WORM policy
+
+Earlier versions put a 30-day, unlocked, container-level time-based retention policy (WORM) on
+`table-backups`. Microsoft Learn documents that the lifecycle delete action is "not supported with
+page blobs or blobs in an immutable container" and "won't work with any blob in an immutable
+container" (lifecycle policy structure, lifecycle overview: known issues). With the policy in
+place, the lifecycle rule could never delete a backup, and backups would outlive the promise. An
+unlocked policy also gives little protection: anyone who may change the account can shorten it.
+Soft delete (7 days), versioning, the write-only nightly identity and the delete lock remain.
+
+**One-time owner step: delete the old policy in every environment.** Removing the resource from the
+template does not remove it from Azure, and the delete lock blocks the delete, so for each of e2e,
+test and production (after the first deploy of this change):
+
+```sh
+rg=rg-<slug>-<env>
+account=$(az storage account list -g "$rg" --query "[?starts_with(name, 'bk')].name" -o tsv)
+# Prints only the state and the days (the full output contains the account name):
+az storage container immutability-policy show --account-name "$account" -c table-backups -g "$rg" \
+  --query "{state: state, days: immutabilityPeriodSinceCreationInDays}" -o table
+# Only if it shows a policy with state "Unlocked":
+etag=$(az storage container immutability-policy show --account-name "$account" -c table-backups \
+  -g "$rg" --query etag -o tsv)
+az lock delete --name do-not-delete -g "$rg"
+az storage container immutability-policy delete --account-name "$account" -c table-backups \
+  -g "$rg" --if-match "$etag"
+# Put the lock back right away, also if the delete failed (same name and level as the bootstrap):
+az lock create --name do-not-delete --lock-type CanNotDelete -g "$rg" \
+  --notes "Protects the RSVP data of this WeddingPlanner environment. Managed by scripts/bootstrap.sh; see docs/runbooks/azure-onboarding.md before removing it."
+az lock show --name do-not-delete -g "$rg" --query level -o tsv   # CanNotDelete
+```
+
+The `az lock create` line works the same for every environment. Re-running the bootstrap would put
+the lock back too, but its arguments differ per environment (`--env e2e` takes no `--instance` and
+resets the e2e alert emails without `--alert-emails-from`), so use the line above. Never print or
+paste the account name. If the policy says `Locked`, it cannot be deleted or shortened: stop and
+plan the purge by hand (backups can be deleted once their 30 days have passed).
+
+**Check that backups really go (owner, three weeks after deleting the old policy, then monthly and
+after a week with many deploys while RSVP data exists).** List
+everything in the container, including previous versions and soft-deleted blobs, older than 30
+days. The answer must be `0`:
+
+```sh
+az storage blob list --account-name "$account" -c table-backups --auth-mode login \
+  --include dv --num-results '*' \
+  --query "length([?properties.creationTime < '$(date -u -v-30d +%Y-%m-%dT%H:%M:%SZ)'])" -o tsv
+```
+
+(`date -d '30 days ago'` instead of `-v-30d` on Linux.) Use an account with Storage Blob Data
+Reader on the backup account; run it for test and production.
+
+### Erasure requests and the deletion date
+
+- A guest who withdraws their reply, or asks for erasure, is deleted from the tables at once. Their
+  data stays in the backups written before that until those age out: at most 30 days. The privacy
+  notice says exactly that, so the usual answer to an erasure request is "deleted now, gone from the
+  backups within 30 days".
+- If someone needs it gone from the backups sooner, delete the backup folders (`<backupId>/`) that
+  were written before the erasure with an owner login (no WORM policy prevents it), then note that
+  their soft-deleted copies still need 7 days. Never restore such a backup afterwards without
+  removing that guest again.
+- A restore brings back rows that were deleted after the backup was written. After a restore,
+  delete again every reply that was withdrawn or erased in between.
+- On the deletion date (`privacy.deleteBy`), see the deletion procedure in
+  [the data inventory](../privacy/data-inventory.md#deletion-procedure-owner): stop the nightly
+  backup, delete the tables, and the backups are gone 30 days later at the latest.
 
 Blob versioning is on, so an identity with blob write access could still write a new blob under
 an existing name: that adds a new current version and keeps the original as an earlier one. The
 tool never does that: every write is conditional (`If-None-Match: *`) and fails on an existing name.
-
-The immutability policy is **unlocked**, so you can still shorten or remove it if it gets in your way
-(Portal → backup account → Containers → `table-backups` → Access policy). Locking it is a one-way
-decision: a locked policy can only be extended, the account cannot be deleted while it holds
-protected blobs, and the template, which manages an unlocked policy, then fails on redeploy until
-the policy resource is removed from `infra/app/modules/backup-storage.bicep`.
 
 ## Who can do what
 
