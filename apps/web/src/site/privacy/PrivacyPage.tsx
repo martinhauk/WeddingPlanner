@@ -7,7 +7,7 @@ import { formatDate } from '../format.ts';
 import { LANG_STORAGE_KEY, type Lang, t } from '../i18n.ts';
 import type { SiteBuild } from '../sections/types.ts';
 import { type UiText, ui } from '../ui.ts';
-import { privacyText as p } from './privacy-text.ts';
+import { privacyText as p, transferLinks } from './privacy-text.ts';
 import { regionArea, regionName } from './regions.ts';
 import { IMPRINT_ID } from './route.ts';
 
@@ -55,6 +55,12 @@ export function PrivacyPage({ content, regions, lang }: PrivacyPageProps) {
       : fill(tx(outsideEu.length === 1 ? p.transferRegionOne : p.transferRegionMany), {
           regions: new Intl.ListFormat(lang, { type: 'conjunction' }).format(outsideEu),
         });
+  // Where the safeguards are published: plain links, a new tab, no referrer and no opener.
+  const transferLink = ({ text, href }: (typeof transferLinks)[keyof typeof transferLinks]) => (
+    <a href={tx(href)} target="_blank" rel="noopener noreferrer">
+      {tx(text)}
+    </a>
+  );
 
   return (
     <article className="section privacy" aria-labelledby="privacy_title">
@@ -116,7 +122,12 @@ export function PrivacyPage({ content, regions, lang }: PrivacyPageProps) {
         </p>
         <p>
           {tx(p.transfer)} {outsideEuSentence !== undefined && <>{outsideEuSentence} </>}
-          {tx(p.transferBasis)}
+          {tx(p.transferBasis)}{' '}
+          {fill(tx(p.transferSources), {
+            scc: transferLink(transferLinks.scc),
+            dpa: transferLink(transferLinks.dpa),
+            dpf: transferLink(transferLinks.dpf),
+          })}
         </p>
         <p>{tx(p.logs)}</p>
       </Block>

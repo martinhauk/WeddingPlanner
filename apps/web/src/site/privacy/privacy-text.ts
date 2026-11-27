@@ -4,7 +4,8 @@ import type { UiText } from '../ui.ts';
  * The built-in privacy notice (German law: GDPR, TDDDG, DDG), complete in every site language. The
  * instance adds the controllers, the contact email, the deletion date and optional paragraphs
  * (`site-content.json` `privacy`). Placeholders in braces are filled by the page: `{controllers}`,
- * `{email}`, `{deleteBy}`, `{appRegion}`, `{dataRegion}`, `{showMap}`.
+ * `{email}`, `{deleteBy}`, `{appRegion}`, `{dataRegion}`, `{regions}`, `{showMap}`, and the links
+ * of `transferLinks` (`{scc}`, `{dpa}`, `{dpf}`).
  *
  * Keep it true to the code: when the app starts storing, logging or loading something new, change
  * this text and `docs/privacy/data-inventory.md` in the same commit.
@@ -143,6 +144,12 @@ export const privacyText = {
     en: 'Microsoft is certified under the EU-U.S. Data Privacy Framework, which is covered by an adequacy decision of the European Commission (Art. 45 GDPR). In addition, the European Commission’s standard contractual clauses apply to every transfer to a country outside the EU (Art. 46 GDPR).',
     es: 'Microsoft está certificada conforme al Marco de Privacidad de Datos UE-EE. UU., cubierto por una decisión de adecuación de la Comisión Europea (art. 45 RGPD). Además, para cualquier transferencia a un país fuera de la UE se aplican las cláusulas contractuales tipo de la Comisión Europea (art. 46 RGPD).',
   },
+  // Where the safeguards are published (Art. 13(1)(f) GDPR); the three links are `transferLinks`.
+  transferSources: {
+    de: 'Die Klauseln findet ihr auf der Website der {scc}, unseren Vertrag mit Microsoft im {dpa} und die Zertifizierung von Microsoft in der {dpf}.',
+    en: 'You can find the clauses on the website of the {scc}, our contract with Microsoft in the {dpa} and Microsoft’s certification on the {dpf}.',
+    es: 'Podéis encontrar las cláusulas en la web de la {scc}, nuestro contrato con Microsoft en el {dpa} y la certificación de Microsoft en la {dpf}.',
+  },
   logs: {
     de: 'Technische Protokolle (Azure Application Insights) helfen uns, Fehler zu finden. Sie enthalten keine Namen, Nachrichten, Angaben zur Ernährung, persönlichen Links, Cookies oder IP-Adressen und werden nach 30 Tagen gelöscht.',
     en: 'Technical logs (Azure Application Insights) help us find errors. They contain no names, messages, dietary details, personal links, cookies or IP addresses, and are deleted after 30 days.',
@@ -237,3 +244,46 @@ export const privacyText = {
     es: 'Esta es una web privada, sin fines comerciales ni publicidad, por lo que no es obligatorio un aviso legal (Impressum) según el § 5 DDG.',
   },
 } as const satisfies Record<string, UiText | readonly UiText[]>;
+
+/**
+ * The official pages named in `transferSources`: the European Commission's page on the standard
+ * contractual clauses (a URL per language with the menus translated; the text is in English and
+ * links the clauses), Microsoft's Products and Services Data Protection Addendum (one page; the DPA
+ * can be downloaded there in many languages) and the Data Privacy Framework list, where Microsoft's
+ * certification can be looked up (English only). The page renders them as plain links that open in
+ * a new tab without a referrer, so nothing is loaded before a click and the CSP needs no new origin.
+ */
+export const transferLinks = {
+  scc: {
+    text: { de: 'EU-Kommission', en: 'European Commission', es: 'Comisión Europea' },
+    href: {
+      de: 'https://commission.europa.eu/law/law-topic/data-protection/international-dimension-data-protection/standard-contractual-clauses-scc_de',
+      en: 'https://commission.europa.eu/law/law-topic/data-protection/international-dimension-data-protection/standard-contractual-clauses-scc_en',
+      es: 'https://commission.europa.eu/law/law-topic/data-protection/international-dimension-data-protection/standard-contractual-clauses-scc_es',
+    },
+  },
+  dpa: {
+    text: {
+      de: 'Data Protection Addendum',
+      en: 'Data Protection Addendum',
+      es: 'Data Protection Addendum',
+    },
+    href: {
+      de: 'https://www.microsoft.com/licensing/docs/view/Microsoft-Products-and-Services-Data-Protection-Addendum-DPA',
+      en: 'https://www.microsoft.com/licensing/docs/view/Microsoft-Products-and-Services-Data-Protection-Addendum-DPA',
+      es: 'https://www.microsoft.com/licensing/docs/view/Microsoft-Products-and-Services-Data-Protection-Addendum-DPA',
+    },
+  },
+  dpf: {
+    text: {
+      de: 'Liste des Data Privacy Framework',
+      en: 'Data Privacy Framework list',
+      es: 'lista del Marco de Privacidad de Datos',
+    },
+    href: {
+      de: 'https://www.dataprivacyframework.gov/list',
+      en: 'https://www.dataprivacyframework.gov/list',
+      es: 'https://www.dataprivacyframework.gov/list',
+    },
+  },
+} as const satisfies Record<string, { readonly text: UiText; readonly href: UiText }>;

@@ -94,9 +94,20 @@ request before it is stored in Germany; telemetry and backups stay in Germany.
       (adequacy decision, Art. 45 GDPR), and the **standard contractual clauses** apply to every
       transfer outside the EU (Art. 46 GDPR). When `swaLocation` or `dataLocation` is outside the
       EU, the paragraph also names that region and says that the replies are always sent there;
-      check that it names West US 2 (or your `swaLocation`). Lead decision in #95, revertible by
-      the owner: before, the paragraph appeared only when a region was outside the EU, although
-      the notice says the pages come from a worldwide network.
+      check that it names West US 2 (or your `swaLocation`). Lead decision in #95, confirmed by the
+      owner: the paragraph is always shown, because the notice says the pages come from a worldwide
+      network (before, it appeared only when a region was outside the EU).
+- [x] **Where the safeguards can be found** (Art. 13(1)(f) GDPR, #97; owner decision: links, not
+      "on request"). The transfer paragraph ends with one sentence that links three official pages:
+      the European Commission's page on the
+      [standard contractual clauses](https://commission.europa.eu/law/law-topic/data-protection/international-dimension-data-protection/standard-contractual-clauses-scc_en)
+      (`_de`, `_en` or `_es` to match the page language; the text there is in English), Microsoft's
+      [Products and Services Data Protection Addendum](https://www.microsoft.com/licensing/docs/view/Microsoft-Products-and-Services-Data-Protection-Addendum-DPA)
+      (our contract with Microsoft; downloads in many languages) and the
+      [Data Privacy Framework list](https://www.dataprivacyframework.gov/list), where Microsoft's
+      certification can be looked up. They are plain links (new tab, `rel="noopener noreferrer"`),
+      so nothing is loaded before a click and the CSP is unchanged. The URLs live in
+      `transferLinks` in `privacy-text.ts`; if one of them moves, change it there.
 - [ ] **Open question: should the dietary consent sentence mention the US processing?** The transfer
       itself rests on the adequacy decision and the clauses, not on consent, and the notice
       explains it. Mentioning it in the consent sentence too ("…processed on Microsoft servers,

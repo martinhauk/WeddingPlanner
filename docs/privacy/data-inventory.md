@@ -162,7 +162,9 @@ guest or admin uses).
 - **Dietary data passes through the United States** when `swaLocation` is a US region (West US 2 by
   default): the managed functions that receive and validate a reply run there, while the reply is
   stored only in `dataLocation` (Germany). The notice covers this with the transfer paragraph
-  (EU-U.S. Data Privacy Framework plus standard contractual clauses), which also names that region;
+  (EU-U.S. Data Privacy Framework plus standard contractual clauses), which also names that region
+  and links where the safeguards are published (the Commission's SCC page, Microsoft's Data
+  Protection Addendum, the Data Privacy Framework list; plain links, nothing loads before a click);
   see the checklist. The paragraph is shown even when both regions are in the EU, because the SWA
   edge that delivers the pages and takes the requests is a worldwide network.
 - The `/api/health` keep-warm ping (only while RSVP is on) and `/version.json` carry no personal data
