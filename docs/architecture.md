@@ -313,7 +313,9 @@ subscription would be disabled after 30 days).
   and sits in a separate ops resource group it has no rights on; the app resource group has a delete
   lock; secrets are fetched and masked at deploy time; no `pull_request_target`.
 - **Data:** RSVP and guest data are purged after the event (retention date configured per
-  deployment); nightly backups go to private blob storage.
+  deployment); nightly backups go to private blob storage. What is stored where and for how long:
+  [privacy/data-inventory.md](privacy/data-inventory.md); the owner's checklist for the privacy
+  notice: [privacy/privacy-notice-checklist.md](privacy/privacy-notice-checklist.md).
 
 ## 14. Local development
 
