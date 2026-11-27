@@ -137,7 +137,7 @@ test('the edit token of a new reply claims it in another browser until it is wit
   const wrong = `${editToken.slice(0, 33)}${'A'.repeat(43)}`;
   assert.equal((await other.call('POST', '/api/rsvp/claim', { editToken: wrong })).status, 404);
 
-  assert.equal((await call('DELETE', '/api/rsvp/me')).status, 204);
+  assert.equal((await call('DELETE', '/api/rsvp/me', undefined, '"v1"')).status, 204);
   assert.equal((await other.call('POST', '/api/rsvp/claim', { editToken })).status, 404);
   assert.deepEqual(
     rsvp.writes().map((write) => `${write.method} ${write.path}`),
