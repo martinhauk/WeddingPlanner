@@ -14,8 +14,13 @@ export type RsvpSummaryProps = {
   readonly busy: boolean;
   /** Moves focus to the thank-you line when shown after a guest's action (never on page load). */
   readonly focusOnMount: boolean;
-  /** The personal edit link, right after the reply was created; shown with a copy button. */
+  /** The personal edit link of the reply, shown with a copy button. */
   readonly editLink?: string | null;
+  /**
+   * Show the link at once (right after the reply was created); otherwise a "show your personal
+   * link" button reveals it.
+   */
+  readonly editLinkShown?: boolean;
   readonly onEdit: () => void;
   readonly onWithdraw: () => void;
 };
@@ -31,10 +36,26 @@ function dietaryText(person: RsvpView['people'][number], lang: Lang): string {
  * Clipboard API (older in-app browsers) or when copying fails, the link is selected for the guest to
  * copy by hand.
  */
-export function RsvpEditLink({ link, lang }: { readonly link: string; readonly lang: Lang }) {
+export function RsvpEditLink({
+  link,
+  lang,
+  focusOnMount = false,
+}: {
+  readonly link: string;
+  readonly lang: Lang;
+  /** Moves focus to the link (and selects it) when shown on request. */
+  readonly focusOnMount?: boolean;
+}) {
   const id = useId();
   const field = useRef<HTMLInputElement>(null);
   const [copied, setCopied] = useState<boolean | null>(null);
+  const [focusFirst] = useState(focusOnMount);
+
+  useEffect(() => {
+    if (focusFirst) {
+      field.current?.focus();
+    }
+  }, [focusFirst]);
 
   const copy = async (event: FormEvent) => {
     event.preventDefault();
@@ -77,8 +98,12 @@ export function RsvpEditLink({ link, lang }: { readonly link: string; readonly l
 
 /** The thank-you after a reply: who comes (or not), dietary needs, the message, change/withdraw. */
 export function RsvpSummary(props: RsvpSummaryProps) {
-  const { rsvp, lang, readOnly, busy, focusOnMount, editLink, onEdit, onWithdraw } = props;
+  const { rsvp, lang, readOnly, busy, focusOnMount, editLink, editLinkShown, onEdit, onWithdraw } =
+    props;
   const [confirming, setConfirming] = useState(false);
+  const [revealed, setRevealed] = useState(false);
+  const link = editLink ?? null;
+  const linkVisible = link !== null && (editLinkShown === true || revealed);
   const thanks = useRef<HTMLParagraphElement>(null);
   const cancel = useRef<HTMLButtonElement>(null);
   const withdrawButton = useRef<HTMLButtonElement>(null);
@@ -131,6 +156,7 @@ export function RsvpSummary(props: RsvpSummaryProps) {
           </>
         )}
       </dl>
+      {linkVisible && <RsvpEditLink link={link} lang={lang} focusOnMount={revealed} />}
       {!readOnly &&
         (confirming ? (
           <div className="rsvp-confirm">
@@ -164,7 +190,13 @@ export function RsvpSummary(props: RsvpSummaryProps) {
             </button>
           </div>
         ))}
-      {editLink !== undefined && editLink !== null && <RsvpEditLink link={editLink} lang={lang} />}
+      {link !== null && !linkVisible && (
+        <div className="row center rsvp-show-link">
+          <button type="button" className="btn ghost small" onClick={() => setRevealed(true)}>
+            {t(r.showLink, lang)}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

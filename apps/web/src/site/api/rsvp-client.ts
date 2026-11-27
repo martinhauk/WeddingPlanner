@@ -5,8 +5,9 @@
  * without calling the API.
  *
  * The personal edit link `<origin>/#edit=<editToken>` carries the same credential (`<id>.<token>`):
- * the create returns it once, and `claimRsvp` turns it into the cookies of another browser. It is a
- * URL fragment, so it never reaches a server or a `Referer`.
+ * the create and every answer about the own reply return it (`editToken`), and `claimRsvp` turns it
+ * into the cookies of another browser (`previewClaim` only asks whose reply it is). It is a URL
+ * fragment, so it never reaches a server or a `Referer`.
  *
  * Every call resolves to an `ApiResult` instead of throwing. Responses are checked with small type
  * guards: the browser bundle has no zod.
@@ -54,15 +55,19 @@ export type RsvpView = {
   readonly dietaryConsent?: boolean;
 };
 
-/** The browser's own reply: `version` goes into `If-Match`; `open` is false after the deadline. */
+/**
+ * The browser's own reply: `version` goes into `If-Match`; `open` is false after the deadline;
+ * `editToken` is the secret of its personal edit link (absent if the API sent none).
+ */
 export type RsvpMine = {
   readonly rsvp: RsvpView;
   readonly version: string;
   readonly open: boolean;
+  readonly editToken?: string;
 };
 
-/** A new reply, with the secret of its personal edit link (absent if the API sent none). */
-export type RsvpCreated = RsvpMine & { readonly editToken?: string };
+/** `POST /api/rsvp/claim` with `preview: true`: who the link's reply belongs to. */
+export type RsvpClaimPreview = { readonly names: readonly string[] };
 
 export type RsvpLimits = {
   readonly maxPeople: number;
@@ -168,6 +173,11 @@ export function parseEditLink(hash: string): { readonly token: string | null } |
   return { token: EDIT_TOKEN.test(token) && !/[A-Za-z0-9_-]/.test(next) ? token : null };
 }
 
+/** The reply id of an edit token (`<id>.<token>`); it is no secret. */
+export function editTokenId(editToken: string): string {
+  return editToken.slice(0, editToken.indexOf('.'));
+}
+
 /** The personal edit link for `editToken`, on the site's start page. */
 export function editLinkFor(editToken: string, origin: string = window.location.origin): string {
   return `${origin}/${EDIT_FRAGMENT}${editToken}`;
@@ -182,19 +192,12 @@ export function getMine(signal?: AbortSignal): Promise<ApiResult<RsvpMine>> {
 }
 
 /** Creates this browser's reply; the API sets the cookies and returns the edit link's secret. */
-export function createRsvp(
-  body: RsvpRequest,
-  signal?: AbortSignal,
-): Promise<ApiResult<RsvpCreated>> {
+export function createRsvp(body: RsvpRequest, signal?: AbortSignal): Promise<ApiResult<RsvpMine>> {
   return send({ method: 'POST', path: '', body, signal }, 201, (data, response) => {
     const version = versionOf(data, response);
-    if (!isRecord(data) || !isRsvpView(data.rsvp) || version === undefined) {
-      return undefined;
-    }
-    const mine = { rsvp: data.rsvp, version, open: true };
-    return typeof data.editToken === 'string' && EDIT_TOKEN.test(data.editToken)
-      ? { ...mine, editToken: data.editToken }
-      : mine;
+    return isRecord(data) && isRsvpView(data.rsvp) && version !== undefined
+      ? withEditToken({ rsvp: data.rsvp, version, open: true }, data)
+      : undefined;
   });
 }
 
@@ -204,6 +207,27 @@ export function createRsvp(
  */
 export function claimRsvp(editToken: string, signal?: AbortSignal): Promise<ApiResult<RsvpMine>> {
   return send({ method: 'POST', path: '/claim', body: { editToken }, signal }, 200, parseMine);
+}
+
+/**
+ * Asks whose reply a personal edit link opens (the names only) without claiming it: the API sets
+ * no cookie, so this browser keeps its own reply. Fails like `claimRsvp`.
+ */
+export function previewClaim(
+  editToken: string,
+  signal?: AbortSignal,
+): Promise<ApiResult<RsvpClaimPreview>> {
+  return send(
+    { method: 'POST', path: '/claim', body: { editToken, preview: true }, signal },
+    200,
+    (data) =>
+      isRecord(data) &&
+      Array.isArray(data.names) &&
+      data.names.length > 0 &&
+      data.names.every((name) => typeof name === 'string')
+        ? { names: data.names as readonly string[] }
+        : undefined,
+  );
 }
 
 /** Replaces the own reply; `version` is the one from the last read (`If-Match`). */
@@ -223,7 +247,7 @@ export function deleteRsvp(version?: string, signal?: AbortSignal): Promise<ApiR
 type Call = {
   readonly method: 'GET' | 'POST' | 'PUT' | 'DELETE';
   readonly path: string;
-  readonly body?: RsvpRequest | { readonly editToken: string };
+  readonly body?: RsvpRequest | { readonly editToken: string; readonly preview?: true };
   readonly ifMatch?: string | undefined;
   readonly signal?: AbortSignal | undefined;
 };
@@ -378,8 +402,16 @@ function parseMine(data: unknown, response: Response): RsvpMine | undefined {
     isRsvpView(data.rsvp) &&
     typeof data.open === 'boolean' &&
     version !== undefined
-    ? { rsvp: data.rsvp, version, open: data.open }
+    ? withEditToken({ rsvp: data.rsvp, version, open: data.open }, data)
     : undefined;
+}
+
+/** Adds the edit token of an answer when it has a well-formed one for this reply. */
+function withEditToken(mine: RsvpMine, data: Record<string, unknown>): RsvpMine {
+  const token = data.editToken;
+  return typeof token === 'string' && EDIT_TOKEN.test(token) && editTokenId(token) === mine.rsvp.id
+    ? { ...mine, editToken: token }
+    : mine;
 }
 
 function isLimits(value: unknown): value is RsvpLimits {

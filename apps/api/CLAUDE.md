@@ -118,13 +118,21 @@ prefixed with `'`). Contract: [`docs/api.md`](../../docs/api.md). Test support: 
 ## RSVP API
 
 Contract, cookies, errors and storage layout: [`docs/api.md`](../../docs/api.md). In short:
-`GET /api/rsvp/status` (`RsvpStatus`), `POST /api/rsvp` (`RsvpCreate`) and `GET`/`PUT`/`DELETE
-/api/rsvp/me` (`RsvpGetMine`, `RsvpUpdateMine`, `RsvpDeleteMine`) in `Features/Rsvp/`. Validation,
-sanitising, person ids and the deadline are pure domain code in
-`packages/WeddingPlanner.Domain/src/WeddingPlanner.Domain/Rsvp/`. The `Rsvps` table is accessed only
-through `Storage/Rsvps/IRsvpRepository` (`TableRsvpRepository`), which stores the SHA-256 hash of the
-edit token, never the token. Settings: `Rsvp__Deadline`, `Rsvp__TimeZone` (from Bicep),
-`Rsvp__MaxCompanions` (5), `Rsvp__MaxActiveRsvps` (300), `Rsvp__CookieLifetimeDays` (365).
+`GET /api/rsvp/status` (`RsvpStatus`), `POST /api/rsvp` (`RsvpCreate`), `GET`/`PUT`/`DELETE
+/api/rsvp/me` (`RsvpGetMine`, `RsvpUpdateMine`, `RsvpDeleteMine`) and `POST /api/rsvp/claim`
+(`RsvpClaim`: the personal edit link; with `"preview": true` it answers only `{names}` and sets no
+cookie) in `Features/Rsvp/`. Every "mine" answer (`GET`/`PUT /me`, the claim; all built by
+`RsvpHttp.Mine`) and the create's 201 carry `editToken` (`<id>.<token>`, the session's credential): never
+log it, keep those responses `no-store`, and keep `ToString` of the response records free of it. A claim
+or preview resolves the token through `RsvpHttp.ResolveAsync` (constant time, decoy hash) and every failure
+is the same 404. Validation, sanitising, the name rules (`PersonNames`), person ids and the deadline are
+pure domain code in `packages/WeddingPlanner.Domain/src/WeddingPlanner.Domain/Rsvp/`. The `Rsvps` table is
+accessed only through `Storage/Rsvps/IRsvpRepository` (`TableRsvpRepository`), which stores the SHA-256
+hash of the edit token, never the token. Settings: `Rsvp__Deadline`, `Rsvp__TimeZone` (from Bicep),
+`Rsvp__MaxCompanions` (5), `Rsvp__MaxActiveRsvps` (300), `Rsvp__CookieLifetimeDays` (365),
+`Rsvp__MinSubmitMs` (2500; 0 switches the minimum fill time of a new reply off, at most 60000). Warnings
+for alerts: `RsvpCapacityReached` (2101) and `RsvpSubmissionsRejected` (2102, counts per reason of refused
+new replies), each at most once per hour and worker instance through `RsvpLogThrottle`.
 
 Responses: return `Http/ApiResult` (`ApiResult.Json`) or `Http/ApiProblem.Create(status, code)`
 with a code from `ProblemCodes`. Both serialise with `ApiJson.Options` (camelCase, nulls omitted,

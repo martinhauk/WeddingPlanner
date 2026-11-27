@@ -5,12 +5,13 @@ import {
   createRsvp,
   deleteRsvp,
   editLinkFor,
+  editTokenId,
   type FieldError,
   getMine,
   getStatus,
   parseEditLink,
+  previewClaim,
   RSVP_STATE_EVENT,
-  type RsvpCreated,
   type RsvpLimits,
   type RsvpMine,
   type RsvpState,
@@ -37,6 +38,16 @@ export type RsvpPhase =
   | { readonly kind: 'stored' }
   /** The page was opened with a personal edit link; it is claimed once the section is near. */
   | { readonly kind: 'claiming' }
+  /**
+   * The link opens another reply than the one this browser holds: "are you X or Y?". `own` and
+   * `link` are the names of this browser's reply and of the link's reply; nothing changes until the
+   * guest picks one.
+   */
+  | {
+      readonly kind: 'whoAreYou';
+      readonly own: readonly string[];
+      readonly link: readonly string[];
+    }
   | { readonly kind: 'loadFailed'; readonly error: ApiFailure }
   | { readonly kind: 'form'; readonly mode: 'create' | 'edit'; readonly draft: Reply }
   /** The thank-you with the own reply. */
@@ -68,11 +79,13 @@ export type UseRsvp = {
   /** The state cookie as it was when the page loaded. */
   readonly stored: RsvpState | null;
   readonly mine: RsvpMine | null;
-  /**
-   * The personal edit link of the reply this page has just created (shown until it is withdrawn);
-   * `null` otherwise, also for a returning guest (the API returns it only once).
-   */
+  /** The personal edit link of the own reply (`null` without a reply or when the API sent none). */
   readonly editLink: string | null;
+  /**
+   * Show the link at once: the reply was created on this page. Otherwise it stays behind a "show my
+   * personal link" button.
+   */
+  readonly editLinkShown: boolean;
   /** The section is near the viewport or the guest pressed a button: the API may be called. */
   readonly active: boolean;
   readonly busy: boolean;
@@ -100,6 +113,10 @@ export type UseRsvp = {
   /** Loads the stored reply now (also without `IntersectionObserver`). */
   readonly reveal: () => void;
   readonly retry: () => void;
+  /** "Are you X or Y?": the guest is who this browser's reply names; the link is dropped. */
+  readonly keepOwnReply: () => void;
+  /** "Are you X or Y?": the guest is who the link names; its reply replaces this browser's one. */
+  readonly takeLinkReply: () => void;
 };
 
 const CHOOSE: RsvpPhase = { kind: 'choose' };
@@ -143,18 +160,21 @@ function forgetEditLink(): void {
  * State and API calls of the RSVP section. On page load it reads only the `wp_rsvp_state` cookie
  * and the URL fragment; the API is called once the section comes near the viewport or the guest
  * presses a button. A personal edit link (`#edit=<id>.<token>`) is then claimed for this browser
- * (`POST /api/rsvp/claim`) and removed from the address bar.
+ * (`POST /api/rsvp/claim`) and removed from the address bar; a browser that holds another reply
+ * asks the guest first which of the two is theirs.
  */
 export function useRsvp({ enabled, lang, deadline, anchor }: UseRsvpOptions): UseRsvp {
   const [stored] = useState(() => (enabled ? readRsvpState() : null));
   const [link] = useState(() => (enabled ? parseEditLink(window.location.hash) : null));
   // The token still to claim; cleared once the API has answered for good.
   const [claimToken, setClaimToken] = useState(() => link?.token ?? null);
+  // This browser has a reply of its own: ask whose the link is before it replaces that reply.
+  const [askFirst, setAskFirst] = useState(() => stored !== null);
   const [phase, setPhase] = useState<RsvpPhase>(
     claimToken !== null ? CLAIMING : stored === null ? CHOOSE : STORED,
   );
   const [mine, setMine] = useState<RsvpMine | null>(null);
-  const [editLink, setEditLink] = useState<string | null>(null);
+  const [editLinkShown, setEditLinkShown] = useState(false);
   const [status, setStatus] = useState<RsvpStatus | null>(null);
   const [requested, setRequested] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -180,36 +200,82 @@ export function useRsvp({ enabled, lang, deadline, anchor }: UseRsvpOptions): Us
     }
   }, [link]);
 
-  // Opened with a personal edit link: claim the reply for this browser.
+  // Opened with a personal edit link: claim the reply for this browser. A browser with a reply of
+  // its own first reads it: the same reply needs no claim, another one makes the page ask the guest
+  // "are you X or Y?" (with the names from a preview, which changes no cookie) before claiming.
   const claimNow = active && phase.kind === 'claiming' && claimToken !== null;
   useEffect(() => {
     if (!claimNow || claimToken === null) {
       return undefined;
     }
     const controller = new AbortController();
-    void claimRsvp(claimToken, controller.signal).then((result) => {
-      if (controller.signal.aborted) {
+    const { signal } = controller;
+    /** The link is done with: forget it and show `reply`. */
+    const settle = (reply: RsvpMine, next: RsvpNotice | null) => {
+      setClaimToken(null);
+      forgetEditLink();
+      setMine(reply);
+      setPhase(SAVED);
+      setNotice(next);
+    };
+    const run = async () => {
+      let ownGone = false;
+      if (askFirst) {
+        const own = await getMine(signal);
+        if (signal.aborted) {
+          return;
+        }
+        if (own.ok) {
+          if (own.value.rsvp.id === editTokenId(claimToken)) {
+            // The link of this very reply: nothing to claim, nothing to ask.
+            settle(own.value, null);
+            return;
+          }
+          const preview = await previewClaim(claimToken, signal);
+          if (signal.aborted) {
+            return;
+          }
+          if (preview.ok) {
+            setMine(own.value);
+            setPhase({
+              kind: 'whoAreYou',
+              own: own.value.rsvp.people.map((person) => person.name),
+              link: preview.value.names,
+            });
+          } else if (preview.error.kind === 'notFound') {
+            settle(own.value, 'linkInvalid');
+          } else {
+            setPhase({ kind: 'loadFailed', error: preview.error });
+          }
+          return;
+        }
+        if (own.error.kind !== 'notFound') {
+          setPhase({ kind: 'loadFailed', error: own.error });
+          return;
+        }
+        // The own reply is gone (the API has cleared the stale cookies): claim as without one.
+        ownGone = true;
+      }
+      const result = await claimRsvp(claimToken, signal);
+      if (signal.aborted) {
         return;
       }
       if (result.ok) {
-        setClaimToken(null);
-        forgetEditLink();
-        setMine(result.value);
-        setPhase(SAVED);
-        setNotice('claimed');
+        settle(result.value, 'claimed');
       } else if (result.error.kind === 'notFound') {
         // Wrong, incomplete or withdrawn: say so, and carry on with this browser's own reply.
         setClaimToken(null);
         forgetEditLink();
-        setPhase(stored === null ? CHOOSE : STORED);
+        setPhase(stored === null || ownGone ? CHOOSE : STORED);
         setNotice('linkInvalid');
       } else {
         // Offline, rate-limited or unavailable: keep the link for "try again".
         setPhase({ kind: 'loadFailed', error: result.error });
       }
-    });
+    };
+    void run();
     return () => controller.abort();
-  }, [claimNow, claimToken, stored]);
+  }, [claimNow, claimToken, askFirst, stored]);
 
   // A returning guest: load the own reply.
   const loadMine = active && phase.kind === 'stored';
@@ -280,7 +346,7 @@ export function useRsvp({ enabled, lang, deadline, anchor }: UseRsvpOptions): Us
       setNotice(next);
     } else if (result.error.kind === 'notFound') {
       setMine(null);
-      setEditLink(null);
+      setEditLinkShown(false);
       setPhase(CHOOSE);
       setNotice('replyGone');
     } else {
@@ -304,7 +370,7 @@ export function useRsvp({ enabled, lang, deadline, anchor }: UseRsvpOptions): Us
         if (mode === 'edit') {
           // The reply was deleted elsewhere: keep the entries and let the guest send them anew.
           setMine(null);
-          setEditLink(null);
+          setEditLinkShown(false);
           setPhase({
             kind: 'form',
             mode: 'create',
@@ -370,10 +436,10 @@ export function useRsvp({ enabled, lang, deadline, anchor }: UseRsvpOptions): Us
             toRequest(draft, lang, website, performance.now() - formShownAt.current),
           );
     if (result.ok) {
-      const { editToken, ...saved }: RsvpCreated = result.value;
-      setMine(saved);
-      if (editToken !== undefined) {
-        setEditLink(editLinkFor(editToken));
+      setMine(result.value);
+      if (mode === 'create') {
+        // A new reply shows its personal link at once.
+        setEditLinkShown(true);
       }
       setPhase(SAVED);
     } else {
@@ -393,7 +459,7 @@ export function useRsvp({ enabled, lang, deadline, anchor }: UseRsvpOptions): Us
     if (result.ok || result.error.kind === 'notFound') {
       // The API deleted the reply, so its edit link no longer works either.
       setMine(null);
-      setEditLink(null);
+      setEditLinkShown(false);
       setPhase(CHOOSE);
       setNotice('withdrawn');
     } else if (result.error.kind === 'conflict') {
@@ -417,11 +483,34 @@ export function useRsvp({ enabled, lang, deadline, anchor }: UseRsvpOptions): Us
     setPhase(claimToken !== null ? CLAIMING : STORED);
   };
 
+  const keepOwnReply = () => {
+    if (phase.kind !== 'whoAreYou') {
+      return;
+    }
+    setInteracted(true);
+    setClaimToken(null);
+    forgetEditLink();
+    setPhase(SAVED);
+  };
+
+  const takeLinkReply = () => {
+    if (phase.kind !== 'whoAreYou') {
+      return;
+    }
+    setInteracted(true);
+    setRequested(true);
+    setAskFirst(false);
+    setPhase(CLAIMING);
+  };
+
+  const editToken = mine?.editToken;
+
   return {
     phase,
     stored,
     mine,
-    editLink,
+    editLink: editToken === undefined ? null : editLinkFor(editToken),
+    editLinkShown,
     active,
     busy,
     error,
@@ -441,5 +530,7 @@ export function useRsvp({ enabled, lang, deadline, anchor }: UseRsvpOptions): Us
     withdraw,
     reveal,
     retry,
+    keepOwnReply,
+    takeLinkReply,
   };
 }

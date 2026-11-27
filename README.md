@@ -143,9 +143,10 @@ checkout outside this repo. The workflow of the instance repo is in
 ## Contributing
 
 Read [CLAUDE.md](CLAUDE.md) (it applies to humans too) and the [conventions](docs/conventions/README.md).
-Every change is an issue → branch `sN-NN-short-name` → PR with a Conventional Commit title and
-`Closes #N`. CI (`ci-ok`) must be green and an independent reviewer must approve; PRs are
-squash-merged.
+Every change is an issue → branch `wp-NN-short-name` (`fix-short-name` outside a work package) → PR
+with a Conventional Commit title and `Closes #N` (or `Refs #N`). CI (`ci-ok`) must be green; PRs that
+touch security-relevant paths also get an independent reviewer. The owner merges, squash only
+([ADR 0010](docs/adr/0010-working-process.md)).
 
 ## License
 

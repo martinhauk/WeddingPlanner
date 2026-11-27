@@ -260,7 +260,37 @@ public sealed class RsvpCreateFunctionTests
         var bodies = new[] { honeypot, tooFast, both }.Select(TestHttp.ReadBody).ToList();
         bodies.Distinct().ShouldHaveSingleItem().ShouldNotContain("website");
         bodies[0].ShouldNotContain("elapsed", Case.Insensitive);
-        harness.Logs.Records.ShouldBeEmpty("refused submissions are not logged");
+        harness.Logs.Records.ShouldHaveSingleItem("refused submissions are not logged one by one, only counted")
+            .ShouldContain("RsvpSubmissionsRejected: 1 new replies refused");
+    }
+
+    [Fact]
+    public async Task RefusedRepliesAreCountedPerReasonInOneWarningPerHour()
+    {
+        using var harness = new RsvpHarness();
+        var spamName = new { attending = false, people = new[] { new { name = "Pablo spam.shop" } }, language = "de", website = string.Empty };
+
+        await harness.PostAsync(SampleBodyWith(website: "https://spam.example.com"));
+        await harness.PostAsync(SampleBodyWith(elapsedMs: 100));
+        await harness.PostAsync(SampleBodyWith(elapsedMs: 100, website: "x"));
+        (await harness.PostAsync(spamName)).Response.StatusCode.ShouldBe(StatusCodes.Status400BadRequest);
+        (await harness.PostAsync(new { attending = false, people = new[] { new { name = "" } }, language = "de", website = string.Empty }))
+            .Response.StatusCode.ShouldBe(StatusCodes.Status400BadRequest);
+        SubmissionWarnings(harness).ShouldHaveSingleItem("the first refusal is reported at once, the rest wait for the hour");
+
+        harness.Time.Advance(RsvpLogThrottle.Interval);
+        (await harness.PostAsync(spamName)).Response.StatusCode.ShouldBe(StatusCodes.Status400BadRequest);
+
+        var warnings = SubmissionWarnings(harness);
+        warnings.Count.ShouldBe(2);
+        warnings[0].ShouldStartWith($"Warning {typeof(RsvpCreateFunction).FullName} {RsvpCreateFunction.SubmissionsRejectedEvent}: ");
+        warnings[0].ShouldContain("RsvpSubmissionsRejected: 1 new replies refused since the last report (honeypot 1, fill time 0, name rules 0;");
+        warnings[1].ShouldContain("RsvpSubmissionsRejected: 4 new replies refused since the last report (honeypot 1, fill time 1, name rules 2;", customMessage: "a missing name is no name-rule refusal");
+        foreach (var warning in warnings)
+        {
+            warning.ShouldNotContain("spam", Case.Insensitive);
+            warning.ShouldNotContain("Pablo");
+        }
     }
 
     [Fact]
@@ -508,6 +538,9 @@ public sealed class RsvpCreateFunctionTests
         problem.TryGetProperty("detail", out _).ShouldBeFalse();
         TestHttp.SetCookies(httpContext).ShouldBeEmpty();
     }
+
+    private static List<string> SubmissionWarnings(RsvpHarness harness) =>
+        [.. harness.Logs.Records.Where(record => record.Contains(RsvpCreateFunction.SubmissionsRejectedEvent, StringComparison.Ordinal))];
 
     private static object SampleBodyWith(long elapsedMs = RsvpHarness.HumanElapsedMs, string website = "") => new
     {

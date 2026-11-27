@@ -105,9 +105,10 @@ internal sealed class RsvpHarness : IDisposable
     }
 
     /// <summary><c>POST /api/rsvp/claim</c> with <c>{editToken}</c> (or <paramref name="rawBody"/>).</summary>
-    public async Task<HttpContext> ClaimAsync(string? editToken, string? cookie = null, string? rawBody = null)
+    public async Task<HttpContext> ClaimAsync(string? editToken, string? cookie = null, string? rawBody = null, bool preview = false)
     {
-        var httpContext = TestHttp.Request("POST", "/api/rsvp/claim", rawBody is null ? new { editToken } : null, rawBody, cookie: cookie);
+        object body = preview ? new { editToken, preview } : new { editToken };
+        var httpContext = TestHttp.Request("POST", "/api/rsvp/claim", rawBody is null ? body : null, rawBody, cookie: cookie);
         await RunAsync(httpContext, request => ClaimFunction().Run(request, CancellationToken.None));
         return httpContext;
     }

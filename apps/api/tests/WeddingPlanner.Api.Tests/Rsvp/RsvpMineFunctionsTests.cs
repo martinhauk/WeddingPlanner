@@ -28,12 +28,25 @@ public sealed class RsvpMineFunctionsTests
         httpContext.Response.Headers.CacheControl.ToString().ShouldBe("no-store");
         httpContext.Response.Headers.ETag.ToString().ShouldBe(created.Response.Headers.ETag.ToString());
         var body = TestHttp.ReadJson(httpContext);
-        body.EnumerateObject().Select(property => property.Name).ShouldBe(["rsvp", "version", "open", "deadline"]);
+        body.EnumerateObject().Select(property => property.Name).ShouldBe(["rsvp", "version", "open", "deadline", "editToken"]);
+        body.GetProperty("editToken").GetString().ShouldBe(RsvpHarness.EditToken(created), "a returning guest can see the personal link again");
         body.GetProperty("version").GetString().ShouldBe(httpContext.Response.Headers.ETag.ToString());
         body.GetProperty("open").GetBoolean().ShouldBeTrue();
         body.GetProperty("deadline").GetString().ShouldBe("2099-05-01T21:59:00Z");
         body.GetProperty("rsvp").GetProperty("id").GetString().ShouldBe(TestHttp.ReadJson(created).GetProperty("rsvp").GetProperty("id").GetString());
         body.GetProperty("rsvp").GetProperty("people")[1].GetProperty("name").GetString().ShouldBe("María-José García");
+    }
+
+    [Fact]
+    public async Task UpdateReturnsTheEditTokenOfTheOwnCookie()
+    {
+        using var harness = new RsvpHarness();
+        var created = await harness.PostAsync();
+
+        var updated = await harness.PutMineAsync(TestHttp.CookieHeader(created), RsvpHarness.SampleBody(attending: false), "*");
+
+        updated.Response.StatusCode.ShouldBe(StatusCodes.Status200OK);
+        TestHttp.ReadJson(updated).GetProperty("editToken").GetString().ShouldBe(RsvpHarness.EditToken(created));
     }
 
     [Fact]

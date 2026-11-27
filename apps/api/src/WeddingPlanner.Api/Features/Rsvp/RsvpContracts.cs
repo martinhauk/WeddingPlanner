@@ -125,13 +125,28 @@ public sealed record RsvpCreatedResponse(RsvpView Rsvp, string Version, string E
 
 /// <summary>Body of <c>POST /api/rsvp/claim</c>.</summary>
 /// <param name="EditToken">The secret of the personal edit link, <c>&lt;rsvpId&gt;.&lt;token&gt;</c>.</param>
-public sealed record RsvpClaimRequest(string? EditToken)
+/// <param name="Preview">
+/// <see langword="true"/>: only look at the link (<see cref="RsvpClaimPreviewResponse"/>) without taking the reply into
+/// this browser. Omitted or <see langword="false"/>: claim it.
+/// </param>
+public sealed record RsvpClaimRequest(string? EditToken, bool? Preview = null)
 {
     /// <summary>Never prints the edit token.</summary>
     public override string ToString() => nameof(RsvpClaimRequest);
 }
 
-/// <summary>Body of <c>GET</c> and <c>PUT /api/rsvp/me</c>.</summary>
+/// <summary>
+/// Body of 200 from <c>POST /api/rsvp/claim</c> with <c>"preview": true</c>: only the names of the link's reply, so a
+/// browser that already holds another reply can ask the guest who they are before replacing it.
+/// </summary>
+/// <param name="Names">The names of the reply's people, the guest first.</param>
+public sealed record RsvpClaimPreviewResponse(IReadOnlyList<string> Names)
+{
+    /// <summary>Prints no personal data.</summary>
+    public override string ToString() => nameof(RsvpClaimPreviewResponse);
+}
+
+/// <summary>Body of <c>GET</c> and <c>PUT /api/rsvp/me</c> and of a claim.</summary>
 /// <param name="Rsvp">The caller's reply.</param>
 /// <param name="Version">
 /// The reply's entity tag (the <c>ETag</c> header value, quotes included), so the client can send <c>If-Match</c>
@@ -139,7 +154,15 @@ public sealed record RsvpClaimRequest(string? EditToken)
 /// </param>
 /// <param name="Open">Whether it can still be changed or deleted (deadline not passed).</param>
 /// <param name="Deadline">The deadline (UTC), omitted when not configured.</param>
-public sealed record RsvpMineResponse(RsvpView Rsvp, string Version, bool Open, DateTime? Deadline);
+/// <param name="EditToken">
+/// The secret of this reply's personal edit link, <c>&lt;rsvpId&gt;.&lt;token&gt;</c>: the credential of the request's own
+/// <c>wp_rsvp</c> cookie (or of the claimed link), so a returning guest can see the link again. Never logged.
+/// </param>
+public sealed record RsvpMineResponse(RsvpView Rsvp, string Version, bool Open, DateTime? Deadline, string EditToken)
+{
+    /// <summary>Never prints the edit token or personal data (records print every member by default).</summary>
+    public override string ToString() => $"RsvpMineResponse {{ Rsvp = {Rsvp} }}";
+}
 
 /// <summary>Body of <c>GET /api/rsvp/status</c>.</summary>
 /// <param name="Enabled">Whether the RSVP API is configured (storage and deadline).</param>

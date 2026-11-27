@@ -12,11 +12,14 @@ namespace WeddingPlanner.Api.Features.Rsvp;
 /// <c>POST /api/rsvp/claim</c> with <c>{editToken}</c>: turns the personal edit link (<c>/#edit=&lt;rsvpId&gt;.&lt;token&gt;</c>,
 /// from the 201 of <c>POST /api/rsvp</c>) into the RSVP cookies of this browser, so a guest who replied in a
 /// messenger's in-app browser or on another device can see, change and withdraw the reply here. Answers 200
-/// <c>{rsvp, version, open, deadline}</c> with <c>ETag</c>, like <c>GET /api/rsvp/me</c>, and sets both cookies
-/// (replacing any this browser held for another reply).
+/// <c>{rsvp, version, open, deadline, editToken}</c> with <c>ETag</c>, like <c>GET /api/rsvp/me</c>, and sets both
+/// cookies (replacing any this browser held for another reply).
 /// </summary>
 /// <remarks>
 /// <list type="bullet">
+///   <item>With <c>"preview": true</c> a valid link answers 200 <c>{names}</c> (the names of its reply's people, nothing
+///   else) and sets or clears no cookie: a browser that holds another reply asks the guest "are you X or Y?" before it
+///   claims. Every failure takes the same path and gives the same 404 as a claim.</item>
 ///   <item>A malformed token, an unknown id, a wrong token and a deleted (withdrawn) reply all answer the same 404
 ///   <c>not_found</c>, so the response never reveals whether a reply id exists. The token is compared in constant
 ///   time, against a decoy hash when the id is unknown (<see cref="RsvpHttp.ResolveAsync"/>). A 404 leaves this
@@ -57,6 +60,13 @@ public sealed class RsvpClaimFunction(IRsvpRepository repository, RsvpSettings s
             || await RsvpHttp.ResolveAsync(repository, credential, cancellationToken) is not { } session)
         {
             return ApiProblem.Create(StatusCodes.Status404NotFound, ProblemCodes.NotFound);
+        }
+
+        if (input.Preview == true)
+        {
+            // Only who the link belongs to: no cookies, no version, no reply details.
+            var names = session.Stored.Record.Answer.People.Select(person => person.Name).ToList();
+            return ApiResult.Json(StatusCodes.Status200OK, new RsvpClaimPreviewResponse(names));
         }
 
         return RsvpHttp.Mine(response, session.Credential, session.Stored, settings, timeProvider.GetUtcNow());
