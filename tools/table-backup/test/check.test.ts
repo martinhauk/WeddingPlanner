@@ -83,6 +83,14 @@ const denied = () =>
     code: 'AuthorizationPermissionMismatch',
   });
 
+/**
+ * The same refusal for a HEAD request (downloadToBuffer asks for the blob's properties first): no
+ * body, so the SDK sets no `code` and no message and keeps the x-ms-error-code header in
+ * `details.errorCode`.
+ */
+const deniedHead = (errorCode = 'AuthorizationPermissionMismatch') =>
+  Object.assign(new Error(''), { statusCode: 403, code: undefined, details: { errorCode } });
+
 async function written(): Promise<{ store: MemoryStore; manifest: Manifest }> {
   const store = new MemoryStore();
   const manifest = await exportBackup(
@@ -340,6 +348,40 @@ describe('check', () => {
     });
     store.getError = () => other;
     await expect(check(store, manifest.backupId)).rejects.toBe(other);
+  });
+
+  it('treats a refused HEAD request (code only in details.errorCode) like a refused GET', async () => {
+    const { store, manifest } = await written();
+    store.getError = (path) => (path.endsWith('/manifest.json') ? deniedHead() : undefined);
+    const noManifest = await check(store, manifest.backupId);
+    expect(noManifest).toMatchObject({ ok: false, manifest: 'denied', tables: [] });
+    expect(checkSummary(noManifest)).toEqual([
+      `backup ${manifest.backupId}: FAILED`,
+      '  manifest: denied',
+    ]);
+
+    store.getError = (path) =>
+      path.endsWith('/tables/Guests.jsonl.gz') ? deniedHead() : undefined;
+    const noTable = await check(store, manifest.backupId);
+    expect(problemsOf(noTable, 'Guests')).toEqual(['denied']);
+    expect(problemsOf(noTable, 'Rsvps')).toEqual([]);
+    expect(checkSummary(noTable)).toEqual([
+      `backup ${manifest.backupId}: FAILED`,
+      '  Guests: denied',
+    ]);
+
+    // Another code in the header, or a 403 without any code, passes through as an error.
+    const other = deniedHead('AuthenticationFailed');
+    store.getError = () => other;
+    await expect(check(store, manifest.backupId)).rejects.toBe(other);
+    const bare = Object.assign(new Error(''), { statusCode: 403, details: {} });
+    store.getError = () => bare;
+    await expect(check(store, manifest.backupId)).rejects.toBe(bare);
+
+    // A listing refused that way is still "no read access yet".
+    store.getError = () => undefined;
+    store.listError = deniedHead();
+    await expect(check(store, manifest.backupId)).rejects.toThrow(ReadDeniedError);
   });
 
   it('refuses an invalid backup id before any request', async () => {

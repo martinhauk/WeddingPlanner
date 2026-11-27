@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { redact } from '../src/cli.ts';
+import { errorMessage, redact } from '../src/cli.ts';
 import { annotateDoubles, stateOfPages } from '../src/storage.ts';
 
 describe('annotateDoubles', () => {
@@ -40,6 +40,22 @@ describe('redact', () => {
     expect(text).not.toContain('bkwedabc123prod');
     expect(text).not.toContain('abc/def==');
     expect(text).toContain('<account>.table.<endpoint>');
+  });
+});
+
+describe('errorMessage', () => {
+  it('keeps a message, and names status and code of an error without one (a HEAD request)', () => {
+    expect(errorMessage(new Error('boom'))).toBe('boom');
+    expect(errorMessage('plain')).toBe('plain');
+    const head = Object.assign(new Error(''), {
+      statusCode: 403,
+      details: { errorCode: 'AuthorizationPermissionMismatch' },
+    });
+    expect(errorMessage(head)).toBe('request failed (HTTP 403 AuthorizationPermissionMismatch)');
+    expect(errorMessage(Object.assign(new Error(''), { statusCode: 500 }))).toBe(
+      'request failed (HTTP 500)',
+    );
+    expect(errorMessage(new Error(''))).toBe('request failed without a message');
   });
 });
 

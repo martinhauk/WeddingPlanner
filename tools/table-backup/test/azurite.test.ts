@@ -486,10 +486,31 @@ describe.skipIf(!available)('check against Azurite (read a written backup back)'
     expect(noList.code).toBe(3);
     expect(noList.errors.join('\n')).toContain('may not read the backups');
     expect(printed).toEqual([]);
-    // List but no read: never the "not yet" exit code.
+    // List but no read: never the "not yet" exit code. Reading the manifest starts with a HEAD
+    // request, whose refusal carries its code only in a header; it is still reported as denied.
     const noRead = await cliWith(backupId, await limited('l'));
     expect(noRead.code).toBe(1);
-    expect(noRead.errors.join('\n')).not.toMatch(/sig=(?!<redacted>)/);
+    expect(printed).toEqual([`backup ${backupId}: FAILED`, '  manifest: denied']);
+    expect(noRead.errors).toEqual([]);
+  });
+
+  it('names the status and code of a refused request that has no message', async () => {
+    const backupId = await fresh();
+    // restore does not map refusals: the HEAD request's error has an empty message.
+    const errors: string[] = [];
+    const error = vi.spyOn(console, 'error').mockImplementation((line: string) => {
+      errors.push(line);
+    });
+    try {
+      const code = await main(
+        ['restore', '--backup-id', backupId, '--container', containerName, '--dry-run'],
+        { TABLES_CONNECTION_STRING: CONNECTION, ...(await limited('l')) },
+      );
+      expect(code).toBe(1);
+    } finally {
+      error.mockRestore();
+    }
+    expect(errors).toEqual(['error: request failed (HTTP 403 AuthorizationPermissionMismatch)']);
   });
 
   it('the CLI needs a valid backup id', async () => {

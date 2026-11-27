@@ -122,10 +122,19 @@ export class ReadDeniedError extends Error {
   override name = 'ReadDeniedError';
 }
 
+/**
+ * A 403 AuthorizationPermissionMismatch from Blob Storage. A request with an XML error body (the
+ * listing, a GET) carries the code in `code`; a HEAD request has no body, so the SDK leaves `code`
+ * unset and keeps the code of the x-ms-error-code header in `details.errorCode`. Reading a blob
+ * starts with such a HEAD (downloadToBuffer asks for the properties first).
+ */
 function isPermissionMismatch(error: unknown): boolean {
   if (typeof error !== 'object' || error === null) return false;
-  const e = error as { statusCode?: unknown; code?: unknown };
-  return e.statusCode === 403 && e.code === 'AuthorizationPermissionMismatch';
+  const e = error as { statusCode?: unknown; code?: unknown; details?: unknown };
+  if (e.statusCode !== 403) return false;
+  if (e.code === 'AuthorizationPermissionMismatch') return true;
+  const details = e.details as { errorCode?: unknown } | null | undefined;
+  return typeof details === 'object' && details?.errorCode === 'AuthorizationPermissionMismatch';
 }
 
 /**

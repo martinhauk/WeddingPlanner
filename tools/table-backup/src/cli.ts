@@ -96,6 +96,20 @@ export function redact(message: string, secrets: readonly string[]): string {
   return text;
 }
 
+/**
+ * The error's message. A refused HEAD request (the first request of every blob download) has no
+ * body, so its error has an empty message: then the HTTP status and the storage error code.
+ */
+export function errorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.trim() !== '' || typeof error !== 'object' || error === null) return message;
+  const e = error as { statusCode?: unknown; details?: { errorCode?: unknown } | null };
+  const status = typeof e.statusCode === 'number' ? `HTTP ${e.statusCode}` : '';
+  const code = typeof e.details?.errorCode === 'string' ? e.details.errorCode : '';
+  const what = [status, code].filter((part) => part !== '').join(' ');
+  return what === '' ? 'request failed without a message' : `request failed (${what})`;
+}
+
 export async function main(argv: readonly string[], env: Env = process.env): Promise<number> {
   const [command, ...rest] = argv;
   if (!command || command === '-h' || command === '--help') {
@@ -236,7 +250,7 @@ export async function main(argv: readonly string[], env: Env = process.env): Pro
         throw new UsageError(`unknown command ${command}`);
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = errorMessage(error);
     if (
       error instanceof UsageError ||
       (error as { code?: string })?.code?.startsWith('ERR_PARSE_ARGS')
