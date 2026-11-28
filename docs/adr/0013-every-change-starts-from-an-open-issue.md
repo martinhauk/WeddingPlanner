@@ -22,7 +22,7 @@ issue: rulesets and branch protection can require reviews and status checks, but
   or chore: if no issue exists yet, one is created first (bug, task or chore template) and added to
   the board. The issue is the place where the work is planned and tracked; the PR only links it.
 - **The PR body links it** with `Closes #N`, or `Refs #N` while the issue stays open. `Fixes` and
-  `Resolves` count too; links inside HTML comments do not.
+  `Resolves` count too; links inside HTML comments or code, and full issue URLs, do not.
 - **An epic alone does not count.** An epic (label `type:epic`) groups work; a PR links the bug, task
   or chore under it that it actually works on.
 - **A required check enforces it.** The workflow `pr-policy.yml` runs on every pull request to
@@ -31,6 +31,13 @@ issue: rulesets and branch protection can require reviews and status checks, but
   (`scripts/ci/check-pr-issue.sh`), and when the PR title is a Conventional Commit summary (moved
   here from `ci.yml`). The `main` ruleset requires `pr-policy` next to `ci-ok`.
 - **Dependabot's version-bump PRs are the only exception.** They pass without an issue.
+- **The check is a risky path.** A pull request runs its own copy of `scripts/ci/`, so
+  `scripts/ci/` and `.github/rulesets/` join the paths of ADR 0010 that get the independent
+  reviewer, next to `.github/workflows/`.
+- **The board follows the issues.** This replaces ADR 0010's "the board moves only through the
+  `Closes` automation": the project's built-in workflows add every new issue to the board and move
+  it to Done when it closes (a merged PR with `Closes #N` closes it); whoever starts work on an
+  issue sets it to In progress by hand.
 
 ## Consequences
 

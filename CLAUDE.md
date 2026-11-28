@@ -66,7 +66,7 @@ Tools v4, and a Docker engine (Docker Desktop or OrbStack).
 Before you open a PR, run every check that applies to your change: `pnpm lint`, `pnpm typecheck`,
 `pnpm test`, `pnpm build`, and for .NET changes `dotnet format --verify-no-changes`, build and test.
 Changes to `scripts/github/` also run `scripts/github/tests/run.sh` (fake `gh`, no network) and
-shellcheck.
+shellcheck; changes to `scripts/ci/` run `scripts/ci/tests/check-pr-issue.test.sh` and shellcheck.
 
 **Script contracts.** The root scripts delegate to workspace packages, so packages must provide:
 
@@ -103,9 +103,10 @@ Every change to this repo goes through a PR ([ADR 0010](docs/adr/0010-working-pr
    title and the linked issue, and re-runs when you edit the title or body.
 6. **Review:** an independent reviewer agent (fresh context: issue + diff only) reviews every PR that
    touches a risky path: `apps/api/src/WeddingPlanner.Api/` `Security/`, `RateLimiting/`,
-   `Features/Rsvp/`, `Features/Admin/`; `infra/`; `.github/workflows/`; `scripts/bootstrap*`,
-   `scripts/ops/`; the privacy text and `docs/privacy/data-inventory.md`. The lead reviews all other
-   PRs. One fix round on the same branch, then a re-check.
+   `Features/Rsvp/`, `Features/Admin/`; `infra/`; `.github/workflows/`, `.github/rulesets/`;
+   `scripts/bootstrap*`, `scripts/ops/`, `scripts/ci/` (a PR runs its own copy of the `pr-policy`
+   check); the privacy text and `docs/privacy/data-inventory.md`. The lead reviews all other PRs.
+   One fix round on the same branch, then a re-check.
 7. **The owner merges**, squash only. Merging deploys: `deploy.yml` runs the full CI on the commit,
    then `e2e` → `test`. `production` is switched off until there is a customer
    ([ADR 0012](docs/adr/0012-production-off-until-first-customer.md)): it runs only while the

@@ -178,8 +178,9 @@ check "makes no gh calls" [ ! -s "$LOG" ]
 test_case "create-project: fresh repository gets labels, milestones, project and fields"
 run create-project.sh "$FIXTURES/create-project.fresh.json"
 check "exits 0" status_is 0
-check "creates 14 missing labels" [ "$(grep -c '^POST repos/acme/wedding-demo/labels ' "$LOG")" -eq 14 ]
+check "creates 15 missing labels" [ "$(grep -c '^POST repos/acme/wedding-demo/labels ' "$LOG")" -eq 15 ]
 check "creates blocked and incident labels" called '"name":"blocked"'
+check "creates the type:epic label (pr-policy ignores epics)" called '"name":"type:epic"'
 check "fixes the color of an existing label" json_true \
   "$(last_body 'PATCH repos/acme/wedding-demo/labels/area%3Aweb')" \
   '.new_name == "area:web" and .color == "1d76db"'

@@ -55,6 +55,7 @@ output_has() { printf '%s' "$OUT" | grep -qF -- "$1"; }
 called() { grep -qxF -- "GET repos/acme/wedding-demo/issues/$1" "$LOG"; }
 no_calls() { [ ! -s "$LOG" ]; }
 call_count() { [ "$(grep -c . "$LOG" || true)" -eq "$1" ]; }
+only_called() { called "$1" && call_count 1; }
 # fails_with_help: exit 1 with the annotation that says how to fix it.
 fails_with_help() {
   status_is 1 && output_has '::error title=No open issue linked::' &&
@@ -88,6 +89,27 @@ test_case "an unclosed HTML comment hides the rest of the body"
 run $'Summary.\n<!-- draft notes\nCloses #10'
 check "fails" status_is 1
 check "makes no API calls" no_calls
+
+# Bodies with backticks are $'...' strings, so the backticks are plainly literal.
+test_case "a link inside code does not count (GitHub does not link it)"
+for body in $'Quotes `Closes #10` only.' $'``Closes #10``' $'```text\nCloses #10\n```' \
+  $'~~~\nCloses #10\n~~~' $'  ```\n  Closes #10\n  ```' $'````\n```\nCloses #10\n```\n````' \
+  $'Summary.\n\n```sh\nCloses #10' $'```Closes #10```' \
+  $'Quotes `the fix\nCloses #10` over two lines.'; do
+  run "$body"
+  check "$(printf '%q' "$body") does not count" status_is 1
+  check "$(printf '%q' "$body") makes no API calls" no_calls
+done
+
+test_case "code hides only itself: links next to it count"
+for body in $'Uses `jq`. Closes #10' $'```sh\nfoo\n```\n\nCloses #10' $'```\n```\nCloses #10' \
+  $'~~~\n```\n~~~\nCloses #10' $'Fixes the `foo command.\n\nCloses #10\n\nAlso `bar`.' \
+  $'``foo` Closes #10' $'`<!--` Closes #10' $'<!--\n```\n-->\nCloses #10' \
+  $'```\r\nRefs #11\r\n```\r\nCloses #10' $'```Refs #11``` and Closes #10'; do
+  run "$body"
+  check "$(printf '%q' "$body") counts" status_is 0
+  check "$(printf '%q' "$body") reads only #10" only_called 10
+done
 
 test_case "an epic alone does not count"
 run "Refs #20"
@@ -152,7 +174,7 @@ for body in "closes #10" "CLOSES: #10" $'Refs:\t#10' "ref #10" "fix #10" "Fixes 
   check "\"$body\" counts" status_is 0
 done
 
-test_case "not a link: other words and forms"
+test_case "not a link: other words and forms, and full issue URLs"
 for body in "prefixes #10" "Closes#10" "Closes #10abc" "Closes 10" "Closing #10" "See #10" \
   "closes https://example.com/acme/wedding-demo/issues/10"; do
   run "$body"
@@ -164,6 +186,13 @@ test_case "a reference to another repository is ignored"
 run "Closes octo-org/other-repo#10"
 check "fails with the help text" fails_with_help
 check "makes no API calls" no_calls
+
+test_case "Windows line endings and several links on one line"
+run $'Summary.\r\n\r\nCloses #10, closes #11\r\n'
+check "passes" status_is 0
+check "reads both issues" called 10
+check "reads #11 too" called 11
+check "lists both" output_has "OK: the PR links the open issue(s) #10 #11."
 
 test_case "every number is read once"
 run $'Closes #10\nRefs #10\nfixes #0010'

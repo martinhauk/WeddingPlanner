@@ -10,12 +10,14 @@
 #   PR_AUTHOR  the login of the pull request's author
 #   REPO       OWNER/NAME of the repository the pull request targets
 #
-# HTML comments (<!-- ... -->, also over several lines) are removed from the body first: links
-# in them are not visible on GitHub and do not count. A link is close/closes/closed,
+# HTML comments (<!-- ... -->), fenced code blocks (``` or ~~~) and inline code spans (`...`)
+# are removed from the body first, also when they run over several lines: GitHub does not show
+# links in comments or turn keywords in code into links, so they do not count. An unclosed comment
+# or fence hides the rest of the body, as it does on GitHub. A link is close/closes/closed,
 # fix/fixes/fixed, resolve/resolves/resolved or ref/refs, in any letter case, an optional colon,
-# whitespace and `#N`. References to other repositories (`owner/repo#N`) do not count. Every
-# linked number is read with `gh api repos/REPO/issues/N` and counts when it is an open issue of
-# REPO without the label `type:epic`. Pull requests by Dependabot are exempt.
+# whitespace and `#N`. References to other repositories (`owner/repo#N`) and full issue URLs do
+# not count. Every linked number is read with `gh api repos/REPO/issues/N` and counts when it is an
+# open issue of REPO without the label `type:epic`. Pull requests by Dependabot are exempt.
 #
 # Usage (read-only; also works locally with an authenticated gh):
 #   PR_BODY='Closes #12' PR_AUTHOR=someone REPO=OWNER/NAME scripts/ci/check-pr-issue.sh
@@ -39,11 +41,25 @@ cleanup() {
 trap cleanup EXIT
 
 # linked_numbers BODY: the unique issue numbers that BODY links, one per line, ascending.
+#
+# One pass removes what GitHub does not link; at each position the leftmost construct wins, as
+# in Markdown, so `<!--` inside code is code and a fence inside a comment is comment:
+#   - an HTML comment, to `-->` or the end of the body;
+#   - a fenced code block: an opening fence of three or more ` or ~ at the start of a line (up to
+#     three spaces in), to a closing fence of the same character and at least the same length, or
+#     to the end of the body;
+#   - an inline code span: a run of backticks to the next run of the same length, within one
+#     paragraph (an unmatched backtick is plain text and hides nothing).
 linked_numbers() {
   jq -n -r --arg body "$1" '
-    $body
-    # An unclosed comment hides the rest of the body, as it does on GitHub.
-    | gsub("<!--[\\s\\S]*?(-->|\\z)"; "")
+    ( "<!--[\\s\\S]*?(?:-->|\\z)"
+    + "|(?<![^\\n])[ ]{0,3}(?:(`{3,})[^`\\n]*|(~{3,})[^\\n]*)(?=\\n|\\z)[\\s\\S]*?"
+    + "(?:\\n[ ]{0,3}(?:\\1`*|\\2~*)[ \\t]*(?=\\n|\\z)|\\z)"
+    + "|(?<!`)(`+)(?!`)(?:[^\\n]|\\n(?![ \\t]*(?:\\n|\\z)))*?(?<!`)\\3(?!`)"
+    ) as $hidden
+    | $body
+    | gsub("\\r\\n?"; "\n")
+    | gsub($hidden; "")
     | [scan("(?i)\\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|refs?):?[ \\t]+#([0-9]{1,9})\\b")
        | .[0] | tonumber]
     | unique[]'
@@ -80,7 +96,7 @@ main() {
 
   numbers=$(linked_numbers "${PR_BODY:-}")
   if [ -z "$numbers" ]; then
-    echo "The PR body links no issue (links inside HTML comments do not count)."
+    echo "The PR body links no issue (links inside HTML comments or code do not count)."
   else
     echo "Issues linked in the PR body:"
     while IFS= read -r n; do

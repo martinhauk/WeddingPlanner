@@ -52,7 +52,8 @@ Use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/):
   - a short summary and **`Closes #N`** for the tracker and every issue the PR finishes (`Refs #N`
     for an issue that stays open). `pr-policy` requires at least one link to an open issue of this
     repository that is not an epic (`Fixes` and `Resolves` count too; links inside HTML comments
-    and `owner/repo#N` do not). Editing the body re-runs the check, no push needed;
+    or code, `owner/repo#N` and full issue URLs do not). Editing the body re-runs the check, no
+    push needed;
   - the Definition of Done checklist ([definition-of-done.md](definition-of-done.md));
   - **how you verified it**: the commands you ran and their result (never claim a check you did not
     run);
@@ -71,7 +72,9 @@ Every change to this repo goes through a PR ([ADR 0010](../adr/0010-working-proc
    reviews every PR that touches a risky path:
    - `apps/api/src/WeddingPlanner.Api/`: `Security/`, `RateLimiting/`, `Features/Rsvp/`,
      `Features/Admin/`;
-   - `infra/`, `.github/workflows/`, `scripts/bootstrap*`, `scripts/ops/`;
+   - `infra/`, `.github/workflows/`, `.github/rulesets/`, `scripts/bootstrap*`, `scripts/ops/`;
+   - `scripts/ci/`: a pull request runs its own copy of the `pr-policy` check, so a change to it
+     must not get through on the lead's review alone;
    - the privacy text and `docs/privacy/data-inventory.md`.
 
    The lead reviews every other PR. The implementer fixes findings on the same branch: one fix
