@@ -7,7 +7,7 @@
   "budgetAmount": 10,
   "alertEmails": ["anna@example.com", "ben@example.com"],
   "adminEmails": ["anna@example.com"],
-  "rsvp": { "deadline": "2099-05-01T23:59:59+02:00", "timeZone": "Europe/Berlin" },
+  "rsvp": { "deadline": "2099-07-01T23:59:00+02:00", "timeZone": "Europe/Berlin" },
   "environments": {
     "e2e": { "features": { "rsvp": true, "admin": true } },
     "test": { "features": { "rsvp": true, "admin": true } },

@@ -83,7 +83,7 @@ public sealed class AdminRsvpsFunctionsTests
         var created = await harness.PostAsync();
         var cookie = TestHttp.CookieHeader(created);
         var (id, version, people) = First(await harness.AdminListAsync());
-        harness.Time.Advance(TimeSpan.FromDays(60)); // after the deadline: admins may still edit
+        harness.Time.SetUtcNow(RsvpHarness.DeadlineUtc.AddDays(1)); // after the deadline: admins may still edit
 
         var body = new
         {
@@ -171,7 +171,7 @@ public sealed class AdminRsvpsFunctionsTests
         using var harness = new RsvpHarness();
         var cookie = TestHttp.CookieHeader(await harness.PostAsync());
         var (id, version, _) = First(await harness.AdminListAsync());
-        harness.Time.Advance(TimeSpan.FromDays(60));
+        harness.Time.SetUtcNow(RsvpHarness.DeadlineUtc.AddDays(1));
 
         var deleted = await harness.AdminDeleteAsync(id, version);
 

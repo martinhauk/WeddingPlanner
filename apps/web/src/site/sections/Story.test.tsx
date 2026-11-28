@@ -10,8 +10,11 @@ const story: SectionOf<'story'> = {
     ...sections.story.data,
     items: [
       {
-        heading: { de: 'Wie habt ihr euch kennengelernt?', en: 'How did you meet?' },
-        text: { de: 'Im Speisewagen.\n\nBeim letzten Kaffee.', en: 'In the dining car.' },
+        heading: { de: 'Zwei Hochbeete', en: 'Two raised beds' },
+        text: {
+          de: 'Auf dem Tempelhofer Feld.\n\nNeben dem Basilikum.',
+          en: 'On Tempelhofer Feld.',
+        },
       },
       { text: { de: 'Ohne Überschrift.' } },
     ],
@@ -26,17 +29,17 @@ describe('Story', () => {
     expect(
       within(parts[0] as HTMLElement).getByRole('heading', {
         level: 3,
-        name: 'Wie habt ihr euch kennengelernt?',
+        name: 'Zwei Hochbeete',
       }),
     ).toBeInTheDocument();
-    expect(within(parts[0] as HTMLElement).getAllByText(/Speisewagen|Kaffee/)).toHaveLength(2);
+    expect(within(parts[0] as HTMLElement).getAllByText(/Tempelhofer|Basilikum/)).toHaveLength(2);
     expect(within(parts[1] as HTMLElement).queryByRole('heading')).toBeNull();
-    expect(screen.getByText('Wir trafen uns im Zug.')).toBeInTheDocument();
+    expect(screen.getByText('Wir trafen uns im Gemeinschaftsgarten.')).toBeInTheDocument();
   });
 
   it('uses the visitor language with German as the fallback', () => {
     render(<Story section={story} ctx={{ lang: 'en', content, build }} />);
-    expect(screen.getByRole('heading', { level: 3, name: 'How did you meet?' })).toBeVisible();
+    expect(screen.getByRole('heading', { level: 3, name: 'Two raised beds' })).toBeVisible();
     expect(screen.getByText('Ohne Überschrift.')).toBeInTheDocument();
   });
 });

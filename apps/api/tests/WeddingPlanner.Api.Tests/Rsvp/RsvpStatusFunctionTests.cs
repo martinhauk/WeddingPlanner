@@ -29,7 +29,7 @@ public sealed class RsvpStatusFunctionTests
         status.GetProperty("enabled").GetBoolean().ShouldBeTrue();
         status.GetProperty("open").GetBoolean().ShouldBeTrue();
         status.GetProperty("full").GetBoolean().ShouldBeFalse();
-        status.GetProperty("deadline").GetString().ShouldBe("2099-05-01T21:59:00Z");
+        status.GetProperty("deadline").GetString().ShouldBe("2099-07-01T21:59:00Z");
         status.GetProperty("timeZone").GetString().ShouldBe("Europe/Berlin");
 
         var limits = status.GetProperty("limits");

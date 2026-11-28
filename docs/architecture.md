@@ -51,7 +51,7 @@ WeddingPlanner/
 │  └─ WeddingPlanner.Domain/  pure .NET: RSVP rules, name normalisation, fuzzy matching, CSV
 ├─ tests/e2e/                 @weddingplanner/e2e: Playwright device matrix, specs/ (PR), smoke/
 │                             (read-only), *.e2e-env.spec.ts (write path), screenshot contact sheet
-├─ tools/withjoy-import/      generic page extractor (URL passed as argument) that writes into a
+├─ tools/content-import/      generic page extractor (URL passed as argument) that writes into a
 │                             local instance checkout, never into this repo
 ├─ samples/instance/          complete fictional instance: instance.json, site-content.json,
 │                             site.json (legacy), media/

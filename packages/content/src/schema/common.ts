@@ -50,7 +50,7 @@ export const timeZoneSchema = z.string().refine(isIanaTimeZone, {
   error: coded('E_TZ', 'must be an IANA time zone name, e.g. Europe/Berlin'),
 });
 
-/** An ISO 8601 date-time with a UTC offset (`2099-05-01T23:59:00+02:00` or `…Z`). */
+/** An ISO 8601 date-time with a UTC offset (`2099-07-01T23:59:00+02:00` or `…Z`). */
 export const dateTimeWithOffsetSchema = z.iso.datetime({
   offset: true,
   error: coded(

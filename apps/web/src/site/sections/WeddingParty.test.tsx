@@ -12,7 +12,7 @@ describe('WeddingParty', () => {
     const { container } = renderParty();
     expect(screen.getByRole('button', { name: /Pablo Pérez/ })).toHaveTextContent('Trauzeuge');
     expect(screen.getByRole('button', { name: /María-José García/ })).toHaveTextContent('M');
-    expect(container.querySelector('img')).toHaveAttribute('src', '/media/portrait.png');
+    expect(container.querySelector('img')).toHaveAttribute('src', '/media/party-1.webp');
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 

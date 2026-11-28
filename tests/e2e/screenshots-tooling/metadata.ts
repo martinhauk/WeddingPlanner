@@ -56,6 +56,23 @@ export function screenshotBaseName(caseName: string, lang?: string): string {
   return `${caseName}.${lang}`;
 }
 
+/** WebKit outside macOS refuses a capture longer than this many pixels on either side. */
+export const WEBKIT_MAX_CAPTURE_PIXELS = 32_767;
+
+/**
+ * The scale of a capture: device pixels, unless WebKit would refuse the capture because a side
+ * (CSS size times device scale factor) is longer than it allows. Then CSS pixels, so a long page
+ * on a 3x phone is still recorded in full, at 1x.
+ */
+export function captureScale(
+  browser: string,
+  cssSize: { readonly width: number; readonly height: number },
+  deviceScaleFactor: number,
+): 'device' | 'css' {
+  const longestSide = Math.ceil(Math.max(cssSize.width, cssSize.height) * deviceScaleFactor);
+  return browser === 'webkit' && longestSide > WEBKIT_MAX_CAPTURE_PIXELS ? 'css' : 'device';
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

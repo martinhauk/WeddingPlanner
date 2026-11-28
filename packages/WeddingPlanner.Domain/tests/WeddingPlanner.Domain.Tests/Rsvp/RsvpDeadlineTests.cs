@@ -11,9 +11,9 @@ public sealed class RsvpDeadlineTests
     [Fact]
     public void TakesADeadlineWithOffsetAsIs()
     {
-        var deadline = Create("2099-05-01T23:59:00+02:00", "Europe/Berlin");
+        var deadline = Create("2099-07-01T23:59:00+02:00", "Europe/Berlin");
 
-        deadline.Utc.ShouldBe(Utc(2099, 5, 1, 21, 59, 0));
+        deadline.Utc.ShouldBe(Utc(2099, 7, 1, 21, 59, 0));
         deadline.Utc.Offset.ShouldBe(TimeSpan.Zero);
         deadline.TimeZoneId.ShouldBe("Europe/Berlin");
     }
@@ -36,13 +36,13 @@ public sealed class RsvpDeadlineTests
     }
 
     [Theory]
-    [InlineData("2099-05-01 23:59:00+02:00")]
-    [InlineData("2099-05-01 21:59Z")]
-    [InlineData("2099-05-01 23:59")]
+    [InlineData("2099-07-01 23:59:00+02:00")]
+    [InlineData("2099-07-01 21:59Z")]
+    [InlineData("2099-07-01 23:59")]
     public void AcceptsASpaceInsteadOfTheT(string value)
     {
         // The form for local.settings.json, which Core Tools would otherwise rewrite (see RsvpDeadline remarks).
-        Create(value, "Europe/Berlin").Utc.ShouldBe(Utc(2099, 5, 1, 21, 59, 0));
+        Create(value, "Europe/Berlin").Utc.ShouldBe(Utc(2099, 7, 1, 21, 59, 0));
     }
 
     [Fact]
@@ -71,7 +71,7 @@ public sealed class RsvpDeadlineTests
     [InlineData("2099-06-30")]
     [InlineData("2099-06-30  23:59")]
     [InlineData("2099-06-30t23:59")]
-    [InlineData("05/01/2099 21:59:00")]
+    [InlineData("07/01/2099 21:59:00")]
     [InlineData("2099-02-30T10:00")]
     [InlineData("2099-06-30T24:00")]
     [InlineData("2099-06-30T23:59+0200")]
@@ -91,7 +91,7 @@ public sealed class RsvpDeadlineTests
     [Fact]
     public void IsOpenUntilAndIncludingTheDeadline()
     {
-        var deadline = Create("2099-05-01T23:59:00+02:00", "Europe/Berlin");
+        var deadline = Create("2099-07-01T23:59:00+02:00", "Europe/Berlin");
 
         deadline.IsOpenAt(deadline.Utc.AddDays(-30)).ShouldBeTrue();
         deadline.IsOpenAt(deadline.Utc).ShouldBeTrue();

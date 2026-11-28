@@ -5,8 +5,8 @@ import { installOsmTileMock, type OsmTiles } from './osm-tiles.ts';
 import { type FakeRsvpApi, installFakeRsvpApi } from './rsvp-api.ts';
 
 /**
- * The fixed "now" of every device test: before the sample's RSVP deadline (2099-05-01) and
- * wedding (2099-06-20), so the form is open and the countdown shows the same numbers in every
+ * The fixed "now" of every device test: before the sample's RSVP deadline (2099-07-01) and
+ * wedding (2099-09-26), so the form is open and the countdown shows the same numbers in every
  * screenshot. Timers keep running; only `Date` is fixed.
  */
 export const FIXED_NOW = new Date('2099-03-14T10:00:00+01:00');

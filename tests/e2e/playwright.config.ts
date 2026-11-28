@@ -57,6 +57,9 @@ export default defineConfig({
   reporter: env.publicTarget
     ? [['./fixtures/public-reporter.ts']]
     : [['list'], ['html', { open: 'never' }]],
+  // No commit metadata (author, message) or source diff in any report: Playwright adds both by
+  // default on CI, and the HTML report is uploaded as an artifact of a public repo.
+  captureGitInfo: { commit: false, diff: false },
   // Device suites start from an empty screenshots/ folder (E2E_KEEP_SCREENSHOTS keeps it).
   ...(env.suite === 'smoke' ? {} : { globalSetup: './fixtures/global-setup.ts' }),
   use: {

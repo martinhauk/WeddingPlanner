@@ -76,13 +76,13 @@ describe('containsBankDetails', () => {
     'Ruft an: 0049 151 12345678 oder +34 600 000 000',
     'tel:+49 151 333 333',
     // dates and times
-    '01.05.2099',
-    '2099-05-01T23:59:00+02:00',
-    'Am 20. Juni 2099 ab 18:30 Uhr',
+    '01.07.2099',
+    '2099-07-01T23:59:00+02:00',
+    'Am 26. September 2099 ab 18:00 Uhr',
     // postcodes and addresses
-    '99999 Musterstadt',
-    'DE-99999 Musterstadt',
-    'Beispielweg 1, 99999 Musterstadt, DE 12345',
+    '12045 Berlin',
+    'DE-12045 Berlin',
+    'Beispielstraße 7, 12045 Berlin, DE 12345',
     // numbers that look a bit like an IBAN but fail the check
     'DE89 3704 0044 0532 0130 01',
     'DE89-3704-0044-0532-0130-01',
@@ -90,16 +90,16 @@ describe('containsBankDetails', () => {
     'Booking code AB12CD34EF56GH78',
     'Booking code AB12-CD34-EF56-GH78',
     // hyphenated codes, dates and phone numbers
-    'DE-99999 Musterstadt, Tel. +49-151-0000-0000',
-    'Am 2099-06-20, Tisch A12-B34',
+    'DE-12045 Berlin, Tel. +49-151-0000-0000',
+    'Am 2099-09-26, Tisch A12-B34',
     'Ticket DE12-3456-7890',
     // a BIC without its label, or the label without a code
     'COBADEFFXXX',
     'BIC: ask us',
     'Die BIC sagen wir euch gern.',
     'BIC: anfragen',
-    // the gifts text of the decision
-    'Das größte Geschenk ist, dass ihr dabei seid. Sprecht uns gerne an.',
+    // a gifts text
+    'Ihr seid da – mehr wünschen wir uns eigentlich nicht. Sprecht uns gerne an.',
   ])('finds nothing in %j', (text) => {
     expect(containsBankDetails(text)).toBe(false);
   });

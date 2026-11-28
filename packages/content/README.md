@@ -71,9 +71,9 @@ code and a JSON path, never the value.
   (`zusag`, `absag`, `rückmeld`, `antwort` but not `verantwort…`, `anmeld`, `bescheid` but not
   `bescheiden`); English and Spanish ones only at the start of a word (`reply`, `respond`,
   `response`, `respuest`, `rsvp`, `let us know`, `confirm`, `contest`, `avisa`), so
-  "responsible", "responsable" and "correspond" do not count. It recognises `2099-05-01`,
-  `1.5.2099`, `1/5/2099` (German and Spanish), `1. Mai 2099`, `1 May 2099`, `May 1, 2099` and
-  `1 de mayo de 2099`, each also without the year; a lower-case `may`, `march` or `august` is a
+  "responsible", "responsable" and "correspond" do not count. It recognises `2099-07-01`,
+  `1.7.2099`, `1/7/2099` (German and Spanish), `1. Juli 2099`, `1 July 2099`, `July 1, 2099` and
+  `1 de julio de 2099`, each also without the year; a lower-case `may`, `march` or `august` is a
   month only with a year or an ordinal ("may 2, 2099", "2nd of may"), so "children under 12 may
   come" is no date. It allows the deadline's date and the wedding date. It is a heuristic, so it
   only warns.
@@ -112,7 +112,7 @@ fails while the committed files are out of date. Never edit them by hand.
   draft: it never reaches the public bundle (`publishedSiteContent`). Every user-visible text is
   `{de, en?, es?}`. Colors are hex values and fonts come from the self-hosted catalogue
   `SITE_FONTS` (each an `@fontsource` dependency of `apps/web`), so content cannot inject CSS.
-  Media are paths inside `media/` (`hero.png`); the images the published content uses are
+  Media are paths inside `media/` (`hero.webp`); the images the published content uses are
   published under `/media/` (`publishedMedia`). `validate` also checks
   unique section ids, schedule → location references and that referenced media exist.
   `privacy?` feeds the privacy notice (`/datenschutz`): `controllers[] {name, address?}`, `email?`
@@ -134,7 +134,7 @@ fails while the committed files are out of date. Never edit them by hand.
   size (`bodyWeight`, `bodySize`): `eb-garamond` reads best for long text on dark backgrounds.
 - All three are strict (unknown keys are errors) and accept an optional `$schema`.
 
-The fictional sample lives in [`samples/instance/`](../../samples/instance). Its placeholder images
-are drawn from code: `pnpm --filter @weddingplanner/content sample-media` regenerates them.
+The fictional sample lives in [`samples/instance/`](../../samples/instance). Its media are committed
+WebP illustrations, no real photos.
 
 Breaking schema changes need a `schemaVersion` bump and a migration note for instance repos.

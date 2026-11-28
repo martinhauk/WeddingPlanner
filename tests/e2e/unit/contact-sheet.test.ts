@@ -6,6 +6,7 @@ import { after, before, describe, test } from 'node:test';
 import { encodePng } from '../fixtures/png.ts';
 import { buildContactSheet, escapeHtml } from '../screenshots-tooling/contact-sheet.ts';
 import {
+  captureScale,
   parseScreenshotMeta,
   type ScreenshotMeta,
   screenshotBaseName,
@@ -152,6 +153,14 @@ describe('screenshot metadata', () => {
     assert.equal(screenshotBaseName('menu-open'), 'menu-open');
     assert.throws(() => screenshotBaseName('Home Page'), /kebab-case/);
     assert.throws(() => screenshotBaseName('home', 'Deutsch'), /language code/);
+  });
+
+  test('a capture too long for WebKit in device pixels is taken in CSS pixels', () => {
+    assert.equal(captureScale('webkit', { width: 402, height: 10_000 }, 3), 'device');
+    assert.equal(captureScale('webkit', { width: 402, height: 15_800 }, 3), 'css');
+    assert.equal(captureScale('webkit', { width: 16_384, height: 800 }, 2), 'css');
+    // Chromium takes such captures in device pixels.
+    assert.equal(captureScale('chromium', { width: 360, height: 16_600 }, 2), 'device');
   });
 
   test('sidecars are validated field by field', () => {

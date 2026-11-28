@@ -9,7 +9,7 @@
   "alertEmails": ["alerts@example.com"],
   "adminEmails": ["anna@example.com", "ben@example.com"],
   "rsvp": {
-    "deadline": "2099-05-01T23:59:00+02:00",
+    "deadline": "2099-07-01T23:59:00+02:00",
     "timeZone": "Europe/Berlin"
   },
   "environments": {

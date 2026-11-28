@@ -14,7 +14,10 @@ export const sections = {
     id: 'story',
     type: 'story',
     data: {
-      text: text('Wir trafen uns im Zug.\n\nSeitdem reisen wir zusammen.', 'We met on a train.'),
+      text: text(
+        'Wir trafen uns im Gemeinschaftsgarten.\n\nSeitdem gießen wir zusammen.',
+        'We met in a community garden.',
+      ),
     },
   },
   schedule: {
@@ -22,7 +25,7 @@ export const sections = {
     type: 'schedule',
     data: {
       items: [
-        { time: '14:00', title: text('Trauung', 'Ceremony'), locationId: 'chapel' },
+        { time: '11:00', title: text('Trauung', 'Ceremony'), locationId: 'villa' },
         { time: '18:00', title: text('Abendessen', 'Dinner'), note: text('Im Garten', 'Outside') },
       ],
     },
@@ -34,18 +37,18 @@ export const sections = {
     data: {
       cards: [
         {
-          id: 'chapel',
-          name: 'Kapelle am Beispielsee',
+          id: 'villa',
+          name: 'Villa Lindenufer',
           kind: text('Trauung', 'Ceremony'),
-          address: 'Beispielweg 1, 99999 Musterstadt',
-          lat: 51.1657,
-          lng: 10.4515,
+          address: 'Uferpromenade 14, 12435 Berlin',
+          lat: 52.4894,
+          lng: 13.4712,
         },
       ],
       hotels: [
         {
-          name: 'Hotel Seeblick',
-          address: 'Uferstraße 10, 99999 Musterstadt',
+          name: 'Hotel Spreewelle',
+          address: 'Uferpromenade 30, 12435 Berlin',
           url: 'https://example.com/hotel',
         },
       ],
@@ -59,7 +62,7 @@ export const sections = {
         {
           name: 'Pablo Pérez',
           role: text('Trauzeuge', 'Best man', 'Testigo'),
-          photo: 'portrait.png',
+          photo: 'party-1.webp',
           text: text('Pablo kennt Ben seit der Schule.', 'Pablo has known Ben since school.'),
         },
         {
@@ -74,7 +77,7 @@ export const sections = {
     id: 'dresscode',
     type: 'dresscode',
     visible: false,
-    data: { text: text('Sommerlich elegant.') },
+    data: { text: text('Festlich, aber bequem.') },
   },
   music: {
     id: 'music',
@@ -84,11 +87,11 @@ export const sections = {
       link: { url: 'https://example.com/playlist' },
     },
   },
-  dance: {
-    id: 'dance',
+  tips: {
+    id: 'berlin-tips',
     type: 'text',
-    title: text("Let's Dance"),
-    data: { text: text('Die Tanzfläche gehört euch.', 'The dance floor is yours.') },
+    title: text('Schon am Freitag in Berlin?'),
+    data: { text: text('Ein paar Tipps für den Tag davor.', 'A few tips for the day before.') },
   },
   faq: {
     id: 'faq',
@@ -122,17 +125,22 @@ export const sections = {
     id: 'rsvp',
     type: 'rsvp',
     nav: text('Zusagen', 'RSVP'),
-    data: { intro: text('Wir freuen uns auf eure Antwort.', 'We look forward to your reply.') },
+    data: {
+      intro: text(
+        'Ein Nein hilft uns beim Planen genauso wie ein Ja.',
+        'A no helps us plan just as much as a yes.',
+      ),
+    },
   },
 } satisfies Record<string, Section>;
 
 export const content: SiteContent = {
   schemaVersion: 1,
   couple: text('Anna & Ben', 'Anna & Ben', 'Anna y Ben'),
-  event: { start: '2099-06-20T14:00:00+02:00', timeZone: 'Europe/Berlin' },
-  tagline: text('Wir heiraten', "We're getting married", 'Nos casamos'),
-  place: text('Musterstadt'),
-  rsvpDeadline: '2099-05-01',
+  event: { start: '2099-09-26T11:00:00+02:00', timeZone: 'Europe/Berlin' },
+  tagline: text('Wir trauen uns', "We're tying the knot", 'Nos casamos'),
+  place: text('Berlin'),
+  rsvpDeadline: '2099-07-01',
   theme: {
     colors: {
       bg: '#faf7f2',
@@ -145,15 +153,15 @@ export const content: SiteContent = {
     },
     fonts: { heading: 'cormorant-garamond', body: 'jost' },
   },
-  hero: { image: 'hero.png' },
+  hero: { image: 'hero.webp' },
   sections: Object.values(sections),
   privacy: {
-    controllers: [{ name: 'Anna', address: 'Beispielweg 1\n99999 Musterstadt' }, { name: 'Ben' }],
+    controllers: [{ name: 'Anna', address: 'Beispielstraße 7\n12045 Berlin' }, { name: 'Ben' }],
     email: 'anna@example.com',
     extra: [
       {
         title: text('Fotos', 'Photos'),
-        text: text('Es wird fotografiert.', 'Photos will be taken.'),
+        text: text('Unsere Fotografin macht Bilder.', 'Our photographer takes pictures.'),
       },
     ],
   },
@@ -161,7 +169,7 @@ export const content: SiteContent = {
 
 export const build: SiteBuild = {
   features: { rsvp: true, admin: true },
-  rsvpDeadline: '2099-05-01T21:59:00.000Z',
+  rsvpDeadline: '2099-07-01T21:59:00.000Z',
   rsvpTimeZone: 'Europe/Berlin',
   regions: { app: 'eastus2', data: 'germanywestcentral' },
 };

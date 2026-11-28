@@ -16,7 +16,7 @@ export function eventDate(event: { readonly start: string; readonly timeZone: st
 
 /**
  * The day on which all guest data is deleted (`YYYY-MM-DD`): `privacy.deleteBy`, else the last day
- * of the third month after the wedding (a wedding in June: September 30).
+ * of the third month after the wedding (a wedding in May: August 31).
  */
 export function privacyDeleteBy(content: {
   readonly event: { readonly start: string; readonly timeZone: string };

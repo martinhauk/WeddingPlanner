@@ -50,11 +50,11 @@ public sealed class ApiProblemTests
     {
         var httpContext = TestFunctionContext.CreateHttpContext();
 
-        await ApiResult.Json(StatusCodes.Status200OK, new Sample("Anna", null, new DateTime(2099, 5, 1, 21, 59, 0, DateTimeKind.Utc)))
+        await ApiResult.Json(StatusCodes.Status200OK, new Sample("Anna", null, new DateTime(2099, 7, 1, 21, 59, 0, DateTimeKind.Utc)))
             .WriteAsync(httpContext.Response, CancellationToken.None);
 
         httpContext.Response.ContentType.ShouldBe("application/json; charset=utf-8");
-        TestHttp.ReadBody(httpContext).ShouldBe("{\"firstName\":\"Anna\",\"at\":\"2099-05-01T21:59:00Z\"}");
+        TestHttp.ReadBody(httpContext).ShouldBe("{\"firstName\":\"Anna\",\"at\":\"2099-07-01T21:59:00Z\"}");
     }
 
     [Fact]

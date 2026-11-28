@@ -76,7 +76,7 @@ describe('Hero', () => {
   it('shows up to two decorative photos side by side behind the names', () => {
     const { container } = render(
       <Hero
-        content={{ ...content, hero: { images: ['hero.png', 'couple/by-the-lake.webp'] } }}
+        content={{ ...content, hero: { images: ['hero.webp', 'couple/by-the-lake.webp'] } }}
         lang="de"
         rsvpId="rsvp"
       />,
@@ -85,7 +85,7 @@ describe('Hero', () => {
     expect(section).toHaveClass('hero', 'has-image', 'images-2');
     const photos = [...container.querySelectorAll('.hero-media img')];
     expect(photos.map((img) => img.getAttribute('src'))).toEqual([
-      '/media/hero.png',
+      '/media/hero.webp',
       '/media/couple/by-the-lake.webp',
     ]);
     expect(photos.every((img) => img.getAttribute('alt') === '')).toBe(true);

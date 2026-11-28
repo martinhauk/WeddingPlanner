@@ -41,8 +41,8 @@ export type RsvpWrite = {
   readonly body: unknown;
 };
 
-/** The sample deadline (`samples/instance`: 2099-05-01 23:59 Europe/Berlin), in UTC. */
-export const SAMPLE_DEADLINE_UTC = '2099-05-01T21:59:00Z';
+/** The sample deadline (`samples/instance`: 2099-07-01 23:59 Europe/Berlin), in UTC. */
+export const SAMPLE_DEADLINE_UTC = '2099-07-01T21:59:00Z';
 
 export const RSVP_LIMITS = {
   maxPeople: 6,

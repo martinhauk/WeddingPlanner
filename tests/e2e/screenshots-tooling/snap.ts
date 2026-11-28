@@ -4,7 +4,7 @@ import { type Locator, type LocatorScreenshotOptions, type Page, test } from '@p
 import { currentE2eEnv, type E2eEnv, recordsScreenshots } from '../fixtures/env.ts';
 import { E2E_DIR, SCREENSHOTS_DIR } from '../fixtures/paths.ts';
 import { parseVersionInfo } from '../fixtures/version.ts';
-import { type ScreenshotMeta, screenshotBaseName } from './metadata.ts';
+import { captureScale, type ScreenshotMeta, screenshotBaseName } from './metadata.ts';
 
 export type SnapOptions = {
   /** The content language on screen; part of the file name (`home.de.png`). */
@@ -148,6 +148,22 @@ async function settle(page: Page, target: Locator | undefined, fullPage: boolean
   );
 }
 
+/** The CSS size of what a capture covers: the element, the whole page or the viewport. */
+async function captureSize(
+  page: Page,
+  options: SnapOptions,
+): Promise<{ width: number; height: number }> {
+  if (options.target !== undefined) {
+    const box = await options.target.boundingBox();
+    return { width: box?.width ?? 0, height: box?.height ?? 0 };
+  }
+  if (options.fullPage === false) return page.viewportSize() ?? { width: 0, height: 0 };
+  return page.evaluate(() => ({
+    width: document.documentElement.scrollWidth,
+    height: document.documentElement.scrollHeight,
+  }));
+}
+
 /**
  * Captures a screenshot case for the contact sheet: `screenshots/<project>/<case>.png` (or
  * `<case>.<lang>.png`) plus a `.json` sidecar with the metadata (case, language, project, device,
@@ -188,11 +204,14 @@ export async function snap(
   await claimCase(metaPath, owner);
 
   await settle(page, options.target, options.fullPage ?? true);
+  const browser = page.context().browser()?.browserType().name() ?? 'unknown';
+  const deviceScaleFactor = info.project.use.deviceScaleFactor ?? 1;
+  const scale = captureScale(browser, await captureSize(page, options), deviceScaleFactor);
   const common: LocatorScreenshotOptions = {
     path: pngPath,
     animations: 'disabled',
     caret: 'hide',
-    scale: 'device',
+    scale,
     mask: [...(options.mask ?? [])],
   };
   if (options.target === undefined) {
@@ -202,20 +221,22 @@ export async function snap(
   }
 
   const pageUrl = new URL(page.url());
+  const notes = [options.note, scale === 'css' ? 'at 1x: too long for device pixels' : undefined];
+  const note = notes.filter((part) => part !== undefined).join('; ');
   const meta: ScreenshotMeta = {
     version: 1,
     case: caseName,
     lang: options.lang ?? null,
     project,
     file: `${base}.png`,
-    browser: page.context().browser()?.browserType().name() ?? 'unknown',
+    browser,
     viewport: page.viewportSize(),
-    deviceScaleFactor: info.project.use.deviceScaleFactor ?? 1,
+    deviceScaleFactor,
     isMobile: info.project.use.isMobile ?? false,
     hasTouch: info.project.use.hasTouch ?? false,
     fullPage: options.target === undefined && (options.fullPage ?? true),
     element: options.target !== undefined,
-    note: options.note ?? null,
+    note: note === '' ? null : note,
     test: owner.test,
     testId: owner.testId,
     spec: owner.spec,

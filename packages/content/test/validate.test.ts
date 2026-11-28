@@ -27,7 +27,17 @@ describe('validate: the sample instance', () => {
     const result = await validate(DEFAULT_INSTANCE_DIR);
     expect(result.instance?.sample).toBe(true);
     expect(result.site?.i18n).toEqual({ languages: ['de', 'en', 'es'], defaultLanguage: 'de' });
-    expect(result.media.map((m) => m.id)).toEqual(['garden.png', 'hero.png', 'portrait.png']);
+    expect(result.media.map((m) => m.id)).toEqual([
+      'berlin-tips.webp',
+      'dresscode.webp',
+      'hero.webp',
+      'party-1.webp',
+      'party-2.webp',
+      'story-1.webp',
+      'story-2.webp',
+      'story-3.webp',
+      'welcome.webp',
+    ]);
     expect(result.siteContent?.sections.length).toBeGreaterThan(0);
   });
 
@@ -54,8 +64,8 @@ describe('validate: invalid fixtures fail', () => {
   });
 
   it.each([
-    ['without offset', '2099-05-01T23:59:00'],
-    ['date only', '2099-05-01'],
+    ['without offset', '2099-07-01T23:59:00'],
+    ['date only', '2099-07-01'],
     ['not a date', 'first of May'],
   ])('rejects an RSVP deadline %s', async (_, deadline) => {
     expect(await diagnosticsFor([set('instance.json', ['rsvp', 'deadline'], deadline)])).toEqual([
@@ -65,7 +75,7 @@ describe('validate: invalid fixtures fail', () => {
 
   it('accepts a deadline in UTC (Z)', async () => {
     expect(
-      await diagnosticsFor([set('instance.json', ['rsvp', 'deadline'], '2099-05-01T21:59:00Z')]),
+      await diagnosticsFor([set('instance.json', ['rsvp', 'deadline'], '2099-07-01T21:59:00Z')]),
     ).toEqual([]);
   });
 
@@ -146,7 +156,7 @@ describe('validate: invalid fixtures fail', () => {
 
   it('rejects an event that ends before it starts', async () => {
     expect(
-      await diagnosticsFor([set('site.json', ['event', 'end'], '2099-06-20T13:00:00+02:00')]),
+      await diagnosticsFor([set('site.json', ['event', 'end'], '2099-09-26T10:00:00+02:00')]),
     ).toEqual(['error E_EVENT_RANGE site.json $.event.end']);
   });
 
@@ -252,15 +262,21 @@ describe('validate: media', () => {
 
     const result = await validate(dir);
     expect(result.diagnostics.map(brief)).toEqual([
-      'error E_MEDIA_INVALID media/ $[1]',
-      'warning W_MEDIA_UNSUPPORTED media/ $[2]',
+      'error E_MEDIA_INVALID media/ $[3]',
+      'warning W_MEDIA_UNSUPPORTED media/ $[4]',
     ]);
     expect(JSON.stringify(result.diagnostics)).not.toMatch(/pablo|broken/);
     expect(result.media.map((m) => [m.id, m.width, m.height])).toEqual([
+      ['berlin-tips.webp', 1600, 1067],
+      ['dresscode.webp', 1536, 1024],
       ['gallery/tiny.png', 4, 3],
-      ['garden.png', 800, 1000],
-      ['hero.png', 1600, 900],
-      ['portrait.png', 800, 1000],
+      ['hero.webp', 1200, 1800],
+      ['party-1.webp', 720, 900],
+      ['party-2.webp', 720, 900],
+      ['story-1.webp', 1600, 1200],
+      ['story-2.webp', 1200, 1500],
+      ['story-3.webp', 1200, 1500],
+      ['welcome.webp', 1200, 1800],
     ]);
   });
 

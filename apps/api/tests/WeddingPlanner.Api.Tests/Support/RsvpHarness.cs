@@ -20,10 +20,10 @@ namespace WeddingPlanner.Api.Tests.Support;
 /// </summary>
 internal sealed class RsvpHarness : IDisposable
 {
-    /// <summary>Deadline of the sample instance: 2099-05-01 23:59 in Berlin (21:59 UTC).</summary>
-    public const string Deadline = "2099-05-01T23:59:00+02:00";
+    /// <summary>Deadline of the sample instance: 2099-07-01 23:59 in Berlin (21:59 UTC).</summary>
+    public const string Deadline = "2099-07-01T23:59:00+02:00";
 
-    public static readonly DateTimeOffset DeadlineUtc = new(2099, 5, 1, 21, 59, 0, TimeSpan.Zero);
+    public static readonly DateTimeOffset DeadlineUtc = new(2099, 7, 1, 21, 59, 0, TimeSpan.Zero);
 
     private readonly Lazy<ServiceProvider> _provider;
 

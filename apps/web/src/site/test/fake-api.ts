@@ -64,7 +64,7 @@ export const openStatus = {
   enabled: true,
   open: true,
   full: false,
-  deadline: '2099-05-01T21:59:00Z',
+  deadline: '2099-07-01T21:59:00Z',
   timeZone: 'Europe/Berlin',
   limits: {
     maxPeople: 6,
@@ -89,7 +89,7 @@ export const yesReply: RsvpView = {
 };
 
 export function mineBody(rsvp: RsvpView, version = '"v1"', open = true) {
-  return { rsvp, version, open, deadline: '2099-05-01T21:59:00Z' };
+  return { rsvp, version, open, deadline: '2099-07-01T21:59:00Z' };
 }
 
 /** Simulates the readable state cookie the API sets (`wp_rsvp_state=yes|no`). */

@@ -10,12 +10,12 @@ import type { FoundText } from './localized-texts.ts';
  * shown in `rsvp.timeZone`):
  *
  * - `E_RSVP_DEADLINE`: `site-content.json` `rsvpDeadline` (the date the page shows) is another day.
- *   A deadline at exactly midnight also accepts the day before ("by 1 May" = until 2 May, 00:00).
+ *   A deadline at exactly midnight also accepts the day before ("by 1 July" = until 2 July, 00:00).
  * - `W_RSVP_DEADLINE_TEXT`: a text about replying (the RSVP section's intro, a FAQ entry, or any
  *   text with a word like "reply", "zusagen" or "confirmar", but not "verantwortlich" or
- *   "responsible") names another date. A heuristic, so a warning: it recognises `2099-05-01`,
- *   `1.5.2099`, `1/5/2099` (German and Spanish only), `1. Mai 2099`, `1 May 2099`, `May 1, 2099`
- *   and `1 de mayo de 2099`, each also without the year; a lower-case "may", "march" or "august"
+ *   "responsible") names another date. A heuristic, so a warning: it recognises `2099-07-01`,
+ *   `1.7.2099`, `1/7/2099` (German and Spanish only), `1. Juli 2099`, `1 July 2099`, `July 1, 2099`
+ *   and `1 de julio de 2099`, each also without the year; a lower-case "may", "march" or "august"
  *   counts only with a year or an ordinal. The wedding date is allowed in such a text too.
  *
  * Diagnostics carry the JSON path only, never a date.
@@ -125,23 +125,23 @@ const DATE_PATTERNS: ReadonlyArray<{
   readonly languages?: readonly SiteLanguage[];
   readonly read: (m: RegExpMatchArray) => TextDate | undefined;
 }> = [
-  // 2099-05-01
+  // 2099-07-01
   {
     pattern: /(?<!\d)(\d{4})-(\d{2})-(\d{2})(?!\d)/g,
     read: (m) => date(m[3], m[2], m[1]),
   },
-  // 1.5.2099, 01.05.99, 1.5.
+  // 1.7.2099, 01.07.99, 1.7.
   {
     pattern: /(?<![\d.])(\d{1,2})\.\s?(\d{1,2})\.(?:\s?(\d{4}|\d{2})(?!\d))?/g,
     read: (m) => date(m[1], m[2], m[3]),
   },
-  // 1/5/2099 (day first: German and Spanish only, English may put the month first)
+  // 1/7/2099 (day first: German and Spanish only, English may put the month first)
   {
     pattern: /(?<![\d/])(\d{1,2})\/(\d{1,2})\/(\d{4}|\d{2})(?![\d/])/g,
     languages: ['de', 'es'],
     read: (m) => date(m[1], m[2], m[3]),
   },
-  // 1. Mai 2099, 1 May 2099, 1st of May, 1 de mayo de 2099
+  // 1. Juli 2099, 1 July 2099, 1st of July, 1 de julio de 2099
   {
     pattern: new RegExp(
       `(?<![\\p{L}\\p{N}])(\\d{1,2})(\\.|st|nd|rd|th|º)?\\s{0,3}(de\\s{1,3}|of\\s{1,3})?(${MONTH})(?![\\p{L}])(?:,?\\s{0,3}(?:del?\\s{1,3})?(\\d{4})(?!\\d))?`,
