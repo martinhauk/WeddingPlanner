@@ -426,7 +426,7 @@ jobs:
           fail-on-severity: moderate
           comment-summary-in-pr: never
 
-      - name: Offline tests of the scripts (fake gh, az and curl)
+      - name: Offline tests of the owner-run scripts (fake gh and az)
         run: |
           git ls-files ':(glob)scripts/**/tests/**/run.sh' ':(glob)scripts/**/tests/**/*.test.sh' \
             >"$RUNNER_TEMP/suites.txt"
