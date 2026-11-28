@@ -101,7 +101,9 @@ Every change to this repo goes through a PR ([ADR 0010](docs/adr/0010-working-pr
    `scripts/ops/`; the privacy text and `docs/privacy/data-inventory.md`. The lead reviews all other
    PRs. One fix round on the same branch, then a re-check.
 7. **The owner merges**, squash only. Merging deploys: `deploy.yml` runs the full CI on the commit,
-   then `e2e` → `test`; `production` waits for the owner's approval.
+   then `e2e` → `test`. `production` is switched off until there is a customer
+   ([ADR 0012](docs/adr/0012-production-off-until-first-customer.md)): it runs only while the
+   repository variable `PRODUCTION_ENABLED` is `true`, and then waits for the owner's approval.
 
 Agents never merge PRs, push to `main`, force-push someone else's branch, run deploy workflows,
 approve deployments, or change GitHub settings, environments, secrets or rulesets. The owner runs

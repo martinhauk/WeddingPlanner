@@ -16,7 +16,9 @@ bootstrap script prints step and resource-group names only.
 4. [Prepare GitHub](#4-prepare-github): environments (`setup-repo.sh`) and the private instance
    repo.
 5. [Run the bootstrap](#5-run-the-bootstrap-e2e--test--production) once per environment:
-   **e2e → test → production**.
+   **e2e → test → production**. Production is switched off until there is a customer
+   ([ADR 0012](../adr/0012-production-off-until-first-customer.md)); bootstrap it only to
+   [switch it on](#switching-production-on).
 6. Afterwards: `scripts/bootstrap-cost.sh` (budget and anomaly alert, S0-06), then the first deploy
    (merge to `main`, [ADR 0004](../adr/0004-environments-e2e-test-production.md)).
 
@@ -76,9 +78,11 @@ required reviewer.
 
 ### The private instance repo (test and production)
 
-`test` and `production` deploy real content from the deployment's **private instance repo**
-([ADR 0003](../adr/0003-private-instance-repo-baked-at-build.md)); `e2e` always uses
-`samples/instance/`. Until `scripts/instance/new-instance.sh` exists (S1-13), create it by hand:
+`test` deploys the deployment's **private instance repo**
+([ADR 0003](../adr/0003-private-instance-repo-baked-at-build.md)), which currently holds a fictional
+couple ([ADR 0012](../adr/0012-production-off-until-first-customer.md)); `production` deploys a
+customer's instance once it is switched on. `e2e` always uses `samples/instance/`. Until
+`scripts/instance/new-instance.sh` exists (S1-13), create it by hand:
 
 ```sh
 gh repo create <owner>/<neutral-name> --private --clone   # neutral name, never the couple's names
@@ -119,6 +123,24 @@ group regions) and **changes nothing if a check fails**. Then it registers the r
 AlertsManagement), deploys `infra/bootstrap/main.bicep` at subscription scope (deployment name
 `bootstrap-<slug>-<env>`, `-o none`), and configures GitHub. Re-running converges to the same state;
 a run that failed halfway is fixed by running it again.
+
+### Switching production on
+
+Production is switched off until there is a customer
+([ADR 0012](../adr/0012-production-off-until-first-customer.md)): the deploy, backup and uptime
+workflows skip it unless the **repository** variable `PRODUCTION_ENABLED` is `true`, in any letter
+case; anything else or unset means off. To switch it on, in this order:
+
+```sh
+scripts/github/setup-repo.sh                                  # creates `production` with you as reviewer
+scripts/bootstrap.sh --env production --instance ../<neutral-name>
+scripts/bootstrap-cost.sh --instance ../<neutral-name>        # if the budget or its emails changed
+gh variable set PRODUCTION_ENABLED --body true                # repository variable, not --env
+```
+
+The next merge (or a `deploy` run with `environment: production`) then deploys production and waits
+for your approval. Afterwards set the `UPTIME_HOST_PRODUCTION` secret
+([incident runbook](incident.md)). To switch it off again: `gh variable delete PRODUCTION_ENABLED`.
 
 ### What a run creates
 
@@ -272,6 +294,14 @@ gh repo deploy-key list -R <owner>/<neutral-name>              # then delete dep
 
 Running the bootstrap again recreates the environment (with a new identity, so the variables are
 updated as well).
+
+**Production:** keep `rg-<slug>-production-ops`. The budget of `scripts/bootstrap-cost.sh` notifies
+its action group `ag-<slug>-production`; delete only the two identities in it
+(`id-<slug>-production`, `id-<slug>-production-backup`), then their role assignments, which Azure
+keeps as "Identity not found" (`az role assignment list --all --query "[?!principalName]" -o table`,
+then `az role assignment delete --ids <id>`). Switch production off first
+(`gh variable delete PRODUCTION_ENABLED`) and delete the GitHub Environments `production` and
+`backup-production`.
 
 ## For contributors
 

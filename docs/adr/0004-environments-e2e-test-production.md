@@ -1,6 +1,7 @@
 # ADR 0004: Build once, promote through e2e → test → production
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR 0012](0012-production-off-until-first-customer.md)
+  (production is switched off until the first customer)
 - **Date:** 2026-11-24
 - **Deciders:** product owner, architecture panel
 

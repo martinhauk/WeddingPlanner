@@ -1,5 +1,9 @@
 # Nightly table backup of test and production (docs/runbooks/backup-restore.md).
 #
+# Production is switched off until there is a customer (ADR 0012): its matrix entry exists only while
+# the REPOSITORY variable PRODUCTION_ENABLED is 'true' (in any letter case: GitHub's == ignores
+# case), because a job that names backup-production would create that GitHub Environment again.
+#
 # Each environment exports every table of its data account with tools/table-backup into its own
 # backup storage account (container table-backups: versioning, a lifecycle rule that deletes
 # backups after 18 days, 7 days of soft delete, no WORM policy; every copy is gone within the
@@ -41,9 +45,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        environment:
-          - test
-          - production
+        # test, plus production only while it is switched on (see the header).
+        environment: ${{ fromJSON(vars.PRODUCTION_ENABLED == 'true' && '["test", "production"]' || '["test"]') }}
     environment: backup-${{ matrix.environment }}
     concurrency:
       group: backup-${{ matrix.environment }}
