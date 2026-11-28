@@ -17,7 +17,9 @@
 # fix/fixes/fixed, resolve/resolves/resolved or ref/refs, in any letter case, an optional colon,
 # whitespace and `#N`. References to other repositories (`owner/repo#N`) and full issue URLs do
 # not count. Every linked number is read with `gh api repos/REPO/issues/N` and counts when it is an
-# open issue of REPO without the label `type:epic`. Pull requests by Dependabot are exempt.
+# open issue of REPO without the label `type:epic`. Only the first MAX_LINKS (20) numbers, in
+# ascending order, are read, so a body full of links cannot use up the token's API budget. Pull
+# requests by Dependabot are exempt.
 #
 # Usage (read-only; also works locally with an authenticated gh):
 #   PR_BODY='Closes #12' PR_AUTHOR=someone REPO=OWNER/NAME scripts/ci/check-pr-issue.sh
@@ -28,6 +30,7 @@
 set -euo pipefail
 
 EPIC_LABEL="type:epic"
+MAX_LINKS=20
 TMP_DIR=""
 
 die() {
@@ -79,7 +82,7 @@ issue_problem() {
 }
 
 main() {
-  local numbers n json problem valid="" errors=0
+  local numbers n json problem valid="" errors=0 checked=0
   REPO=${REPO:-}
   [ -n "$REPO" ] || die "REPO is not set (OWNER/NAME)"
   printf '%s' "$REPO" | grep -Eq '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$' ||
@@ -100,6 +103,11 @@ main() {
   else
     echo "Issues linked in the PR body:"
     while IFS= read -r n; do
+      if [ "$checked" -ge "$MAX_LINKS" ]; then
+        printf '  (only the first %s linked numbers are checked)\n' "$MAX_LINKS"
+        break
+      fi
+      checked=$((checked + 1))
       if json=$(gh api "repos/$REPO/issues/$n" 2>"$TMP_DIR/stderr" </dev/null); then
         problem=$(issue_problem "$json") || {
           problem="could not be read: unexpected API response"

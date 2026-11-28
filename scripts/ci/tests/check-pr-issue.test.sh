@@ -199,6 +199,18 @@ run $'Closes #10\nRefs #10\nfixes #0010'
 check "passes" status_is 0
 check "one API call" call_count 1
 
+test_case "at most 20 numbers are read"
+many=""
+for i in $(seq 101 125); do many="$many Refs #$i"; done
+run "$many"
+check "fails with the help text" fails_with_help
+check "20 API calls" call_count 20
+check "says the rest was not checked" output_has "(only the first 20 linked numbers are checked)"
+check "does not read #121" eval '! called 121'
+run "Closes #10$many"
+check "an open issue among the first 20 passes" status_is 0
+check "still 20 API calls" call_count 20
+
 test_case "Dependabot is exempt"
 run "" "dependabot[bot]"
 check "passes" status_is 0
