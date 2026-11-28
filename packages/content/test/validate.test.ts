@@ -64,8 +64,8 @@ describe('validate: invalid fixtures fail', () => {
   });
 
   it.each([
-    ['without offset', '2099-05-01T23:59:00'],
-    ['date only', '2099-05-01'],
+    ['without offset', '2099-07-01T23:59:00'],
+    ['date only', '2099-07-01'],
     ['not a date', 'first of May'],
   ])('rejects an RSVP deadline %s', async (_, deadline) => {
     expect(await diagnosticsFor([set('instance.json', ['rsvp', 'deadline'], deadline)])).toEqual([

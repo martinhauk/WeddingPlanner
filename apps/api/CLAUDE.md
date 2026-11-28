@@ -37,7 +37,7 @@ file is missing, then runs `func start --port 7071` in `src/WeddingPlanner.Api/`
 Tools v4, which builds the project first); open `http://localhost:7071/api/health`. The sample
 switches every feature on and points storage at Azurite; it holds no secrets, so keep it that way.
 Delete `local.settings.json` to pick up a changed sample. Keep `Rsvp__Deadline` there in the space
-form (`2099-05-01 23:59:00+02:00`): Core Tools rewrites `T`-separated date strings from
+form (`2099-07-01 23:59:00+02:00`): Core Tools rewrites `T`-separated date strings from
 `local.settings.json` into culture-formatted dates before the worker sees them (verified with Core
 Tools 4.17), which leaves the RSVP API `not_configured`. Add
 `"Storage__TablePrefix": "<letters and digits>"` to keep a local run's tables apart in a shared Azurite.

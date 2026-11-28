@@ -138,7 +138,7 @@ export const content: SiteContent = {
   schemaVersion: 1,
   couple: text('Anna & Ben', 'Anna & Ben', 'Anna y Ben'),
   event: { start: '2099-09-26T11:00:00+02:00', timeZone: 'Europe/Berlin' },
-  tagline: text('Wir heiraten', "We're getting married", 'Nos casamos'),
+  tagline: text('Wir trauen uns', "We're tying the knot", 'Nos casamos'),
   place: text('Berlin'),
   rsvpDeadline: '2099-07-01',
   theme: {
@@ -161,7 +161,7 @@ export const content: SiteContent = {
     extra: [
       {
         title: text('Fotos', 'Photos'),
-        text: text('Es wird fotografiert.', 'Photos will be taken.'),
+        text: text('Unsere Fotografin macht Bilder.', 'Our photographer takes pictures.'),
       },
     ],
   },

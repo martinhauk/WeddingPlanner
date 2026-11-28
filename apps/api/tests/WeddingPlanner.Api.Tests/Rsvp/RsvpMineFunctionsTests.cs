@@ -32,7 +32,7 @@ public sealed class RsvpMineFunctionsTests
         body.GetProperty("editToken").GetString().ShouldBe(RsvpHarness.EditToken(created), "a returning guest can see the personal link again");
         body.GetProperty("version").GetString().ShouldBe(httpContext.Response.Headers.ETag.ToString());
         body.GetProperty("open").GetBoolean().ShouldBeTrue();
-        body.GetProperty("deadline").GetString().ShouldBe("2099-05-01T21:59:00Z");
+        body.GetProperty("deadline").GetString().ShouldBe("2099-07-01T21:59:00Z");
         body.GetProperty("rsvp").GetProperty("id").GetString().ShouldBe(TestHttp.ReadJson(created).GetProperty("rsvp").GetProperty("id").GetString());
         body.GetProperty("rsvp").GetProperty("people")[1].GetProperty("name").GetString().ShouldBe("María-José García");
     }

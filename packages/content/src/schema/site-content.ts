@@ -9,7 +9,7 @@ import { localizedTextSchema } from './localizable.ts';
  *
  * Every user-visible text is a `LocalizedText` (`{ de, en?, es? }`; English and Spanish fall back to
  * German). Names, addresses and times are plain strings. Media are paths inside the instance's
- * `media/` folder (e.g. `hero.png`), published under `/media/`. Extend fields, never rename them
+ * `media/` folder (e.g. `hero.webp`), published under `/media/`. Extend fields, never rename them
  * without a `schemaVersion` bump; `pnpm --filter @weddingplanner/content schema` regenerates
  * `schema/site-content.schema.json` after a change.
  */
@@ -185,7 +185,7 @@ const sectionBase = {
 
 /** A part of the story under its own small heading, e.g. a question and its answer. */
 const storyItem = z.strictObject({
-  /** E.g. "How did you meet?". */
+  /** E.g. "Two raised beds", or a question. */
   heading: localizedTextSchema.optional(),
   /** Paragraphs are separated by a blank line. */
   text: localizedTextSchema,
@@ -368,7 +368,7 @@ export const siteContentSchema = z.strictObject({
     /** IANA zone in which dates are shown, e.g. `Europe/Berlin`. */
     timeZone: timeZoneSchema,
   }),
-  /** Line above the names in the hero, e.g. "We're getting married". */
+  /** Line above the names in the hero, e.g. "We're tying the knot". */
   tagline: localizedTextSchema,
   place: localizedTextSchema,
   /**

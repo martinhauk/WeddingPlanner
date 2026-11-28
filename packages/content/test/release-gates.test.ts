@@ -94,42 +94,43 @@ describe('privacy gate: W_PRIVACY_* become E_PRIVACY_* where production has RSVP
 describe('deadlineDates', () => {
   it('is the date of the deadline in its time zone, not in UTC', () => {
     expect(
-      deadlineDates({ deadline: '2099-05-01T23:59:00+02:00', timeZone: 'Europe/Berlin' }),
-    ).toEqual(['2099-05-01']);
-    expect(deadlineDates({ deadline: '2099-05-01T22:30:00Z', timeZone: 'Europe/Berlin' })).toEqual([
-      '2099-05-02',
+      deadlineDates({ deadline: '2099-07-01T23:59:00+02:00', timeZone: 'Europe/Berlin' }),
+    ).toEqual(['2099-07-01']);
+    expect(deadlineDates({ deadline: '2099-07-01T22:30:00Z', timeZone: 'Europe/Berlin' })).toEqual([
+      '2099-07-02',
     ]);
     expect(
-      deadlineDates({ deadline: '2099-05-01T23:00:00-05:00', timeZone: 'America/Mexico_City' }),
-    ).toEqual(['2099-05-01']);
+      deadlineDates({ deadline: '2099-07-01T23:00:00-05:00', timeZone: 'America/Mexico_City' }),
+    ).toEqual(['2099-07-01']);
   });
 
   it('also accepts the day before for a deadline at exactly midnight', () => {
     expect(
-      deadlineDates({ deadline: '2099-05-02T00:00:00+02:00', timeZone: 'Europe/Berlin' }),
-    ).toEqual(['2099-05-02', '2099-05-01']);
+      deadlineDates({ deadline: '2099-07-02T00:00:00+02:00', timeZone: 'Europe/Berlin' }),
+    ).toEqual(['2099-07-02', '2099-07-01']);
   });
 });
 
 describe('findDates', () => {
   it.each([
-    ['de', 'Bitte bis zum 1. Mai 2099.', [{ year: 2099, month: 5, day: 1 }]],
+    ['de', 'Bitte sagt uns bis zum 1. Juli 2099 Bescheid.', [{ year: 2099, month: 7, day: 1 }]],
     [
       'de',
-      'Antwortet bis 01.05.2099 oder spätestens 1.5.',
+      'Antwortet bis 01.07.2099 oder spätestens 1.7.',
       [
-        { year: 2099, month: 5, day: 1 },
-        { month: 5, day: 1 },
+        { year: 2099, month: 7, day: 1 },
+        { month: 7, day: 1 },
       ],
     ],
     ['de', 'Rückmeldung bis 3. März', [{ month: 3, day: 3 }]],
-    ['de', 'bis 1/5/2099', [{ year: 2099, month: 5, day: 1 }]],
-    ['en', 'Please by 1 May 2099.', [{ year: 2099, month: 5, day: 1 }]],
+    ['de', 'bis 1/7/2099', [{ year: 2099, month: 7, day: 1 }]],
+    ['en', 'Please let us know by 1 July 2099.', [{ year: 2099, month: 7, day: 1 }]],
     ['en', 'Reply by May 1st, 2099', [{ year: 2099, month: 5, day: 1 }]],
     ['en', 'by the 1st of May', [{ month: 5, day: 1 }]],
-    ['en', 'RSVP by 2099-05-01', [{ year: 2099, month: 5, day: 1 }]],
-    ['es', 'Por favor, antes del 1 de mayo de 2099.', [{ year: 2099, month: 5, day: 1 }]],
-    ['es', 'Confirmad antes del 1/5/2099', [{ year: 2099, month: 5, day: 1 }]],
+    ['en', 'RSVP by 2099-07-01', [{ year: 2099, month: 7, day: 1 }]],
+    ['es', 'Decidnos hasta el 1 de julio de 2099 si venís.', [{ year: 2099, month: 7, day: 1 }]],
+    ['es', 'Confirmad antes del 2 de mayo', [{ month: 5, day: 2 }]],
+    ['es', 'Confirmad antes del 1/7/2099', [{ year: 2099, month: 7, day: 1 }]],
     // "May" capitalised, or in lower case with a year or an ordinal, is the month.
     ['en', 'Reply by May 2', [{ month: 5, day: 2 }]],
     ['en', 'Reply by 2 May', [{ month: 5, day: 2 }]],
@@ -143,10 +144,10 @@ describe('findDates', () => {
   });
 
   it.each([
-    ['en', 'by 1/5/2099'],
+    ['en', 'by 1/7/2099'],
     ['de', 'ab 18.30 Uhr, Tisch 12'],
     ['de', '+49 151 00000000'],
-    ['de', '99999 Musterstadt'],
+    ['de', '12045 Berlin'],
     ['en', 'Doors open at 18:30, 3 courses'],
     ['es', 'Mar y montaña'],
     // The verb "may" (and "march", "august" as words) next to a number is no date.

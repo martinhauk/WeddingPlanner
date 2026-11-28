@@ -101,7 +101,7 @@ describe('site-content.json: schema errors', () => {
   });
 
   it('accepts only paths inside media/ with an image extension', async () => {
-    for (const bad of ['../instance.json', '/etc/hero.png', '.hidden.png', 'hero.gif']) {
+    for (const bad of ['../instance.json', '/etc/hero.webp', '.hidden.png', 'hero.gif']) {
       expect(await diagnosticsFor(content(['hero', 'image'], bad))).toEqual([
         'error E_MEDIA_PATH $.hero.image',
       ]);

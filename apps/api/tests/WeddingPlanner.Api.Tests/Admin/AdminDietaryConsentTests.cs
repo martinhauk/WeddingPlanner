@@ -63,7 +63,7 @@ public sealed class AdminDietaryConsentTests
         using var harness = new RsvpHarness();
         await harness.PostAsync(Reply(Person("Pablo Pérez", tags: ["vegetarian"])) with { DietaryConsent = true });
         var (id, version, people) = await First(harness);
-        harness.Time.Advance(TimeSpan.FromDays(60)); // after the deadline: admins may still edit
+        harness.Time.SetUtcNow(RsvpHarness.DeadlineUtc.AddDays(1)); // after the deadline: admins may still edit
 
         var httpContext = await harness.AdminPutAsync(id, Reply(Person("Pablo Pérez", people[0], ["vegetarian"], "Sin nueces")) with { DietaryConsent = true }, version);
 

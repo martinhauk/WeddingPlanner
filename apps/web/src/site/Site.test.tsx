@@ -29,7 +29,7 @@ describe('Site', () => {
   it('renders the hero from the content', () => {
     render(<Site content={content} build={build} initialLanguage="de" />);
     expect(screen.getByRole('heading', { level: 1, name: 'Anna & Ben' })).toBeInTheDocument();
-    expect(screen.getByText('Wir heiraten')).toBeInTheDocument();
+    expect(screen.getByText('Wir trauen uns')).toBeInTheDocument();
     expect(screen.getByText('Samstag, 26. September 2099')).toBeInTheDocument();
     expect(screen.getByRole('timer')).toBeInTheDocument();
     expect(document.title).toBe('Anna & Ben');
@@ -204,7 +204,7 @@ describe('Site', () => {
       'aria-pressed',
       'true',
     );
-    expect(screen.getByText("We're getting married")).toBeInTheDocument();
+    expect(screen.getByText("We're tying the knot")).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 2, name: 'Our story' })).toBeInTheDocument();
     // No English text in the fixture: the German one is shown.
     expect(screen.getByText('Eure Anwesenheit ist Geschenk genug.')).toBeInTheDocument();
@@ -237,7 +237,7 @@ describe('Site', () => {
 
     const withImprint = {
       ...content,
-      privacy: { controllers: [{ name: 'Anna' }], imprint: { de: 'Anna, Musterstadt' } },
+      privacy: { controllers: [{ name: 'Anna' }], imprint: { de: 'Anna, Berlin' } },
     };
     render(<Site content={withImprint} build={build} initialLanguage="en" />);
     const links = within(screen.getByRole('contentinfo')).getAllByRole('link');

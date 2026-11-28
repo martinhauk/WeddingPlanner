@@ -175,7 +175,7 @@ describe('PrivacyPage', () => {
           controllers: [{ name: 'Anna' }],
           email: 'anna@example.com',
           deleteBy: '2100-03-15',
-          imprint: { de: 'Anna\nBeispielweg 1, 99999 Musterstadt', en: 'Anna (imprint)' },
+          imprint: { de: 'Anna\nBeispielstraße 7, 12045 Berlin', en: 'Anna (imprint)' },
         },
       },
       lang: 'en',
@@ -196,7 +196,7 @@ describe('PrivacyPage', () => {
   it('says that no imprint is required unless one is configured, and shows extra paragraphs', () => {
     renderPage();
     expect(within(block('Impressum')).getByText(/§ 5 DDG/)).toBeVisible();
-    expect(within(block('Fotos')).getByText('Es wird fotografiert.')).toBeVisible();
+    expect(within(block('Fotos')).getByText('Unsere Fotografin macht Bilder.')).toBeVisible();
   });
 
   it('names the Azure regions and the US transfer basis', () => {

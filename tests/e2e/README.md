@@ -105,8 +105,9 @@ in `apps/web/src/site/site.css`).
 `snap(page, case, { lang, target, fullPage, mask, note })` writes `screenshots/<project>/<case>[.<lang>].png`
 and a `.json` sidecar. A full page is scrolled through once so lazy images load; an element is
 scrolled into view; images, web fonts and two animation frames are awaited. Captures are in device
-pixels, except a WebKit capture with a side longer than 32767 device pixels (WebKit refuses it
-outside macOS, e.g. the full page on a 3x phone): it is taken at 1x and its sidecar note says so.
+pixels, except a WebKit capture with a side longer than 32767 device pixels (e.g. the full page on a
+3x phone): it is taken at 1x on every platform, because WebKit outside macOS refuses it, and its
+sidecar note says so.
 
 - **Cases:** `home.<lang>` (full page, de/en/es), `home-first-view`, `section-hero` and
   `section-<id>` (every section), `menu-open`, `header`, `map-placeholder`, `map-loaded`,

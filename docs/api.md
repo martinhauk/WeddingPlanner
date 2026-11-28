@@ -28,7 +28,7 @@ The architecture overview is in [architecture.md](architecture.md) (sections 6 t
   (300), `Rsvp__CookieLifetimeDays` (365), `Rsvp__MinSubmitMs` (2500, see "Abuse protection"),
   `Storage__TablePrefix` (none), and the rate limits below.
 
-The deadline is an ISO 8601 date-time, with offset (`2099-05-01T23:59:00+02:00`) or local to
+The deadline is an ISO 8601 date-time, with offset (`2099-07-01T23:59:00+02:00`) or local to
 `Rsvp__TimeZone`. A space may replace the `T`; use that form in `local.settings.json`, because Core
 Tools rewrites `T`-separated date strings from that file into culture-formatted dates. Replies can be
 created, changed and deleted **until and including** the deadline.
@@ -52,7 +52,7 @@ created, changed and deleted **until and including** the deadline.
   "enabled": true,
   "open": true,
   "full": false,
-  "deadline": "2099-05-01T21:59:00Z",
+  "deadline": "2099-07-01T21:59:00Z",
   "timeZone": "Europe/Berlin",
   "limits": {
     "maxPeople": 6,

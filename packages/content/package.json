@@ -13,7 +13,6 @@
     "test": "vitest run",
     "validate": "node src/cli.ts validate",
     "bake": "node src/cli.ts bake",
-    "sample-media": "node scripts/generate-sample-media.ts",
     "schema": "node scripts/generate-json-schemas.ts"
   },
   "dependencies": {

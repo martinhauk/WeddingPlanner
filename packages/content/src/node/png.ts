@@ -3,9 +3,8 @@ import { crc32, deflateSync } from 'node:zlib';
 export type Rgb = readonly [red: number, green: number, blue: number];
 
 /**
- * Encodes an 8-bit RGB PNG from a pixel function. Used to generate the placeholder images of the
- * sample instance (`scripts/generate-sample-media.ts`) and media fixtures in tests, so the repo
- * never needs third-party or real photos.
+ * Encodes an 8-bit RGB PNG from a pixel function. Used to draw media fixtures in tests, so the
+ * repo never needs third-party or real photos.
  */
 export function encodePng(
   width: number,

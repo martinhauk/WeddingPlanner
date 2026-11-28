@@ -496,7 +496,7 @@
     {
       "id": "faq",
       "type": "faq",
-      "title": { "de": "Gut zu wissen", "en": "Good to know", "es": "Bueno saberlo" },
+      "title": { "de": "Gut zu wissen", "en": "Good to know", "es": "Conviene saber" },
       "nav": { "de": "FAQ", "en": "FAQ", "es": "Preguntas" },
       "data": {
         "items": [

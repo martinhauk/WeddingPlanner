@@ -9,8 +9,8 @@ describe('resolveText', () => {
   });
 
   it('returns the requested language', () => {
-    expect(resolveText({ de: 'Wir heiraten', en: 'We are getting married' }, 'de', i18n)).toBe(
-      'Wir heiraten',
+    expect(resolveText({ de: 'Wir trauen uns', en: "We're tying the knot" }, 'de', i18n)).toBe(
+      'Wir trauen uns',
     );
   });
 

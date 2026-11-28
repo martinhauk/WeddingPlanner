@@ -64,7 +64,7 @@ switches every feature on, points storage at Azurite and sets a far-future RSVP 
 
 - `"Features__Rsvp": "false"`: the RSVP API answers 404, as with the flag off on Azure.
 - `"Storage__TablePrefix": "dev"` (letters and digits): keeps your tables apart in a shared Azurite.
-- Keep `Rsvp__Deadline` in the space form (`2099-05-01 23:59:00+02:00`): Core Tools rewrites
+- Keep `Rsvp__Deadline` in the space form (`2099-07-01 23:59:00+02:00`): Core Tools rewrites
   `T`-separated dates from this file into culture-formatted strings, which leaves the RSVP API
   `not_configured`.
 

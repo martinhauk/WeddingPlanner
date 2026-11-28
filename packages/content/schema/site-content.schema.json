@@ -297,7 +297,7 @@
     "MediaPath": {
       "type": "string",
       "pattern": "^(?:[A-Za-z0-9_][A-Za-z0-9._-]*\\/)*[A-Za-z0-9_][A-Za-z0-9._-]*\\.(?:png|jpe?g|webp)$",
-      "description": "Path of an image inside the instance's media/ folder, e.g. hero.png."
+      "description": "Path of an image inside the instance's media/ folder, e.g. hero.webp."
     },
     "StorySection": {
       "type": "object",

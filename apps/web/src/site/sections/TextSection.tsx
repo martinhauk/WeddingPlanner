@@ -4,7 +4,7 @@ import { SectionFrame } from '../components/SectionFrame.tsx';
 import { t } from '../i18n.ts';
 import type { SectionProps } from './types.ts';
 
-/** Free text with an optional image beside it (below it on phones), e.g. a "Let's Dance" section. */
+/** Free text with an optional image beside it (below it on phones), e.g. a section of city tips. */
 export function TextSection({ section, ctx }: SectionProps<'text'>) {
   const { text, image } = section.data;
   if (image === undefined) {

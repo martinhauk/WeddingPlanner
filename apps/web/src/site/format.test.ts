@@ -43,17 +43,17 @@ describe('links', () => {
 describe('osm tiles', () => {
   it('computes slippy-map tile coordinates', () => {
     expect(tilePoint(0, 0, 1)).toEqual({ x: 1, y: 1 });
-    const { x, y } = tilePoint(51.1657, 10.4515, 15);
-    expect(Math.floor(x)).toBe(17335);
-    expect(Math.floor(y)).toBe(10945); // cross-checked with asinh(tan(lat))
+    const { x, y } = tilePoint(52.4894, 13.4712, 15);
+    expect(Math.floor(x)).toBe(17610);
+    expect(Math.floor(y)).toBe(10751); // cross-checked with asinh(tan(lat))
   });
 
   it('centers 3 × 3 tiles on the point', () => {
-    const tiles = tilesAround(51.1657, 10.4515);
+    const tiles = tilesAround(52.4894, 13.4712);
     expect(tiles).toHaveLength(9);
     const center = tiles[4];
     expect(center?.left).toBeLessThanOrEqual(0);
     expect(center?.left).toBeGreaterThan(-256);
-    expect(center?.src).toBe('https://tile.openstreetmap.org/15/17335/10945.png');
+    expect(center?.src).toBe('https://tile.openstreetmap.org/15/17610/10751.png');
   });
 });

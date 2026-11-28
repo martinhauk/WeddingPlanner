@@ -40,7 +40,7 @@ function definitions(): z.core.$ZodRegistry<Meta> {
   });
   registry.add(mediaPathSchema, {
     id: 'MediaPath',
-    description: "Path of an image inside the instance's media/ folder, e.g. hero.png.",
+    description: "Path of an image inside the instance's media/ folder, e.g. hero.webp.",
   });
   registry.add(imageSchema, {
     id: 'Image',
