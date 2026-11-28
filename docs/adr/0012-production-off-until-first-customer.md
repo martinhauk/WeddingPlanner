@@ -23,9 +23,10 @@ and every night `backup.yml` would recreate `backup-production`.
 ## Decision
 
 **Production is switched off until the first customer.** The **repository** variable
-`PRODUCTION_ENABLED` is the switch: only the value `true` turns production on; unset (the default)
-or any other value means off. A repository variable, because an environment variable can only be
-read by a job bound to that environment, which would create it.
+`PRODUCTION_ENABLED` is the switch: `true`, in any letter case, turns production on; anything else
+or unset (the default) means off. Every check agrees on that: GitHub's `==` in workflow expressions
+ignores case, and the shell checks lower-case the value first. A repository variable, because an
+environment variable can only be read by a job bound to that environment, which would create it.
 
 While production is off:
 
@@ -43,7 +44,9 @@ The environments:
   The pipeline may use it at any time.
 - **test** deploys from a private instance repo
   ([ADR 0003](0003-private-instance-repo-baked-at-build.md)) that holds the same fictional couple,
-  not a real person's data. The owner accepts changes there.
+  not a real person's data. The owner accepts changes there. That repo is test's own fictional copy
+  of the sample couple and must not set `"sample": true`: the deploy refuses sample content from a
+  repo source, and the smoke and uptime checks expect `isSample` false on test.
 - **production** is removed by the owner: its Azure app resource group, its two identities, and the
   GitHub Environments `production` and `backup-production`. The subscription-level pieces stay: the
   custom role "WeddingPlanner Backup Writer" (test uses it), and the budget and anomaly alert of

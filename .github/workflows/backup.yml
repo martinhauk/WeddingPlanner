@@ -1,8 +1,8 @@
 # Nightly table backup of test and production (docs/runbooks/backup-restore.md).
 #
 # Production is switched off until there is a customer (ADR 0012): its matrix entry exists only while
-# the REPOSITORY variable PRODUCTION_ENABLED is 'true', because a job that names backup-production
-# would create that GitHub Environment again.
+# the REPOSITORY variable PRODUCTION_ENABLED is 'true' (in any letter case: GitHub's == ignores
+# case), because a job that names backup-production would create that GitHub Environment again.
 #
 # Each environment exports every table of its data account with tools/table-backup into its own
 # backup storage account (container table-backups: versioning, a lifecycle rule that deletes

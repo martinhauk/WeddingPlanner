@@ -78,9 +78,11 @@ required reviewer.
 
 ### The private instance repo (test and production)
 
-`test` and `production` deploy real content from the deployment's **private instance repo**
-([ADR 0003](../adr/0003-private-instance-repo-baked-at-build.md)); `e2e` always uses
-`samples/instance/`. Until `scripts/instance/new-instance.sh` exists (S1-13), create it by hand:
+`test` deploys the deployment's **private instance repo**
+([ADR 0003](../adr/0003-private-instance-repo-baked-at-build.md)), which currently holds a fictional
+couple ([ADR 0012](../adr/0012-production-off-until-first-customer.md)); `production` deploys a
+customer's instance once it is switched on. `e2e` always uses `samples/instance/`. Until
+`scripts/instance/new-instance.sh` exists (S1-13), create it by hand:
 
 ```sh
 gh repo create <owner>/<neutral-name> --private --clone   # neutral name, never the couple's names
@@ -126,8 +128,8 @@ a run that failed halfway is fixed by running it again.
 
 Production is switched off until there is a customer
 ([ADR 0012](../adr/0012-production-off-until-first-customer.md)): the deploy, backup and uptime
-workflows skip it unless the **repository** variable `PRODUCTION_ENABLED` is `true`. To switch it
-on, in this order:
+workflows skip it unless the **repository** variable `PRODUCTION_ENABLED` is `true`, in any letter
+case; anything else or unset means off. To switch it on, in this order:
 
 ```sh
 scripts/github/setup-repo.sh                                  # creates `production` with you as reviewer

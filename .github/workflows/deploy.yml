@@ -13,8 +13,9 @@
 #                runs after test succeeded or was not selected, and waits for the owner's approval
 #                (GitHub Environment `production`). Switched off until there is a customer
 #                (ADR 0012): it runs only while the REPOSITORY variable PRODUCTION_ENABLED is
-#                'true'. Otherwise the plan drops it with a notice and a summary line, and the job is
-#                skipped without naming the environment (naming it would create it again).
+#                'true' (in any letter case). Otherwise the plan drops it with a notice and a
+#                summary line, and the job is skipped without naming the environment (naming it
+#                would create it again).
 # Each environment is a call of _deploy-environment.yml, which skips cleanly while its environment
 # has no Azure variables (or no INSTANCE_REPO) and fails on a missing or invalid instance.
 # Backups (docs/runbooks/backup-restore.md): test and production export every table to their own
@@ -140,10 +141,11 @@ jobs:
           selected() { [[ " $envs " == *" $1 "* ]]; }
 
           # Production is switched off until there is a customer (ADR 0012): drop it unless the
-          # repository variable PRODUCTION_ENABLED is 'true'. Not a failure, so every trigger and
-          # dispatch input keeps working; test still deploys.
+          # repository variable PRODUCTION_ENABLED is 'true' in any letter case (lower-cased here,
+          # because the job's `if` compares with GitHub's case-insensitive ==). Not a failure, so
+          # every trigger and dispatch input keeps working; test still deploys.
           production_off=false
-          if selected production && [ "$PRODUCTION_ENABLED" != true ]; then
+          if selected production && [ "${PRODUCTION_ENABLED,,}" != true ]; then
             production_off=true
             kept=""
             for env in $envs; do

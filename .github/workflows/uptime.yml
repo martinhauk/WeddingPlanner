@@ -4,8 +4,9 @@
 #                SHA and the right instance kind, /api/health 200 (or the edge lockdown). Keeps ONE
 #                open issue labelled `incident` in step with the failing environments, naming only
 #                the environments, and fails the run while an environment is down. Production only
-#                while the REPOSITORY variable PRODUCTION_ENABLED is 'true' (ADR 0012: switched off
-#                until there is a customer); otherwise the summary says it is switched off.
+#                while the REPOSITORY variable PRODUCTION_ENABLED is 'true', in any letter case
+#                (ADR 0012: switched off until there is a customer); otherwise the summary says it
+#                is switched off.
 # - cold-start:  every 3 hours, e2e only, at least 1.5 hours after the last uptime check: durations
 #                of the first /api/health, /api/rsvp/status and a warm /api/health, in the job
 #                summary.
@@ -72,7 +73,8 @@ jobs:
           PRODUCTION_ENABLED: ${{ vars.PRODUCTION_ENABLED }}
         run: |
           envs=(--env e2e --env test)
-          if [ "$PRODUCTION_ENABLED" = true ]; then
+          # 'true' in any letter case, like GitHub's case-insensitive == in deploy and backup.
+          if [ "${PRODUCTION_ENABLED,,}" = true ]; then
             envs+=(--env production)
           else
             echo "production: switched off (repository variable PRODUCTION_ENABLED)" >>"$GITHUB_STEP_SUMMARY"
