@@ -134,7 +134,7 @@ describe('cli bake', () => {
     });
     expect(run.code).toBe(0);
     expect(run.stdout).toMatch(
-      /^Baked the sample instance for production: 3 media file\(s\), contentHash [0-9a-f]{64}\.\n$/,
+      /^Baked the sample instance for production: 9 media file\(s\), contentHash [0-9a-f]{64}\.\n$/,
     );
     const build = JSON.parse(
       await readFile(path.join(webDir, 'src', 'content', 'generated', 'build.json'), 'utf8'),

@@ -86,14 +86,16 @@ describe('Rsvp', () => {
   it('shows the intro and the display deadline', () => {
     mockApi({});
     renderRsvp();
-    expect(screen.getByText('Wir freuen uns auf eure Antwort.')).toBeInTheDocument();
-    expect(screen.getByText('Bitte antwortet bis 1. Mai 2099')).toBeInTheDocument();
+    expect(
+      screen.getByText('Ein Nein hilft uns beim Planen genauso wie ein Ja.'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Bitte antwortet bis 1. Juli 2099')).toBeInTheDocument();
   });
 
   it('falls back to the enforced deadline without a display date', () => {
     mockApi({});
     renderRsvp({ lang: 'en', withDate: false });
-    expect(screen.getByText('Please reply by May 1, 2099')).toBeInTheDocument();
+    expect(screen.getByText('Please reply by July 1, 2099')).toBeInTheDocument();
   });
 
   it('shows an "opens soon" note and calls no API while the feature is off', () => {
@@ -553,7 +555,7 @@ describe('Rsvp', () => {
     await user.click(screen.getByRole('button', { name: 'Antwort speichern' }));
 
     expect(await screen.findByText('Die Antwortfrist ist abgelaufen.')).toHaveFocus();
-    expect(screen.getByText('Die Antwortfrist endete am 1. Mai 2099')).toBeInTheDocument();
+    expect(screen.getByText('Die Antwortfrist endete am 1. Juli 2099')).toBeInTheDocument();
     expect(screen.queryByRole('button')).toBeNull();
     expect(contactLink()).toHaveAttribute('href', '#contact');
   });
@@ -751,7 +753,7 @@ describe('Rsvp', () => {
         'Die Antwortfrist ist vorbei. Für Änderungen meldet euch bitte direkt bei uns.',
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText('Die Antwortfrist endete am 1. Mai 2099')).toBeInTheDocument();
+    expect(screen.getByText('Die Antwortfrist endete am 1. Juli 2099')).toBeInTheDocument();
     expect(contactLink()).toBeInTheDocument();
   });
 

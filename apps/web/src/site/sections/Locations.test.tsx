@@ -11,11 +11,11 @@ describe('Locations', () => {
   it('shows each venue with a directions link (Google Maps universal link)', () => {
     render(<Locations section={sections.locations} ctx={ctx} />);
     const card = screen.getByRole('article');
-    expect(within(card).getByRole('heading', { name: 'Kapelle am Beispielsee' })).toBeVisible();
+    expect(within(card).getByRole('heading', { name: 'Villa Lindenufer' })).toBeVisible();
     expect(within(card).getByText('Trauung')).toBeInTheDocument();
     expect(within(card).getByRole('link', { name: 'Route planen' })).toHaveAttribute(
       'href',
-      'https://www.google.com/maps/dir/?api=1&destination=51.1657,10.4515',
+      'https://www.google.com/maps/dir/?api=1&destination=52.4894,13.4712',
     );
   });
 
@@ -25,7 +25,7 @@ describe('Locations', () => {
     expect(container.querySelectorAll('img')).toHaveLength(0);
 
     await user.click(screen.getByRole('button', { name: /Karte anzeigen/ }));
-    const map = screen.getByRole('img', { name: 'Karte: Kapelle am Beispielsee' });
+    const map = screen.getByRole('img', { name: 'Karte: Villa Lindenufer' });
     const tiles = map.querySelectorAll('img');
     expect(tiles).toHaveLength(9);
     for (const tile of tiles) {
@@ -70,13 +70,13 @@ describe('Locations', () => {
             note: { de: 'Parkt nur dort. Fragen? [Schreibt uns](mailto:anna@example.com).' },
             links: [
               {
-                label: { de: 'Parkplatz am Friedhof' },
-                url: 'https://example.com/parking-cemetery',
+                label: { de: 'Wo der Bus abfährt' },
+                url: 'https://example.com/bus-stop',
               },
-              { label: { de: 'Küster anrufen' }, url: 'tel:+49 151 333 333' },
+              { label: { de: 'Empfang anrufen' }, url: 'tel:+49 30 23125 333' },
             ],
-            website: 'https://www.example.com/chapel/',
-            phone: '+49 151 22222222',
+            website: 'https://www.example.com/villa/',
+            phone: '+49 30 23125 222',
           },
         ],
       },
@@ -86,20 +86,20 @@ describe('Locations', () => {
       'href',
       'mailto:anna@example.com',
     );
-    const parking = screen.getByRole('link', { name: 'Parkplatz am Friedhof' });
-    expect(parking).toHaveAttribute('href', 'https://example.com/parking-cemetery');
-    expect(parking).toHaveAttribute('target', '_blank');
-    expect(screen.getByRole('link', { name: 'Küster anrufen' })).toHaveAttribute(
+    const bus = screen.getByRole('link', { name: 'Wo der Bus abfährt' });
+    expect(bus).toHaveAttribute('href', 'https://example.com/bus-stop');
+    expect(bus).toHaveAttribute('target', '_blank');
+    expect(screen.getByRole('link', { name: 'Empfang anrufen' })).toHaveAttribute(
       'href',
-      'tel:+49151333333',
+      'tel:+493023125333',
     );
-    expect(screen.getByRole('link', { name: 'example.com/chapel' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'example.com/villa' })).toHaveAttribute(
       'href',
-      'https://www.example.com/chapel/',
+      'https://www.example.com/villa/',
     );
-    expect(screen.getByRole('link', { name: '+49 151 22222222' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: '+49 30 23125 222' })).toHaveAttribute(
       'href',
-      'tel:+4915122222222',
+      'tel:+493023125222',
     );
   });
 
@@ -117,7 +117,7 @@ describe('Schedule', () => {
   it('shows times, titles, the referenced location and notes', () => {
     render(<Schedule section={sections.schedule} ctx={ctx} />);
     const items = screen.getAllByRole('listitem');
-    expect(items[0]).toHaveTextContent('14:00TrauungKapelle am Beispielsee');
+    expect(items[0]).toHaveTextContent('11:00TrauungVilla Lindenufer');
     expect(items[1]).toHaveTextContent('18:00AbendessenIm Garten');
   });
 });

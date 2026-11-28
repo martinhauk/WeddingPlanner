@@ -7,20 +7,20 @@ describe('Paragraphs', () => {
     const { container } = render(
       <Paragraphs
         text={
-          'Videos:\n[Salsa](https://example.com/salsa)\n\nWrite to [Anna](mailto:anna@example.com) or [call](tel:+49 151 000)'
+          'Videos:\n[Tango](https://example.com/tango)\n\nWrite to [Anna](mailto:anna@example.com) or [call](tel:+49 151 000)'
         }
       />,
     );
     expect(container.querySelectorAll('p')).toHaveLength(2);
-    const salsa = screen.getByRole('link', { name: 'Salsa' });
-    expect(salsa).toHaveAttribute('href', 'https://example.com/salsa');
-    expect(salsa).toHaveAttribute('target', '_blank');
-    expect(salsa).toHaveAttribute('rel', 'noreferrer');
+    const tango = screen.getByRole('link', { name: 'Tango' });
+    expect(tango).toHaveAttribute('href', 'https://example.com/tango');
+    expect(tango).toHaveAttribute('target', '_blank');
+    expect(tango).toHaveAttribute('rel', 'noreferrer');
     const mail = screen.getByRole('link', { name: 'Anna' });
     expect(mail).toHaveAttribute('href', 'mailto:anna@example.com');
     expect(mail).not.toHaveAttribute('target');
     expect(screen.getByRole('link', { name: 'call' })).toHaveAttribute('href', 'tel:+49151000');
-    expect(container.querySelector('p')).toHaveTextContent('Videos: Salsa', {
+    expect(container.querySelector('p')).toHaveTextContent('Videos: Tango', {
       normalizeWhitespace: true,
     });
   });

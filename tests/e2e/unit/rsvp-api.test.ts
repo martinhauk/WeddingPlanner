@@ -111,7 +111,7 @@ test('a seeded reply is served to a returning guest', async () => {
     rsvp: SAMPLE_YES_REPLY,
     version: '"v1"',
     open: false,
-    deadline: '2099-05-01T21:59:00Z',
+    deadline: '2099-07-01T21:59:00Z',
     editToken: rsvp.editToken(),
   });
   assert.match(rsvp.editToken() ?? '', new RegExp(`^${SAMPLE_YES_REPLY.id}\\.[A-Za-z0-9_-]{43}$`));

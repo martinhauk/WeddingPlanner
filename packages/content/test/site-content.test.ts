@@ -38,7 +38,17 @@ describe('site-content.json: the sample', () => {
     const result = await loadSiteContent(DEFAULT_INSTANCE_DIR);
     expect(result.diagnostics).toEqual([]);
     expect(result.ok).toBe(true);
-    expect(result.media.map((m) => m.id)).toEqual(['garden.png', 'hero.png', 'portrait.png']);
+    expect(result.media.map((m) => m.id)).toEqual([
+      'berlin-tips.webp',
+      'dresscode.webp',
+      'hero.webp',
+      'party-1.webp',
+      'party-2.webp',
+      'story-1.webp',
+      'story-2.webp',
+      'story-3.webp',
+      'welcome.webp',
+    ]);
   });
 
   it('uses every section type, so every component has sample content', async () => {
@@ -47,12 +57,11 @@ describe('site-content.json: the sample', () => {
     expect([...used].sort()).toEqual([...SECTION_TYPES].sort());
   });
 
-  it('references media that exist: hero and two wedding-party portraits', async () => {
+  it('references media that exist: hero and two wedding-party pictures', async () => {
     const result = await loadSiteContent(DEFAULT_INSTANCE_DIR);
     if (result.content === undefined) throw new Error('sample invalid');
     const refs = mediaReferences(result.content).map((r) => r.id);
-    expect(refs).toContain('hero.png');
-    expect(refs.filter((id) => id === 'portrait.png').length).toBeGreaterThanOrEqual(2);
+    expect(refs).toEqual(expect.arrayContaining(['hero.webp', 'party-1.webp', 'party-2.webp']));
   });
 });
 
@@ -118,12 +127,13 @@ describe('site-content.json: schema errors', () => {
 
   it('allows at most two hero images and only https, mailto: and tel: location links', async () => {
     const locations = await sectionIndex('locations');
-    const card = ['sections', locations, 'data', 'cards', 0];
+    const cards = ['sections', locations, 'data', 'cards'];
+    const card = [...cards, 0];
     expect(
       await diagnosticsFor(
-        content(['hero', 'images'], ['hero.png', 'garden.png', 'portrait.png']),
+        content(['hero', 'images'], ['hero.webp', 'welcome.webp', 'story-1.webp']),
         content([...card, 'links', 0, 'url'], 'javascript:alert(1)'),
-        content([...card, 'links', 1, 'url'], 'tel:+49 151 0000000'),
+        content([...cards, 1, 'links', 0, 'url'], 'tel:+49 30 23125 000'),
         content([...card, 'website'], 'http://example.com'),
       ),
     ).toEqual([
@@ -152,7 +162,7 @@ describe('site-content.json: semantic checks', () => {
   it('rejects duplicate and reserved section ids', async () => {
     expect(
       await diagnosticsFor(
-        content(['sections', 1, 'id'], 'story'),
+        content(['sections', 1, 'id'], 'welcome'),
         content(['sections', 2, 'id'], 'top'),
       ),
     ).toEqual(['error E_ID_DUP $.sections[1].id', 'error E_ID_RESERVED $.sections[2].id']);
@@ -181,7 +191,7 @@ describe('site-content.json: semantic checks', () => {
   });
 
   it('rejects a hero with both image and images', async () => {
-    expect(await diagnosticsFor(content(['hero', 'image'], 'hero.png'))).toEqual([
+    expect(await diagnosticsFor(content(['hero', 'image'], 'hero.webp'))).toEqual([
       'error E_HERO_IMAGES $.hero',
     ]);
   });
@@ -229,11 +239,11 @@ describe('site-content.json: semantic checks', () => {
   });
 
   it('rejects a privacy deletion date on or before the wedding', async () => {
-    // The sample wedding is on 2099-06-20.
-    expect(await diagnosticsFor(content(['privacy', 'deleteBy'], '2099-06-20'))).toEqual([
+    // The sample wedding is on 2099-09-26.
+    expect(await diagnosticsFor(content(['privacy', 'deleteBy'], '2099-09-26'))).toEqual([
       'error E_PRIVACY_DELETE_BY $.privacy.deleteBy',
     ]);
-    expect(await diagnosticsFor(content(['privacy', 'deleteBy'], '2099-06-21'))).toEqual([]);
+    expect(await diagnosticsFor(content(['privacy', 'deleteBy'], '2099-09-27'))).toEqual([]);
   });
 
   it('checks the privacy fields: controllers, email, date, no unknown keys', async () => {
@@ -266,9 +276,9 @@ describe('checkSiteContent', () => {
     const minimal = {
       schemaVersion: 1,
       couple: { de: 'Anna & Ben' },
-      event: { start: '2099-06-20T14:00:00+02:00', timeZone: 'Europe/Berlin' },
-      tagline: { de: 'Wir heiraten' },
-      place: { de: 'Musterstadt' },
+      event: { start: '2099-09-26T11:00:00+02:00', timeZone: 'Europe/Berlin' },
+      tagline: { de: 'Wir trauen uns' },
+      place: { de: 'Berlin' },
       theme: {
         colors: {
           bg: '#fff',
@@ -306,9 +316,15 @@ describe('publishedSiteContent and publishedMedia', () => {
     expect(published).not.toHaveProperty('$schema');
     expect(published.sections).toEqual(result.content.sections);
     expect(publishedMedia(published, result.media).map((m) => m.id)).toEqual([
-      'garden.png',
-      'hero.png',
-      'portrait.png',
+      'berlin-tips.webp',
+      'dresscode.webp',
+      'hero.webp',
+      'party-1.webp',
+      'party-2.webp',
+      'story-1.webp',
+      'story-2.webp',
+      'story-3.webp',
+      'welcome.webp',
     ]);
   });
 
@@ -318,7 +334,7 @@ describe('publishedSiteContent and publishedMedia', () => {
     const result = await loadSiteContent(
       await sampleWith(
         content(['sections', party, 'visible'], false),
-        content(['hero', 'images'], ['portrait.png']),
+        content(['hero', 'images'], ['party-1.webp']),
         content(['sections', story, 'visible'], false),
       ),
     );
@@ -328,11 +344,12 @@ describe('publishedSiteContent and publishedMedia', () => {
     expect(ids).not.toContain(result.content.sections[party]?.id);
     expect(ids).not.toContain(result.content.sections[story]?.id);
     expect(ids).toHaveLength(result.content.sections.length - 2);
-    // hero.png is now unused (only the hidden story had it), portrait.png only used by the hero
-    // (the party is hidden), garden.png by the text section.
+    // The hero now uses only party-1.webp (the party is hidden); hero.webp, welcome.webp, the
+    // story pictures and party-2.webp are unused; the text and dress code sections keep theirs.
     expect(publishedMedia(published, result.media).map((m) => m.id)).toEqual([
-      'garden.png',
-      'portrait.png',
+      'berlin-tips.webp',
+      'dresscode.webp',
+      'party-1.webp',
     ]);
   });
 });

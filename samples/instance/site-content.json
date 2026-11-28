@@ -3,105 +3,40 @@
   "schemaVersion": 1,
   "couple": { "de": "Anna & Ben", "en": "Anna & Ben", "es": "Anna y Ben" },
   "event": {
-    "start": "2099-06-20T14:00:00+02:00",
+    "start": "2099-09-26T11:00:00+02:00",
     "timeZone": "Europe/Berlin"
   },
-  "tagline": { "de": "Wir heiraten", "en": "We're getting married", "es": "Nos casamos" },
+  "tagline": { "de": "Wir trauen uns", "en": "We're tying the knot", "es": "Nos casamos" },
   "place": {
-    "de": "Musterstadt am Beispielsee",
-    "en": "Musterstadt on Lake Beispiel",
-    "es": "Musterstadt, junto al lago Beispiel"
+    "de": "Berlin & Brandenburg",
+    "en": "Berlin & Brandenburg, Germany",
+    "es": "Berlín y Brandeburgo, Alemania"
   },
-  "rsvpDeadline": "2099-05-01",
+  "rsvpDeadline": "2099-07-01",
   "theme": {
     "colors": {
-      "bg": "#faf7f2",
-      "paper": "#fffdf9",
-      "ink": "#2f2b27",
-      "muted": "#6f675f",
-      "accent": "#66785a",
-      "accentDark": "#5b6a51",
-      "line": "#e7e0d6"
+      "bg": "#f6f1e8",
+      "paper": "#fffcf6",
+      "ink": "#23303f",
+      "muted": "#5b6573",
+      "accent": "#b4553a",
+      "accentDark": "#963f27",
+      "line": "#e6dccb",
+      "frame": "#ebe3d4"
     },
-    "fonts": { "heading": "cormorant-garamond", "body": "jost" }
+    "fonts": { "heading": "playfair-display", "body": "lato" }
   },
-  "hero": { "images": ["hero.png", "garden.png"] },
+  "hero": { "images": ["hero.webp", "welcome.webp"] },
   "sections": [
     {
-      "id": "story",
-      "type": "story",
-      "title": { "de": "Unsere Geschichte", "en": "Our story", "es": "Nuestra historia" },
-      "nav": { "de": "Geschichte", "en": "Story", "es": "Historia" },
+      "id": "welcome",
+      "type": "text",
       "data": {
         "text": {
-          "de": "Kennengelernt haben wir uns auf einer Zugfahrt, die drei Stunden Verspätung hatte. Seitdem reisen wir zusammen.\n\nJetzt wollen wir mit euch feiern, dass aus der Verspätung ein „für immer“ geworden ist.",
-          "en": "We met on a train that was three hours late. We have been travelling together ever since.\n\nNow we want to celebrate with you that the delay turned into a “forever”.",
-          "es": "Nos conocimos en un tren que llevaba tres horas de retraso. Desde entonces viajamos juntos.\n\nAhora queremos celebrar con vosotros que aquel retraso se convirtió en un “para siempre”."
-        },
-        "images": [
-          {
-            "src": "garden.png",
-            "alt": {
-              "de": "Platzhalterbild: ein goldener Ring",
-              "en": "Placeholder picture: a golden ring",
-              "es": "Imagen de ejemplo: un anillo dorado"
-            }
-          },
-          {
-            "src": "portrait.png",
-            "alt": {
-              "de": "Platzhalterbild von Anna und Ben",
-              "en": "Placeholder picture of Anna and Ben",
-              "es": "Imagen de ejemplo de Anna y Ben"
-            }
-          },
-          {
-            "src": "hero.png",
-            "alt": {
-              "de": "Platzhalterbild: zwei Ringe",
-              "en": "Placeholder picture: two rings",
-              "es": "Imagen de ejemplo: dos anillos"
-            }
-          }
-        ],
-        "items": [
-          {
-            "heading": {
-              "de": "Wie habt ihr euch kennengelernt?",
-              "en": "How did you meet?",
-              "es": "¿Cómo os conocisteis?"
-            },
-            "text": {
-              "de": "Im Speisewagen gab es nur noch einen freien Platz – und eine letzte Tasse Kaffee.\n\nWir haben beides geteilt.",
-              "en": "There was only one free seat left in the dining car – and one last cup of coffee.\n\nWe shared both.",
-              "es": "En el vagón restaurante solo quedaba un asiento libre – y una última taza de café.\n\nCompartimos las dos cosas."
-            }
-          },
-          {
-            "heading": {
-              "de": "Wer hat den ersten Schritt gemacht?",
-              "en": "Who made the first move?",
-              "es": "¿Quién dio el primer paso?"
-            },
-            "text": {
-              "de": "Anna hat Ben nach seiner Handynummer gefragt – angeblich nur wegen der Verspätungsentschädigung.",
-              "en": "Anna asked Ben for his number – supposedly only for the delay compensation form.",
-              "es": "Anna le pidió a Ben su número – supuestamente solo por la indemnización del retraso."
-            }
-          },
-          {
-            "heading": {
-              "de": "Wohin geht die nächste Reise?",
-              "en": "Where are you travelling next?",
-              "es": "¿Adónde viajáis ahora?"
-            },
-            "text": {
-              "de": "Das verraten wir nach der Hochzeit. Tipps nehmen wir gerne per [E-Mail](mailto:anna@example.com) entgegen.",
-              "en": "We'll tell you after the wedding. Tips are welcome by [email](mailto:anna@example.com).",
-              "es": "Os lo contaremos después de la boda. Aceptamos consejos por [correo](mailto:anna@example.com)."
-            }
-          }
-        ]
+          "de": "Wir heiraten – und wir möchten diesen Tag mit euch feiern! Hier findet ihr alles, was ihr für unsere Hochzeit wissen müsst.\n\nUm 11 Uhr geben wir uns in der Villa Lindenufer in Berlin-Treptow das Ja-Wort. Danach bringt uns ein Bus hinaus aufs Land: Gefeiert wird auf Gut Kranichwiese am Wolkensee in Brandenburg, mit Aperitivo am Steg, einer langen Tafel und Tanz bis in die Nacht.\n\nWir freuen uns riesig auf euch!",
+          "en": "We're getting married – and we'd love to celebrate the day with you! Here you'll find everything you need to know about our wedding.\n\nAt 11 o'clock we'll say “I do” at Villa Lindenufer in Berlin-Treptow. Afterwards a bus takes us all out to the countryside: we'll celebrate at Gut Kranichwiese on Lake Wolkensee in Brandenburg, with an aperitivo on the jetty, one long dinner table and dancing late into the night.\n\nWe can't wait to see you!",
+          "es": "¡Nos casamos y queremos celebrarlo con vosotros! Aquí encontraréis todo lo que necesitáis saber sobre nuestra boda.\n\nA las 11 nos diremos «sí, quiero» en la Villa Lindenufer, en Berlín-Treptow. Después, un autobús nos llevará al campo: lo celebraremos en Gut Kranichwiese, a orillas del lago Wolkensee, en Brandeburgo, con aperitivo en el embarcadero, una larga mesa compartida y baile hasta bien entrada la noche.\n\n¡Tenemos muchísimas ganas de veros!"
+        }
       }
     },
     {
@@ -110,28 +45,115 @@
       "data": {
         "items": [
           {
-            "time": "14:00",
-            "title": { "de": "Trauung", "en": "Ceremony", "es": "Ceremonia" },
-            "locationId": "chapel"
-          },
-          {
-            "time": "15:30",
-            "title": { "de": "Sektempfang", "en": "Champagne reception", "es": "Recepción" },
-            "locationId": "estate"
-          },
-          {
-            "time": "18:30",
-            "title": { "de": "Abendessen", "en": "Dinner", "es": "Cena" },
-            "locationId": "estate"
-          },
-          {
-            "time": "21:00",
-            "title": { "de": "Party", "en": "Party", "es": "Fiesta" },
-            "locationId": "estate",
+            "time": "11:00",
+            "title": {
+              "de": "Standesamtliche Trauung",
+              "en": "Civil ceremony",
+              "es": "Boda civil"
+            },
+            "locationId": "villa",
             "note": {
-              "de": "Bis in die Morgenstunden.",
-              "en": "Until the early hours.",
-              "es": "Hasta la madrugada."
+              "de": "Bitte seid ab 10:30 Uhr da. Die Trauung dauert etwa eine halbe Stunde – danach stoßen wir im Garten der Villa an.",
+              "en": "Please arrive from 10:30. The ceremony takes about half an hour – afterwards we'll raise a glass in the villa's garden.",
+              "es": "Por favor, llegad a partir de las 10:30. La ceremonia dura una media hora; después brindaremos en el jardín de la villa."
+            }
+          },
+          {
+            "time": "12:30",
+            "title": {
+              "de": "Mit dem Bus an den Wolkensee",
+              "en": "By bus to Lake Wolkensee",
+              "es": "En autobús al Wolkensee"
+            },
+            "locationId": "villa",
+            "note": {
+              "de": "Zwei Busse fahren direkt vor der Villa ab, die Fahrt dauert etwa 75 Minuten.",
+              "en": "Two coaches leave right outside the villa; the ride takes about 75 minutes.",
+              "es": "Dos autobuses salen justo delante de la villa; el trayecto dura unos 75 minutos."
+            }
+          },
+          {
+            "time": "14:00",
+            "title": {
+              "de": "Aperitivo am Steg",
+              "en": "Aperitivo on the jetty",
+              "es": "Aperitivo en el embarcadero"
+            },
+            "locationId": "gut",
+            "note": {
+              "de": "Spritz, kühles Bier und Brezeln – ein bisschen Italien, ein bisschen Deutschland. Wer mag, leiht sich ein Ruderboot aus.",
+              "en": "Spritz, cold beer and pretzels – a little Italy, a little Germany. Anyone who likes can borrow a rowing boat.",
+              "es": "Spritz, cerveza fría y pretzels: un poco de Italia y un poco de Alemania. Quien quiera puede coger prestada una barca de remos."
+            }
+          },
+          {
+            "time": "16:00",
+            "title": {
+              "de": "Kaffee, Torte und Reden",
+              "en": "Coffee, cake and speeches",
+              "es": "Café, tarta y discursos"
+            },
+            "locationId": "gut",
+            "note": {
+              "de": "Unter der alten Linde schneiden wir die Hochzeitstorte an. Wer eine Rede halten möchte, sagt bitte vorher Jürgen Bescheid.",
+              "en": "We'll cut the wedding cake under the old lime tree. If you'd like to give a speech, please let Jürgen know beforehand.",
+              "es": "Cortaremos la tarta nupcial bajo el viejo tilo. Si queréis dar un discurso, avisad antes a Jürgen."
+            }
+          },
+          {
+            "time": "18:00",
+            "title": {
+              "de": "Abendessen an der langen Tafel",
+              "en": "Dinner at the long table",
+              "es": "Cena en la mesa larga"
+            },
+            "locationId": "gut",
+            "note": {
+              "de": "Ein Menü aus Brandenburg und Apulien: Fisch aus dem See, Kartoffeln vom Hof und Orecchiette nach Nonnas Rezept. Vegetarisch und vegan gibt es natürlich auch.",
+              "en": "A menu from Brandenburg and Apulia: fish from the lake, potatoes from the farm and orecchiette from Nonna's recipe. There are vegetarian and vegan options too, of course.",
+              "es": "Un menú de Brandeburgo y Apulia: pescado del lago, patatas de la granja y orecchiette con la receta de la nonna. Por supuesto, también habrá opciones vegetarianas y veganas."
+            }
+          },
+          {
+            "time": "20:30",
+            "title": {
+              "de": "Eröffnungstanz und Party",
+              "en": "First dance and party",
+              "es": "Primer baile y fiesta"
+            },
+            "locationId": "gut",
+            "note": {
+              "de": "Erst wir zwei, dann alle: Die Tanzfläche ist im alten Bootshaus, und am Ufer brennt die Feuerschale.",
+              "en": "First the two of us, then everyone: the dance floor is in the old boathouse, and the fire bowl will be burning on the shore.",
+              "es": "Primero nosotros dos y luego todos: la pista de baile está en la antigua casa de barcas y el brasero estará encendido junto a la orilla."
+            }
+          },
+          {
+            "time": "00:00",
+            "title": {
+              "de": "Mitternachtssnack",
+              "en": "Midnight snack",
+              "es": "Picoteo de medianoche"
+            },
+            "locationId": "gut",
+            "note": {
+              "de": "Currywurst für die Berliner, Focaccia für die Italiener – und Espresso für alle, die noch lange nicht nach Hause wollen.",
+              "en": "Currywurst for the Berliners, focaccia for the Italians – and espresso for everyone who isn't ready to go home yet.",
+              "es": "Currywurst para los berlineses, focaccia para los italianos y espresso para todos los que aún no quieran irse a casa."
+            }
+          },
+          {
+            "time": "01:30",
+            "title": {
+              "de": "Letzter Bus nach Berlin",
+              "en": "Last bus to Berlin",
+              "es": "Último autobús a Berlín"
+            },
+            "locationId": "gut",
+            "note": {
+              "de": "Ein erster Bus fährt schon um 22:30 Uhr für alle, die es ruhiger mögen. Der letzte bringt euch um 01:30 Uhr zurück zur Villa Lindenufer.",
+              "en": "A first bus already leaves at 22:30 for anyone who prefers a quieter night. The last one takes you back to Villa Lindenufer at 01:30.",
+              "es": "Un primer autobús sale ya a las 22:30 para quien prefiera retirarse antes. El último os lleva de vuelta a la Villa Lindenufer a la 01:30."
             }
           }
         ]
@@ -140,70 +162,216 @@
     {
       "id": "travel",
       "type": "locations",
-      "title": { "de": "Anreise", "en": "Travel", "es": "Cómo llegar" },
+      "title": { "de": "Anfahrt", "en": "Getting there", "es": "Cómo llegar" },
       "data": {
         "cards": [
           {
-            "id": "chapel",
-            "name": "Kapelle am Beispielsee",
-            "kind": { "de": "Trauung", "en": "Ceremony", "es": "Ceremonia" },
-            "address": "Beispielweg 1, 99999 Musterstadt",
-            "lat": 51.1657,
-            "lng": 10.4515,
+            "id": "villa",
+            "name": "Villa Lindenufer",
+            "kind": { "de": "Standesamtliche Trauung", "en": "Civil ceremony", "es": "Boda civil" },
+            "address": "Uferpromenade 14, 12435 Berlin",
+            "lat": 52.4894,
+            "lng": 13.4712,
             "note": {
-              "de": "Bitte parkt nur auf diesen Parkplätzen:",
-              "en": "Please park only in these car parks:",
-              "es": "Por favor, aparcad solo en estos aparcamientos:"
+              "de": "Die Villa liegt direkt an der Spree, fünf Minuten zu Fuß von der S-Bahn. Parkplätze gibt es in der Gegend kaum – kommt am besten mit Bahn, Bus oder Rad.",
+              "en": "The villa sits right on the Spree, a five-minute walk from the S-Bahn. Parking nearby is scarce – train, bus or bike is your best bet.",
+              "es": "La villa está a orillas del Spree, a cinco minutos a pie del S-Bahn. Por la zona apenas hay aparcamiento, así que lo mejor es venir en tren, autobús o bici."
             },
             "links": [
               {
                 "label": {
-                  "de": "Parkplatz am Friedhof",
-                  "en": "Car park at the cemetery",
-                  "es": "Aparcamiento del cementerio"
+                  "de": "Wo der Bus abfährt",
+                  "en": "Where the bus leaves from",
+                  "es": "Dónde sale el autobús"
                 },
-                "url": "https://example.com/parking-cemetery"
-              },
-              {
-                "label": {
-                  "de": "Parkplatz am Sportplatz",
-                  "en": "Car park at the sports ground",
-                  "es": "Aparcamiento del campo de deportes"
-                },
-                "url": "https://example.com/parking-sports-ground"
+                "url": "https://example.com/karte/bus-villa-lindenufer"
               }
             ],
-            "website": "https://example.com/chapel",
-            "phone": "+49 151 22222222"
+            "website": "https://example.com/villa-lindenufer",
+            "phone": "+49 30 23125 410"
           },
           {
-            "id": "estate",
-            "name": "Gut Musterhof",
+            "id": "gut",
+            "name": "Gut Kranichwiese",
             "kind": { "de": "Feier", "en": "Celebration", "es": "Celebración" },
-            "address": "Musterhof 5, 99999 Musterstadt",
-            "lat": 51.1712,
-            "lng": 10.463,
+            "address": "Am Wolkensee 3, 16775 Kranichwiese",
+            "lat": 53.0718,
+            "lng": 13.1863,
             "note": {
-              "de": "Parkplätze vor Ort.",
-              "en": "Parking on site.",
-              "es": "Aparcamiento en el lugar."
-            }
+              "de": "Das Gut liegt etwa 75 Kilometer nördlich von Berlin direkt am Wolkensee. Der Shuttlebus bringt euch hin und zurück; wer selbst fährt, findet ausgeschilderte Parkplätze direkt am Gut.",
+              "en": "The estate lies about 75 kilometres north of Berlin, right on Lake Wolkensee. The shuttle bus takes you there and back; if you drive yourself, you'll find signposted parking right at the estate.",
+              "es": "La finca está a unos 75 kilómetros al norte de Berlín, justo a orillas del Wolkensee. El autobús os lleva y os trae; si venís en coche, encontraréis aparcamiento señalizado en la misma finca."
+            },
+            "links": [
+              {
+                "label": {
+                  "de": "Lageplan des Guts",
+                  "en": "Site map of the estate",
+                  "es": "Plano de la finca"
+                },
+                "url": "https://example.com/karte/lageplan-kranichwiese"
+              }
+            ],
+            "website": "https://example.com/gut-kranichwiese",
+            "phone": "+49 30 23125 420"
           }
         ],
         "hotels": [
           {
-            "name": "Hotel Seeblick",
-            "address": "Uferstraße 10, 99999 Musterstadt",
-            "url": "https://example.com/hotel-seeblick",
+            "name": "Landhaus Abendrot",
+            "address": "Dorfstraße 8, 16775 Kranichwiese",
+            "url": "https://example.com/landhaus-abendrot",
             "note": {
-              "de": "Zimmerkontingent unter „Anna & Ben“.",
-              "en": "Rooms reserved under “Anna & Ben”.",
-              "es": "Habitaciones reservadas a nombre de “Anna y Ben”."
+              "de": "Zehn Minuten zu Fuß vom Gut. Bis Ende Juli gibt es dort ein Zimmerkontingent unter dem Stichwort „Anna & Ben“.",
+              "en": "A ten-minute walk from the estate. Until the end of July there's a block of rooms reserved under “Anna & Ben”.",
+              "es": "A diez minutos a pie de la finca. Hasta finales de julio hay un bloque de habitaciones reservado a nombre de «Anna y Ben»."
             }
           },
           {
-            "name": "Pension Am Park",
-            "address": "Parkallee 3, 99999 Musterstadt"
+            "name": "Pension Seerose",
+            "address": "Am Fischerweg 2, 16775 Kranichwiese",
+            "url": "https://example.com/pension-seerose",
+            "note": {
+              "de": "Klein und gemütlich, mit Frühstück im Garten. Am Sonntag gibt es dort ab 11 Uhr einen Katerbrunch für alle.",
+              "en": "Small and cosy, with breakfast in the garden. On Sunday there's a lazy brunch there for everyone from 11 am.",
+              "es": "Pequeña y acogedora, con desayuno en el jardín. El domingo, a partir de las 11, hay un brunch para todos para recuperarse de la fiesta."
+            }
+          },
+          {
+            "name": "Hotel Spreewelle",
+            "address": "Uferpromenade 30, 12435 Berlin",
+            "url": "https://example.com/hotel-spreewelle",
+            "note": {
+              "de": "Für alle, die nach der Feier mit dem Bus zurück nach Berlin fahren: fünf Minuten von der Villa.",
+              "en": "For everyone taking the bus back to Berlin after the party: five minutes from the villa.",
+              "es": "Para quienes volváis a Berlín en autobús después de la fiesta: a cinco minutos de la villa."
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "berlin-tips",
+      "type": "text",
+      "title": {
+        "de": "Schon am Freitag in Berlin?",
+        "en": "In Berlin on Friday already?",
+        "es": "¿Llegáis a Berlín el viernes?"
+      },
+      "nav": { "de": "Berlin-Tipps", "en": "Berlin tips", "es": "Berlín" },
+      "data": {
+        "text": {
+          "de": "Wer schon am Freitag anreist, hat einen ganzen Tag Berlin vor sich. Ein paar unserer Lieblingsorte, alle gut mit Rad oder S-Bahn zu erreichen:\n\n[Picknick auf dem Tempelhofer Feld](https://example.com/berlin/tempelhofer-feld)\n[Mit dem Rad am Landwehrkanal entlang](https://example.com/berlin/landwehrkanal)\n[Eine Runde mit dem Boot über die Spree](https://example.com/berlin/spree-boot)\n\nAm Freitagabend sitzen wir ab 19 Uhr im [Biergarten an der Spree](https://example.com/berlin/biergarten) – kommt gern vorbei, wenn ihr schon da seid.",
+          "en": "If you arrive on Friday, you have a whole day of Berlin ahead of you. A few of our favourite places, all easy to reach by bike or S-Bahn:\n\n[A picnic on Tempelhofer Feld](https://example.com/berlin/tempelhofer-feld)\n[A bike ride along the Landwehr Canal](https://example.com/berlin/landwehrkanal)\n[A boat trip on the Spree](https://example.com/berlin/spree-boot)\n\nOn Friday evening you'll find us at the [beer garden on the Spree](https://example.com/berlin/biergarten) from 7 pm – come and join us if you're already in town.",
+          "es": "Si llegáis el viernes, tenéis todo un día de Berlín por delante. Algunos de nuestros sitios favoritos, todos fáciles de alcanzar en bici o en S-Bahn:\n\n[Un pícnic en el Tempelhofer Feld](https://example.com/berlin/tempelhofer-feld)\n[En bici a lo largo del Landwehrkanal](https://example.com/berlin/landwehrkanal)\n[Una vuelta en barco por el Spree](https://example.com/berlin/spree-boot)\n\nEl viernes por la tarde estaremos desde las 19:00 en la [cervecería al aire libre junto al Spree](https://example.com/berlin/biergarten): pasaos si ya estáis en la ciudad."
+        },
+        "image": {
+          "src": "berlin-tips.webp",
+          "alt": {
+            "de": "Illustration: ein Ausflugsboot auf der Spree, dahinter eine S-Bahn auf dem Viadukt und der Fernsehturm",
+            "en": "Illustration: a tour boat on the Spree, with an S-Bahn train on its viaduct and the TV tower behind it",
+            "es": "Ilustración: un barco turístico en el Spree y, detrás, un tren de S-Bahn sobre el viaducto y la torre de televisión"
+          }
+        }
+      }
+    },
+    {
+      "id": "story",
+      "type": "story",
+      "title": {
+        "de": "Von Beet 14 an den Wolkensee",
+        "en": "From bed 14 to Lake Wolkensee",
+        "es": "Del bancal 14 al Wolkensee"
+      },
+      "nav": { "de": "Über uns", "en": "About us", "es": "Sobre nosotros" },
+      "data": {
+        "text": {
+          "de": "Eine Italienerin aus Lecce, ein Norddeutscher aus Kiel – und dazwischen ein Hochbeet auf dem Tempelhofer Feld. Dass ausgerechnet Basilikum uns zusammenbringt, hätte keiner von uns gedacht.\n\nHier erzählen wir euch ein bisschen von uns: wie wir uns gefunden haben, was wir an Berlin lieben und warum wir am Wolkensee feiern.",
+          "en": "An Italian from Lecce, a northern German from Kiel – and between them a raised garden bed on Tempelhofer Feld. Neither of us would have guessed that basil, of all things, would bring us together.\n\nHere's a little about us: how we found each other, what we love about Berlin and why we're celebrating on Lake Wolkensee.",
+          "es": "Una italiana de Lecce, un alemán del norte, de Kiel, y entre los dos un bancal elevado en el Tempelhofer Feld. Ninguno de los dos habría imaginado que precisamente la albahaca nos uniría.\n\nAquí os contamos un poco sobre nosotros: cómo nos encontramos, qué nos encanta de Berlín y por qué lo celebramos junto al lago Wolkensee."
+        },
+        "items": [
+          {
+            "heading": { "de": "Zwei Hochbeete", "en": "Two raised beds", "es": "Dos bancales" },
+            "text": {
+              "de": "Vor ein paar Jahren hatten wir im Frühling zufällig zwei benachbarte Hochbeete in einem Gemeinschaftsgarten auf dem Tempelhofer Feld. Ben zog dort mit großem Ehrgeiz Sonnenblumen, Anna versuchte, ein bisschen Apulien nach Berlin zu holen: Tomaten, Rucola und vor allem Basilikum.\n\nDas Basilikum fand Berlin allerdings deutlich weniger gut als Anna. Nach drei Wochen klebte an ihrer Gießkanne ein Zettel: „Weniger gießen, mehr Sonne. Viel Glück! – Ben, Beet 14“.",
+              "en": "A few springs ago we happened to have neighbouring raised beds in a community garden on Tempelhofer Feld. Ben was growing sunflowers with great ambition; Anna was trying to bring a bit of Apulia to Berlin: tomatoes, rocket and, above all, basil.\n\nThe basil, however, liked Berlin far less than Anna did. After three weeks a note appeared on her watering can: “Less water, more sun. Good luck! – Ben, bed 14”.",
+              "es": "Hace unas cuantas primaveras teníamos, por casualidad, dos bancales vecinos en un huerto comunitario del Tempelhofer Feld. Ben cultivaba girasoles con mucha ambición; Anna intentaba traerse un poco de Apulia a Berlín: tomates, rúcula y, sobre todo, albahaca.\n\nPero a la albahaca Berlín le gustaba bastante menos que a Anna. A las tres semanas apareció una nota pegada en su regadera: «Menos agua, más sol. ¡Suerte! – Ben, bancal 14»."
+            }
+          },
+          {
+            "heading": {
+              "de": "Ein Glas Pesto",
+              "en": "A jar of pesto",
+              "es": "Un tarro de pesto"
+            },
+            "text": {
+              "de": "Den Anfang hat Anna gemacht – mit einem Glas Pesto. Das Basilikum hatte sich dank Bens Tipp tatsächlich erholt, und sie fand, dass er das Ergebnis probieren sollte. Auf dem Deckel stand ihre Telefonnummer.\n\nBen hat zwei Tage überlegt, was man auf so ein Pesto antwortet. Am Ende hat er sie einfach gefragt, ob sie Lust auf eine Radtour zum Müggelsee hat. Wir sind mit Gegenwind hin- und im Sonnenuntergang zurückgefahren und waren uns danach ziemlich sicher, dass das nicht unsere letzte Tour sein würde.",
+              "en": "Anna got things started – with a jar of pesto. Thanks to Ben's tip the basil had actually recovered, and she felt he ought to taste the result. Her phone number was written on the lid.\n\nBen spent two days wondering how you answer a jar of pesto. In the end he simply asked whether she fancied a bike ride to the Müggelsee. We rode out against the wind and back in the sunset, and afterwards we were fairly sure it wouldn't be our last ride.",
+              "es": "Fue Anna quien empezó, con un tarro de pesto. Gracias al consejo de Ben, la albahaca se había recuperado de verdad, y a ella le pareció que él tenía que probar el resultado. En la tapa estaba su número de teléfono.\n\nBen se pasó dos días pensando qué se contesta a un tarro de pesto. Al final le preguntó sin más si le apetecía ir en bici hasta el Müggelsee. Fuimos con viento en contra, volvimos con la puesta de sol y después estábamos bastante seguros de que no sería nuestra última excursión."
+            }
+          },
+          {
+            "heading": {
+              "de": "Mit dem Nachtzug nach Lecce",
+              "en": "By night train to Lecce",
+              "es": "En tren nocturno a Lecce"
+            },
+            "text": {
+              "de": "Unsere schönste Reise ging mit dem Nachtzug nach Lecce, zum ersten Mal zu Annas Familie. Ben hatte vorher wochenlang Italienisch geübt und brachte bei der Ankunft ein fehlerfreies „Piacere, sono Ben“ heraus – und danach erst mal nicht mehr viel.\n\nAnnas Nonna hat ihn trotzdem sofort adoptiert. Sie hat ihm gezeigt, wie man Orecchiette mit dem Daumen formt, und ihm zum Abschied drei Zitronen von ihrem Baum in den Rucksack gesteckt. Eine davon hat Ben bis nach Berlin verteidigt.",
+              "en": "Our favourite trip was the night train to Lecce, to meet Anna's family for the first time. Ben had practised Italian for weeks and on arrival managed a flawless “Piacere, sono Ben” – and not much else for a while.\n\nAnna's nonna adopted him on the spot anyway. She showed him how to shape orecchiette with his thumb and, when we left, slipped three lemons from her tree into his backpack. Ben defended one of them all the way back to Berlin.",
+              "es": "Nuestro viaje favorito fue en tren nocturno a Lecce, para conocer por primera vez a la familia de Anna. Ben llevaba semanas practicando italiano y al llegar soltó un «Piacere, sono Ben» perfecto… y después, durante un buen rato, poco más.\n\nAun así, la nonna de Anna lo adoptó al instante. Le enseñó a dar forma a las orecchiette con el pulgar y, al despedirnos, le metió en la mochila tres limones de su árbol. Ben defendió uno de ellos hasta Berlín."
+            }
+          },
+          {
+            "heading": {
+              "de": "Sonntage in Neukölln",
+              "en": "Sundays in Neukölln",
+              "es": "Domingos en Neukölln"
+            },
+            "text": {
+              "de": "Ein guter Sonntag beginnt auf unserem Balkon in Neukölln, der inzwischen eher ein kleiner Dschungel ist. Anna macht Espresso, Ben holt Schrippen, und dann diskutieren wir, ob es nachmittags Kaffee und Kuchen oder lieber einen Aperitivo gibt. (Meistens gewinnt beides.)\n\nDazwischen: Flohmarkt im Mauerpark, eine Runde mit dem Rad am Landwehrkanal oder ein Spieleabend mit Freunden, bei dem Ben behauptet, die Regeln zu kennen.",
+              "en": "A good Sunday begins on our balcony in Neukölln, which by now is more of a small jungle. Anna makes espresso, Ben fetches bread rolls, and then we debate whether the afternoon calls for coffee and cake or an aperitivo. (Usually both win.)\n\nIn between: the flea market at Mauerpark, a bike ride along the Landwehr Canal, or a board-game night with friends where Ben claims to know the rules.",
+              "es": "Un buen domingo empieza en nuestro balcón de Neukölln, que a estas alturas es más bien una pequeña selva. Anna prepara un espresso, Ben va a por panecillos y luego discutimos si por la tarde toca café con tarta o un aperitivo. (Casi siempre ganan los dos.)\n\nY entre medias: el mercadillo del Mauerpark, una vuelta en bici por el Landwehrkanal o una noche de juegos de mesa con amigos en la que Ben asegura conocerse las reglas."
+            }
+          },
+          {
+            "heading": {
+              "de": "Warum am Wolkensee",
+              "en": "Why Lake Wolkensee",
+              "es": "Por qué el Wolkensee"
+            },
+            "text": {
+              "de": "Wir sind beide am Meer aufgewachsen – Anna an der Adria, Ben an der Ostsee – und haben in Berlin schnell gemerkt: Ohne Wasser in der Nähe fehlt uns etwas. Seitdem gehören Ausflüge an die Brandenburger Seen zu unseren liebsten Wochenenden.\n\nAuf Gut Kranichwiese sind wir bei einer dieser Touren eher zufällig gelandet, mit einem platten Reifen und großem Hunger. Abends standen wir am Steg, über uns zogen die Kraniche – und wir wussten beide: Hier wollen wir feiern.",
+              "en": "We both grew up by the sea – Anna on the Adriatic, Ben on the Baltic – and quickly noticed in Berlin that we miss having water nearby. Since then, trips out to Brandenburg's lakes have been our favourite kind of weekend.\n\nWe stumbled upon Gut Kranichwiese on one of those trips, with a flat tyre and a big appetite. That evening we stood on the jetty while cranes flew overhead – and we both knew: this is where we want to celebrate.",
+              "es": "Los dos crecimos junto al mar (Anna en el Adriático, Ben en el Báltico) y en Berlín enseguida nos dimos cuenta de que echamos de menos tener agua cerca. Desde entonces, las escapadas a los lagos de Brandeburgo son nuestros fines de semana favoritos.\n\nA Gut Kranichwiese llegamos casi por casualidad en una de esas excursiones, con una rueda pinchada y mucha hambre. Al atardecer, desde el embarcadero, vimos pasar las grullas sobre nosotros y los dos lo tuvimos claro: aquí queremos celebrarlo."
+            }
+          }
+        ],
+        "images": [
+          {
+            "src": "story-1.webp",
+            "alt": {
+              "de": "Illustration: ein Hochbeet mit Basilikum und Sonnenblumen, dahinter die Silhouette Berlins mit dem Fernsehturm",
+              "en": "Illustration: a raised bed with basil and sunflowers, with the Berlin skyline and its TV tower behind it",
+              "es": "Ilustración: un bancal con albahaca y girasoles y, al fondo, la silueta de Berlín con la torre de televisión"
+            }
+          },
+          {
+            "src": "story-2.webp",
+            "alt": {
+              "de": "Illustration: Zitronen und Olivenzweige aus Apulien",
+              "en": "Illustration: lemons and olive branches from Apulia",
+              "es": "Ilustración: limones y ramas de olivo de Apulia"
+            }
+          },
+          {
+            "src": "story-3.webp",
+            "alt": {
+              "de": "Illustration: zwei Fahrräder an einem Seeufer im Abendlicht",
+              "en": "Illustration: two bicycles on a lakeshore in the evening light",
+              "es": "Ilustración: dos bicicletas a orillas de un lago con la luz del atardecer"
+            }
           }
         ]
       }
@@ -211,32 +379,71 @@
     {
       "id": "wedding-party",
       "type": "weddingParty",
-      "title": { "de": "Trauzeugen", "en": "Wedding party", "es": "Testigos" },
+      "title": {
+        "de": "Unsere Crew für den großen Tag",
+        "en": "Our crew for the big day",
+        "es": "Nuestro equipo para el gran día"
+      },
+      "nav": { "de": "Crew", "en": "Crew", "es": "Equipo" },
       "data": {
         "intro": {
-          "de": "Diese beiden halten uns den Rücken frei. Tippt auf ein Bild, um mehr zu erfahren.",
-          "en": "These two have our backs. Tap a picture to learn more.",
-          "es": "Estos dos nos cubren las espaldas. Toca una foto para saber más."
+          "de": "Vier Menschen, ohne die dieser Tag nur halb so gut geplant wäre – und halb so lustig. Mit Fragen könnt ihr euch jederzeit an sie wenden.",
+          "en": "Four people without whom this day would be half as well planned – and half as much fun. Feel free to turn to them with any question.",
+          "es": "Cuatro personas sin las que este día estaría la mitad de bien organizado y sería la mitad de divertido. Podéis acudir a ellas con cualquier pregunta."
         },
         "people": [
           {
-            "name": "Pablo Pérez",
-            "role": { "de": "Trauzeuge", "en": "Best man", "es": "Testigo del novio" },
-            "photo": "portrait.png",
+            "name": "Giulia",
+            "role": {
+              "de": "Trauzeugin · Annas Schwester",
+              "en": "Witness · Anna's sister",
+              "es": "Testigo · hermana de Anna"
+            },
+            "photo": "party-1.webp",
             "text": {
-              "de": "Pablo kennt Ben seit der Schulzeit und hat damals den Zug empfohlen.",
-              "en": "Pablo has known Ben since school and recommended that train back then.",
-              "es": "Pablo conoce a Ben desde el colegio y fue quien le recomendó aquel tren."
+              "de": "Giulia ist Annas große Schwester und lebt in Mailand. Früher hat sie Anna die Zöpfe geflochten, heute hilft sie uns, alle Fäden für diesen Tag zusammenzuhalten.\n\nIhr reist aus Italien an? Schreibt ihr einfach, die Adresse steht unten bei Kontakt.",
+              "en": "Giulia is Anna's big sister and lives in Milan. She used to braid Anna's hair; today she's helping us hold all the threads of this day together.\n\nTravelling from Italy? Just write to her – you'll find her address under Contact below.",
+              "es": "Giulia es la hermana mayor de Anna y vive en Milán. De pequeñas le hacía trenzas a Anna; hoy nos ayuda a no perder ningún hilo de este día.\n\n¿Venís desde Italia? Escribidle; encontraréis su dirección más abajo, en Contacto."
+            }
+          },
+          {
+            "name": "Jürgen Müller",
+            "role": {
+              "de": "Trauzeuge · Bens bester Freund",
+              "en": "Witness · Ben's best friend",
+              "es": "Testigo · mejor amigo de Ben"
+            },
+            "photo": "party-2.webp",
+            "text": {
+              "de": "Jürgen und Ben kennen sich seit der ersten Klasse in Kiel und sind jeden Sommer zusammen gesegelt. Er koordiniert die Reden: Wer etwas sagen, singen oder vorführen möchte, meldet sich bitte bei ihm.",
+              "en": "Jürgen and Ben have known each other since first grade in Kiel and went sailing together every summer. He's coordinating the speeches: if you'd like to say, sing or perform something, please get in touch with him.",
+              "es": "Jürgen y Ben se conocen desde primero de primaria en Kiel y salían a navegar juntos cada verano. Él coordina los discursos: si queréis decir, cantar o representar algo, hablad con él."
             }
           },
           {
             "name": "María-José García",
-            "role": { "de": "Trauzeugin", "en": "Maid of honour", "es": "Testigo de la novia" },
-            "photo": "portrait.png",
+            "role": {
+              "de": "Gute Laune auf der Tanzfläche",
+              "en": "In charge of the dance floor",
+              "es": "Al mando de la pista de baile"
+            },
             "text": {
-              "de": "María-José ist Annas beste Freundin und hat die Hochzeitsplanung fest im Griff.\n\nFragen zum Ablauf? Sie weiß Bescheid.",
-              "en": "María-José is Anna's best friend and has the wedding planning firmly in hand.\n\nQuestions about the day? She knows.",
-              "es": "María-José es la mejor amiga de Anna y tiene la organización bien controlada.\n\n¿Dudas sobre el día? Ella lo sabe todo."
+              "de": "María-José kommt aus Sevilla und hat mit Anna in ihrer ersten Berliner WG gewohnt. Sie hat versprochen, an diesem Abend niemanden am Rand der Tanzfläche stehen zu lassen – ihr seid gewarnt.",
+              "en": "María-José is from Seville and shared Anna's first flat in Berlin. She has promised not to leave anyone standing at the edge of the dance floor that night – consider yourselves warned.",
+              "es": "María-José es de Sevilla y compartió piso con Anna en su primera etapa en Berlín. Ha prometido no dejar a nadie al borde de la pista esa noche: estáis avisados."
+            }
+          },
+          {
+            "name": "Pablo Pérez",
+            "role": {
+              "de": "Zeremonienmeister",
+              "en": "Master of ceremonies",
+              "es": "Maestro de ceremonias"
+            },
+            "text": {
+              "de": "Pablo ist María-Josés Mann, Bens Kollege im Architekturbüro und der Grund, warum es diese Website auch auf Spanisch gibt. Er führt durch den Abend und hat das Mikrofon – und die Uhr – fest im Griff.",
+              "en": "Pablo is María-José's husband, Ben's colleague at the architecture firm and the reason this website also comes in Spanish. He'll guide us through the evening and has the microphone – and the clock – firmly in hand.",
+              "es": "Pablo es el marido de María-José, compañero de Ben en el estudio de arquitectura y el motivo de que esta web también esté en español. Él conducirá la velada y tiene el micrófono (y el reloj) bajo control."
             }
           }
         ]
@@ -245,90 +452,136 @@
     {
       "id": "dresscode",
       "type": "dresscode",
+      "title": { "de": "Was ziehe ich an?", "en": "What should I wear?", "es": "¿Qué me pongo?" },
+      "nav": { "de": "Dresscode", "en": "Dress code", "es": "Vestimenta" },
       "data": {
         "text": {
-          "de": "Sommerlich elegant. Die Feier ist teilweise draußen auf Rasen – denkt an bequeme Schuhe.",
-          "en": "Summer elegant. Part of the party is outside on grass – think comfortable shoes.",
-          "es": "Elegante de verano. Parte de la fiesta es al aire libre sobre césped – zapatos cómodos."
-        }
+          "de": "Festlich, aber bequem: Wir feiern draußen am See, auf der Wiese und am Steg. Für die Herren gern Anzug oder Leinenanzug, Krawatte freiwillig; für die Damen Kleid, Jumpsuit oder was immer ihr schön findet.\n\nUnsere Farben sind die des Spätsommers am Wolkensee: Seeblau, Terrakotta, Zitronengelb und ein warmes Sandbeige. Ihr müsst euch nicht daran halten – aber wir freuen uns über jeden Farbtupfer.\n\nZwei praktische Tipps: Dünne Absätze versinken gern im Rasen, Blockabsätze oder flache Schuhe sind eure Freunde. Und im September wird es abends am Wasser frisch – packt ein Tuch oder eine Strickjacke ein.",
+          "en": "Festive but comfortable: we'll be celebrating outdoors by the lake, on the lawn and on the jetty. Gentlemen, a suit or a linen suit is perfect, tie optional; ladies, a dress, a jumpsuit or whatever you feel great in.\n\nOur colours are those of late summer on Lake Wolkensee: lake blue, terracotta, lemon yellow and a warm sandy beige. You don't have to stick to them – but we love every splash of colour.\n\nTwo practical tips: thin heels like to sink into the lawn, so block heels or flats are your friends. And in September it gets chilly by the water in the evening – pack a wrap or a cardigan.",
+          "es": "Elegante pero cómodo: lo celebraremos al aire libre junto al lago, sobre la hierba y en el embarcadero. Para ellos, traje o traje de lino, corbata opcional; para ellas, vestido, mono o lo que más os guste.\n\nNuestros colores son los del final del verano en el Wolkensee: azul lago, terracota, amarillo limón y un beige arena cálido. No tenéis que seguirlos, pero nos encanta cualquier toque de color.\n\nDos consejos prácticos: los tacones finos se hunden en el césped, así que mejor tacón ancho o zapato plano. Y en septiembre refresca por la noche junto al agua: traed un chal o una rebeca."
+        },
+        "images": [
+          {
+            "src": "dresscode.webp",
+            "alt": {
+              "de": "Illustration: Farbfelder in Seeblau, Terrakotta, Zitronengelb und Sand, dazu ein Kleid und ein Sakko auf Bügeln",
+              "en": "Illustration: colour swatches in lake blue, terracotta, lemon yellow and sand, with a dress and a jacket on hangers",
+              "es": "Ilustración: muestras de color en azul lago, terracota, amarillo limón y arena, con un vestido y una americana en perchas"
+            }
+          }
+        ]
       }
     },
     {
       "id": "music",
       "type": "music",
+      "title": {
+        "de": "Eure Lieblingslieder",
+        "en": "Your favourite songs",
+        "es": "Vuestras canciones favoritas"
+      },
+      "nav": { "de": "Musik", "en": "Music", "es": "Música" },
       "data": {
         "text": {
-          "de": "Welcher Song bringt euch auf die Tanzfläche? Schreibt ihn auf unsere Playlist.",
-          "en": "Which song gets you on the dance floor? Add it to our playlist.",
-          "es": "¿Qué canción os hace bailar? Añadidla a nuestra lista."
+          "de": "Unsere DJane Lotte legt alles auf, von Italo-Disco bis Neue Deutsche Welle – aber die besten Lieder bringt ihr mit. Welches Lied holt euch garantiert auf die Tanzfläche?\n\nTragt eure Wünsche einfach in unsere gemeinsame Playlist ein.",
+          "en": "Our DJ Lotte plays everything from Italo disco to Neue Deutsche Welle – but the best songs come from you. Which song is guaranteed to get you on the dance floor?\n\nJust add your requests to our shared playlist.",
+          "es": "Nuestra DJ, Lotte, pincha de todo, desde italo disco hasta Neue Deutsche Welle, pero las mejores canciones las traéis vosotros. ¿Qué canción os saca seguro a la pista?\n\nAñadid vuestras peticiones a nuestra playlist compartida."
         },
         "link": {
-          "url": "https://example.com/playlist",
-          "label": { "de": "Zur Playlist", "en": "Open the playlist", "es": "Abrir la lista" }
-        }
-      }
-    },
-    {
-      "id": "dance",
-      "type": "text",
-      "title": { "de": "Let's Dance", "en": "Let's Dance", "es": "Let's Dance" },
-      "data": {
-        "text": {
-          "de": "Nach dem Eröffnungstanz gehört die Tanzfläche euch. Wer mag, übt vorher ein paar Schritte:\n\n[Discofox-Grundschritt](https://example.com/discofox)\n[Walzer für Einsteiger](https://example.com/waltz)",
-          "en": "After the first dance the floor is yours. Feel free to practise a few steps beforehand:\n\n[Discofox basic step](https://example.com/discofox)\n[Waltz for beginners](https://example.com/waltz)",
-          "es": "Después del primer baile, la pista es vuestra. Quien quiera puede ensayar antes unos pasos:\n\n[Paso básico de discofox](https://example.com/discofox)\n[Vals para principiantes](https://example.com/waltz)"
-        },
-        "image": {
-          "src": "garden.png",
-          "alt": {
-            "de": "Platzhalterbild: ein goldener Ring",
-            "en": "Placeholder picture: a golden ring",
-            "es": "Imagen de ejemplo: un anillo dorado"
-          }
+          "url": "https://example.com/playlist/anna-und-ben",
+          "label": { "de": "Zur Playlist", "en": "Open the playlist", "es": "Abrir la playlist" }
         }
       }
     },
     {
       "id": "faq",
       "type": "faq",
-      "title": { "de": "Fragen & Antworten", "en": "Questions & answers", "es": "Preguntas" },
-      "nav": { "de": "Fragen", "en": "FAQ", "es": "Preguntas" },
+      "title": { "de": "Gut zu wissen", "en": "Good to know", "es": "Bueno saberlo" },
+      "nav": { "de": "FAQ", "en": "FAQ", "es": "Preguntas" },
       "data": {
         "items": [
           {
             "q": {
-              "de": "Dürfen Kinder mitkommen?",
-              "en": "Can we bring children?",
-              "es": "¿Podemos traer niños?"
+              "de": "Bis wann müssen wir Bescheid geben?",
+              "en": "When do we need to reply by?",
+              "es": "¿Hasta cuándo podemos responder?"
             },
             "a": {
-              "de": "Wir feiern diesen Tag nur mit Erwachsenen.",
-              "en": "We are celebrating this day with adults only.",
-              "es": "Celebraremos este día solo con adultos."
+              "de": "Bitte sagt uns bis zum 1. Juli 2099 Bescheid, ob ihr dabei seid – am einfachsten über das Formular unten.",
+              "en": "Please let us know by 1 July 2099 whether you can come – the easiest way is the form below.",
+              "es": "Decidnos hasta el 1 de julio de 2099 si venís; lo más fácil es usar el formulario de abajo."
             }
           },
           {
             "q": {
-              "de": "Gibt es Parkplätze?",
-              "en": "Is there parking?",
-              "es": "¿Hay aparcamiento?"
+              "de": "Sind Kinder willkommen?",
+              "en": "Are children welcome?",
+              "es": "¿Pueden venir niños?"
             },
             "a": {
-              "de": "Ja, direkt am Gut Musterhof.",
-              "en": "Yes, right at Gut Musterhof.",
-              "es": "Sí, junto a Gut Musterhof."
+              "de": "Ja, sehr! Nachmittags gibt es eine Spielwiese und ab 19 Uhr eine Kinderbetreuung im Hofladen, mit Filmen, Decken und Popcorn. Gebt eure Kinder bitte bei der Antwort mit an.",
+              "en": "Yes, very much! In the afternoon there's a play meadow, and from 7 pm there's childcare in the farm shop with films, blankets and popcorn. Please include your children in your reply.",
+              "es": "¡Sí, claro! Por la tarde habrá un prado para jugar y, a partir de las 19:00, cuidadoras en la tienda de la granja con películas, mantas y palomitas. Incluid a vuestros hijos en la respuesta, por favor."
             }
           },
           {
             "q": {
-              "de": "Bis wann sollen wir zusagen?",
-              "en": "When should we reply?",
-              "es": "¿Hasta cuándo confirmamos?"
+              "de": "Wie kommen wir von der Trauung zur Feier?",
+              "en": "How do we get from the ceremony to the party?",
+              "es": "¿Cómo llegamos de la ceremonia a la fiesta?"
             },
             "a": {
-              "de": "Bitte bis zum 1. Mai 2099.",
-              "en": "Please by 1 May 2099.",
-              "es": "Por favor, antes del 1 de mayo de 2099."
+              "de": "Mit unseren Shuttlebussen: Sie fahren um 12:30 Uhr an der Villa Lindenufer ab und bringen euch um 22:30 Uhr und um 01:30 Uhr zurück nach Berlin. Wer mit dem Auto kommt, kann am Gut parken.",
+              "en": "On our shuttle buses: they leave Villa Lindenufer at 12:30 and bring you back to Berlin at 22:30 and at 01:30. If you come by car, you can park at the estate.",
+              "es": "En nuestros autobuses: salen de la Villa Lindenufer a las 12:30 y os traen de vuelta a Berlín a las 22:30 y a la 01:30. Si venís en coche, podéis aparcar en la finca."
+            }
+          },
+          {
+            "q": {
+              "de": "Wir essen vegetarisch, vegan oder haben eine Allergie. Geht das?",
+              "en": "We're vegetarian, vegan or have an allergy. Is that okay?",
+              "es": "Somos vegetarianos, veganos o tenemos alguna alergia. ¿Hay problema?"
+            },
+            "a": {
+              "de": "Na klar. Schreibt es einfach in eure Antwort, dann sprechen wir es mit der Küche ab.",
+              "en": "Of course. Just mention it in your reply and we'll sort it out with the kitchen.",
+              "es": "Ninguno. Indicadlo en vuestra respuesta y lo hablamos con la cocina."
+            }
+          },
+          {
+            "q": {
+              "de": "Kann man im See baden?",
+              "en": "Can we swim in the lake?",
+              "es": "¿Se puede nadar en el lago?"
+            },
+            "a": {
+              "de": "Wer sich traut: Der Wolkensee hat Ende September noch etwa 17 Grad, am Steg gibt es eine Leiter. Handtücher legen wir bereit, Badesachen bringt ihr selbst mit.",
+              "en": "If you dare: at the end of September Lake Wolkensee is still about 17 degrees, and there's a ladder at the jetty. We'll put out towels; swimwear is up to you.",
+              "es": "Si os atrevéis: a finales de septiembre el Wolkensee todavía está a unos 17 grados y en el embarcadero hay una escalerilla. Nosotros ponemos las toallas; el bañador lo traéis vosotros."
+            }
+          },
+          {
+            "q": {
+              "de": "Wo können wir übernachten?",
+              "en": "Where can we stay?",
+              "es": "¿Dónde podemos dormir?"
+            },
+            "a": {
+              "de": "In Kranichwiese gibt es zwei Unterkünfte mit Zimmerkontingent, in Berlin ein Hotel nahe der Villa. Ihr findet alle drei oben unter „Übernachtung“.",
+              "en": "There are two places with reserved rooms in Kranichwiese and a hotel near the villa in Berlin. You'll find all three above under “Where to stay”.",
+              "es": "En Kranichwiese hay dos alojamientos con habitaciones reservadas y en Berlín un hotel cerca de la villa. Los tres están más arriba, en «Alojamiento»."
+            }
+          },
+          {
+            "q": {
+              "de": "Wir sprechen kein Deutsch. Ist das ein Problem?",
+              "en": "We don't speak German. Is that a problem?",
+              "es": "No hablamos alemán. ¿Es un problema?"
+            },
+            "a": {
+              "de": "Überhaupt nicht! An diesem Tag wird Deutsch, Italienisch, Spanisch und Englisch gesprochen, notfalls auch mit Händen und Füßen. Pablo moderiert zweisprachig.",
+              "en": "Not at all! German, Italian, Spanish and English will all be spoken that day – and hands and feet if needed. Pablo will host in two languages.",
+              "es": "¡Para nada! Ese día se hablará alemán, italiano, español e inglés, y si hace falta, por señas. Pablo presentará en dos idiomas."
             }
           }
         ]
@@ -337,12 +590,12 @@
     {
       "id": "gifts",
       "type": "gifts",
-      "title": { "de": "Geschenke", "en": "Gifts", "es": "Regalos" },
+      "title": { "de": "Ein kleiner Wunsch", "en": "A small wish", "es": "Un pequeño deseo" },
       "data": {
         "text": {
-          "de": "Das größte Geschenk ist, dass ihr dabei seid. Wer uns darüber hinaus etwas schenken möchte: sprecht uns gerne an.",
-          "en": "Having you with us is the greatest gift. If you would like to give us something beyond that, just ask us.",
-          "es": "El mejor regalo es que estéis con nosotros. Si queréis regalarnos algo más, preguntadnos."
+          "de": "Ihr seid da – mehr wünschen wir uns eigentlich nicht. Wer uns trotzdem eine Freude machen möchte: Wir sparen auf eine Hochzeitsreise mit dem Nachtzug quer durch Italien, bis hinunter nach Sizilien.\n\nAuf dem Gut steht dafür eine alte Reisekiste bereit, in die ihr Karten und Umschläge legen könnt.",
+          "en": "You being there is really all we wish for. If you'd still like to give us something: we're saving for a honeymoon by night train right across Italy, all the way down to Sicily.\n\nThere'll be an old travel trunk at the estate where you can leave cards and envelopes.",
+          "es": "Que estéis allí es, de verdad, todo lo que deseamos. Si aun así queréis tener un detalle: estamos ahorrando para un viaje de novios en tren nocturno atravesando Italia, hasta Sicilia.\n\nEn la finca habrá un viejo baúl de viaje donde podréis dejar tarjetas y sobres."
         }
       }
     },
@@ -351,21 +604,23 @@
       "type": "contact",
       "data": {
         "intro": {
-          "de": "Fragen? Meldet euch jederzeit bei uns.",
-          "en": "Questions? Get in touch any time.",
-          "es": "¿Preguntas? Escribidnos cuando queráis."
+          "de": "Fragen zur Hochzeit? Giulia und Jürgen helfen euch gern weiter – oder schreibt uns direkt.",
+          "en": "Questions about the wedding? Giulia and Jürgen are happy to help – or write to us directly.",
+          "es": "¿Tenéis preguntas sobre la boda? Giulia y Jürgen os ayudan encantados, o escribidnos directamente."
         },
         "people": [
           {
-            "name": "Anna",
-            "phone": "+49 151 00000000",
-            "email": "anna@example.com",
-            "whatsapp": "+49 151 00000000"
+            "name": "Giulia",
+            "email": "giulia@example.com"
           },
           {
-            "name": "Ben",
-            "phone": "+49 151 11111111",
-            "email": "ben@example.com"
+            "name": "Jürgen Müller",
+            "phone": "+49 30 23125 187",
+            "whatsapp": "+49 30 23125 187"
+          },
+          {
+            "name": "Anna & Ben",
+            "email": "anna.ben@example.com"
           }
         ]
       }
@@ -376,26 +631,26 @@
       "nav": { "de": "Zusagen", "en": "RSVP", "es": "Confirmar" },
       "data": {
         "intro": {
-          "de": "Wir freuen uns auf eure Antwort – auch wenn ihr nicht kommen könnt.",
-          "en": "We look forward to your reply – even if you can't make it.",
-          "es": "Esperamos vuestra respuesta, aunque no podáis venir."
+          "de": "Ein kurzes Ja oder Nein genügt – beides hilft uns beim Planen. Bis zur Antwortfrist könnt ihr eure Antwort jederzeit ändern.",
+          "en": "A quick yes or no is all we need – both help us plan. You can change your reply at any time until the deadline.",
+          "es": "Basta con un sí o un no: las dos respuestas nos ayudan a organizarnos. Podéis cambiar vuestra respuesta cuando queráis hasta la fecha límite."
         }
       }
     }
   ],
   "privacy": {
     "controllers": [
-      { "name": "Anna", "address": "Beispielweg 1\n99999 Musterstadt" },
-      { "name": "Ben", "address": "Beispielweg 1\n99999 Musterstadt" }
+      { "name": "Anna", "address": "Beispielstraße 7\n12045 Berlin" },
+      { "name": "Ben", "address": "Beispielstraße 7\n12045 Berlin" }
     ],
-    "email": "anna@example.com",
+    "email": "anna.ben@example.com",
     "extra": [
       {
         "title": { "de": "Fotos", "en": "Photos", "es": "Fotos" },
         "text": {
-          "de": "Auf der Feier wird fotografiert. Wenn ihr nicht auf Fotos sein möchtet, sagt es uns oder dem Fotografen einfach.",
-          "en": "Photos will be taken at the party. If you'd rather not be in them, just tell us or the photographer.",
-          "es": "En la fiesta se harán fotos. Si preferís no salir en ellas, decídnoslo a nosotros o al fotógrafo."
+          "de": "Am Hochzeitstag fotografiert unsere Fotografin Frieda. Die Bilder teilen wir nur mit unseren Gästen über einen privaten Link. Wenn ihr nicht auf Fotos erscheinen möchtet, sagt ihr oder uns einfach Bescheid.",
+          "en": "Our photographer Frieda will take pictures on the wedding day. We'll share them only with our guests via a private link. If you'd rather not appear in photos, just tell her or us.",
+          "es": "El día de la boda, nuestra fotógrafa Frieda hará fotos. Solo las compartiremos con nuestros invitados mediante un enlace privado. Si preferís no salir en las fotos, decídselo a ella o a nosotros."
         }
       }
     ]

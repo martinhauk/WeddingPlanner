@@ -152,7 +152,7 @@ describe('findDates', () => {
     // The verb "may" (and "march", "august" as words) next to a number is no date.
     ['en', 'Children under 12 may come for free.'],
     ['en', 'You may 2 or 3 times change your reply.'],
-    ['en', 'Afterwards we march 5 minutes to the barn.'],
+    ['en', 'Afterwards we march 5 minutes to the garden.'],
     ['en', 'An august 4 piece band plays.'],
   ] as const)('finds no date in %s: %j', (language, text) => {
     expect(findDates(text, language)).toEqual([]);
@@ -160,19 +160,19 @@ describe('findDates', () => {
 });
 
 describe('RSVP deadline consistency', () => {
-  // The sample: deadline 2099-05-01T23:59:00+02:00 (Europe/Berlin), rsvpDeadline 2099-05-01, a
-  // FAQ answer "Bitte bis zum 1. Mai 2099." and the wedding on 2099-06-20.
+  // The sample: deadline 2099-07-01T23:59:00+02:00 (Europe/Berlin), rsvpDeadline 2099-07-01, the
+  // first FAQ answer names 1 July 2099, and the wedding is on 2099-09-26.
   const deadline = (value: string) => set('instance.json', ['rsvp', 'deadline'], value);
 
   it('rejects a displayed deadline (rsvpDeadline) that is not the enforced one', async () => {
-    expect(await findings([set('site-content.json', ['rsvpDeadline'], '2099-05-02')])).toEqual({
+    expect(await findings([set('site-content.json', ['rsvpDeadline'], '2099-07-02')])).toEqual({
       ok: false,
       diagnostics: ['error E_RSVP_DEADLINE site-content.json $.rsvpDeadline'],
     });
   });
 
   it('accepts the day before a deadline at midnight, and no display date at all', async () => {
-    expect(await findings([deadline('2099-05-02T00:00:00+02:00')])).toEqual({
+    expect(await findings([deadline('2099-07-02T00:00:00+02:00')])).toEqual({
       ok: true,
       diagnostics: [],
     });
@@ -183,11 +183,11 @@ describe('RSVP deadline consistency', () => {
   });
 
   it('compares in the deadline time zone', async () => {
-    // 2099-05-01T23:30 in New York is already 2 May in Berlin.
-    expect(await findings([deadline('2099-05-01T23:30:00-04:00')])).toMatchObject({ ok: false });
+    // 2099-07-01T23:30 in New York is already 2 July in Berlin.
+    expect(await findings([deadline('2099-07-01T23:30:00-04:00')])).toMatchObject({ ok: false });
     expect(
       await findings([
-        deadline('2099-05-01T23:30:00-04:00'),
+        deadline('2099-07-01T23:30:00-04:00'),
         set('instance.json', ['rsvp', 'timeZone'], 'America/New_York'),
       ]),
     ).toEqual({ ok: true, diagnostics: [] });
@@ -195,7 +195,7 @@ describe('RSVP deadline consistency', () => {
 
   it('warns about a text on replying that names another date (FAQ answer, every language)', async () => {
     const faq = await sectionIndex('faq');
-    const answer = `$.sections[${faq}].data.items[2].a`;
+    const answer = `$.sections[${faq}].data.items[0].a`;
     expect(
       await findings([
         deadline('2099-04-15T23:59:00+02:00'),
@@ -232,7 +232,7 @@ describe('RSVP deadline consistency', () => {
         set(
           'site-content.json',
           at(rsvp, 'intro'),
-          'Antwortet bis 1. Mai, wir feiern am 20. Juni.',
+          'Antwortet bis 1. Juli, wir feiern am 26. September.',
         ),
         set('site-content.json', at(story, 'text'), 'Am 3. März 2090 haben wir uns kennengelernt.'),
       ]),
@@ -270,7 +270,7 @@ describe('RSVP deadline consistency', () => {
     const story = await sectionIndex('story');
     const text = (value: string) =>
       set('site-content.json', ['sections', story, 'data', 'text', 'en'], value);
-    expect(await findings([text('Children under 12 may come; please reply by 1 May.')])).toEqual({
+    expect(await findings([text('Children under 12 may come; please reply by 1 July.')])).toEqual({
       ok: true,
       diagnostics: [],
     });

@@ -87,7 +87,7 @@ describe('titles and navigation', () => {
   it('takes the title, else the default heading of the type', () => {
     expect(sectionTitle(sections.locations, 'en')).toBe('Travel');
     expect(sectionTitle(sections.story, 'en')).toBe('Our story');
-    expect(sectionTitle(sections.dance, 'es')).toBe("Let's Dance");
+    expect(sectionTitle(sections.tips, 'es')).toBe('Schon am Freitag in Berlin?');
   });
 
   it('leaves a text section without title out of the heading and the navigation', () => {

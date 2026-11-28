@@ -16,14 +16,16 @@ describe('t', () => {
 describe('dates', () => {
   it('formats in the event time zone, not the visitor’s', () => {
     // 23:30 UTC is already the next day in Berlin.
-    expect(formatDate('2099-06-19T23:30:00Z', 'de', 'Europe/Berlin', 'long')).toBe('20. Juni 2099');
-    expect(formatDate('2099-06-19T23:30:00Z', 'en', 'UTC', 'long')).toBe('June 19, 2099');
+    expect(formatDate('2099-09-11T23:30:00Z', 'de', 'Europe/Berlin', 'long')).toBe(
+      '12. September 2099',
+    );
+    expect(formatDate('2099-09-11T23:30:00Z', 'en', 'UTC', 'long')).toBe('September 11, 2099');
   });
 
   it('shows the content deadline as a calendar date, else the enforced deadline', () => {
-    const build = { rsvpDeadline: '2099-04-30T22:30:00.000Z', rsvpTimeZone: 'Europe/Berlin' };
-    expect(formatDeadline({ rsvpDeadline: '2099-05-01' }, build, 'es')).toBe('1 de mayo de 2099');
-    expect(formatDeadline({}, build, 'de')).toBe('1. Mai 2099');
+    const build = { rsvpDeadline: '2099-02-28T23:30:00.000Z', rsvpTimeZone: 'Europe/Berlin' };
+    expect(formatDeadline({ rsvpDeadline: '2099-03-01' }, build, 'es')).toBe('1 de marzo de 2099');
+    expect(formatDeadline({}, build, 'de')).toBe('1. März 2099');
   });
 });
 

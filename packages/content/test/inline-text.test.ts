@@ -5,11 +5,11 @@ describe('parseInline', () => {
   it('splits text into plain runs and https, mailto: and tel: links', () => {
     expect(
       parseInline(
-        'Videos: [Salsa](https://example.com/watch?v=a1&t=2) or [mail](mailto:anna@example.com), [call](tel:+49 151 000-000).',
+        'Videos: [Tango](https://example.com/watch?v=a1&t=2) or [mail](mailto:anna@example.com), [call](tel:+49 151 000-000).',
       ),
     ).toEqual([
       { text: 'Videos: ' },
-      { text: 'Salsa', href: 'https://example.com/watch?v=a1&t=2' },
+      { text: 'Tango', href: 'https://example.com/watch?v=a1&t=2' },
       { text: ' or ' },
       { text: 'mail', href: 'mailto:anna@example.com' },
       { text: ', ' },

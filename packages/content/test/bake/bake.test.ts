@@ -1,9 +1,8 @@
-import { readdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { copyFile, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { bake, DEFAULT_SITE_URL } from '../../src/node/bake/index.ts';
 import { DEFAULT_INSTANCE_DIR } from '../../src/node/paths.ts';
-import { encodePng } from '../../src/node/png.ts';
 import { buildInfoSchema, versionInfoSchema } from '../../src/schema/build.ts';
 import { mediaManifestSchema } from '../../src/schema/media.ts';
 import { readAllText, sampleWith, set, tempDir, unset } from '../helpers/fixtures.ts';
@@ -47,7 +46,7 @@ describe('bake: the sample instance for e2e', () => {
     expect(build).toEqual({
       siteUrl: 'https://wedding.example.com',
       features: { rsvp: true, admin: true },
-      rsvpDeadline: '2099-05-01T21:59:00.000Z',
+      rsvpDeadline: '2099-07-01T21:59:00.000Z',
       rsvpTimeZone: 'Europe/Berlin',
       regions: { app: 'westus2', data: 'germanywestcentral' },
     });
@@ -69,15 +68,25 @@ describe('bake: the sample instance for e2e', () => {
 
     const generated = path.join(webDir, 'src', 'content', 'generated');
     const manifest = mediaManifestSchema.parse(await readJson(path.join(generated, 'media.json')));
-    expect(Object.keys(manifest.items)).toEqual(['garden.png', 'hero.png', 'portrait.png']);
-    expect(manifest.items['hero.png']).toMatchObject({ width: 1600, height: 900 });
+    expect(Object.keys(manifest.items)).toEqual([
+      'berlin-tips.webp',
+      'dresscode.webp',
+      'hero.webp',
+      'party-1.webp',
+      'party-2.webp',
+      'story-1.webp',
+      'story-2.webp',
+      'story-3.webp',
+      'welcome.webp',
+    ]);
+    expect(manifest.items['berlin-tips.webp']).toMatchObject({ width: 1600, height: 1067 });
 
     const copied = await readdir(path.join(webDir, 'public', 'content', 'media'));
-    expect(copied).toHaveLength(3);
+    expect(copied).toHaveLength(9);
     for (const [id, item] of Object.entries(manifest.items)) {
       expect(item.variants).toHaveLength(1);
       const [variant] = item.variants;
-      expect(variant?.src).toMatch(/^\/content\/media\/[0-9a-f]{20}\.png$/);
+      expect(variant?.src).toMatch(/^\/content\/media\/[0-9a-f]{20}\.webp$/);
       const file = path.join(webDir, 'public', variant?.src ?? '');
       const source = path.join(DEFAULT_INSTANCE_DIR, 'media', id);
       expect(await readFile(file)).toEqual(await readFile(source));
@@ -87,7 +96,7 @@ describe('bake: the sample instance for e2e', () => {
       'src/content/generated/site.json',
       'src/content/generated/media.json',
       'src/content/generated/build.json',
-      ...copied.map((name) => `public/content/media/${name}`).sort(),
+      ...Object.values(manifest.items).map((item) => `public${item.variants[0]?.src}`),
       'public/version.json',
     ]);
   });
@@ -177,9 +186,9 @@ describe('bake: environments', () => {
       instanceDir: await sampleWith(set('site-content.json', ['tagline', 'en'], 'Save the date')),
     });
     const mediaDir = await sampleWith();
-    await writeFile(
-      path.join(mediaDir, 'media', 'hero.png'),
-      encodePng(2, 2, () => [1, 2, 3]),
+    await copyFile(
+      path.join(mediaDir, 'media', 'party-1.webp'),
+      path.join(mediaDir, 'media', 'hero.webp'),
     );
     const media = await bakeSample({ instanceDir: mediaDir });
     if (!base.result.ok || !text.result.ok || !page.result.ok || !media.result.ok) {
@@ -207,7 +216,7 @@ describe('bake: privacy', () => {
     expect(result.ok).toBe(true);
 
     const files = await readAllText(webDir);
-    expect(files.size).toBe(7);
+    expect(files.size).toBe(13);
     for (const [file, content] of files) {
       for (const forbidden of [
         alert,

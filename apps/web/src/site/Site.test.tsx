@@ -30,7 +30,7 @@ describe('Site', () => {
     render(<Site content={content} build={build} initialLanguage="de" />);
     expect(screen.getByRole('heading', { level: 1, name: 'Anna & Ben' })).toBeInTheDocument();
     expect(screen.getByText('Wir heiraten')).toBeInTheDocument();
-    expect(screen.getByText('Samstag, 20. Juni 2099')).toBeInTheDocument();
+    expect(screen.getByText('Samstag, 26. September 2099')).toBeInTheDocument();
     expect(screen.getByRole('timer')).toBeInTheDocument();
     expect(document.title).toBe('Anna & Ben');
   });
@@ -43,7 +43,7 @@ describe('Site', () => {
       'Anreise',
       'Trauzeugen',
       'Musik',
-      "Let's Dance",
+      'Schon am Freitag in Berlin?',
       'Fragen',
       'Geschenke',
       'Kontakt',
@@ -151,7 +151,7 @@ describe('Site', () => {
       ['Anreise', '#travel'],
       ['Trauzeugen', '#wedding-party'],
       ['Musik', '#music'],
-      ["Let's Dance", '#dance'],
+      ['Schon am Freitag in Berlin?', '#berlin-tips'],
       ['Fragen', '#faq'],
       ['Geschenke', '#gifts'],
       ['Kontakt', '#contact'],

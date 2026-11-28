@@ -30,8 +30,8 @@ describe('Contact', () => {
 describe('text sections', () => {
   it('splits story text into paragraphs', () => {
     render(<Story section={sections.story} ctx={ctx} />);
-    expect(screen.getByText('Wir trafen uns im Zug.')).toHaveClass('lead');
-    expect(screen.getByText('Seitdem reisen wir zusammen.')).toHaveClass('lead');
+    expect(screen.getByText('Wir trafen uns im Gemeinschaftsgarten.')).toHaveClass('lead');
+    expect(screen.getByText('Seitdem gießen wir zusammen.')).toHaveClass('lead');
   });
 
   it('shows the music link with the default label', () => {

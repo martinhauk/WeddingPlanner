@@ -354,13 +354,13 @@ describe('sample content', () => {
         { id: 'story', type: 'story' },
         { id: 'secret', type: 'faq', visible: false },
         { id: 'note', type: 'text' },
-        { id: 'dance', type: 'text', nav: { de: 'Tanz' } },
+        { id: 'tips', type: 'text', nav: { de: 'Tipps' } },
       ],
     });
     assert.deepEqual(parsed.sections, [
       { id: 'story', type: 'story', hasHeading: true, inNav: true },
       { id: 'note', type: 'text', hasHeading: false, inNav: false },
-      { id: 'dance', type: 'text', hasHeading: false, inNav: true },
+      { id: 'tips', type: 'text', hasHeading: false, inNav: true },
     ]);
     assert.throws(() => parseSample({ couple: {}, sections: [] }), /no couple/);
     assert.throws(

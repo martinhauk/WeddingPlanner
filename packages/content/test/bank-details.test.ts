@@ -78,7 +78,7 @@ describe('containsBankDetails', () => {
     // dates and times
     '01.05.2099',
     '2099-05-01T23:59:00+02:00',
-    'Am 20. Juni 2099 ab 18:30 Uhr',
+    'Am 26. September 2099 ab 18:00 Uhr',
     // postcodes and addresses
     '99999 Musterstadt',
     'DE-99999 Musterstadt',
@@ -91,7 +91,7 @@ describe('containsBankDetails', () => {
     'Booking code AB12-CD34-EF56-GH78',
     // hyphenated codes, dates and phone numbers
     'DE-99999 Musterstadt, Tel. +49-151-0000-0000',
-    'Am 2099-06-20, Tisch A12-B34',
+    'Am 2099-09-26, Tisch A12-B34',
     'Ticket DE12-3456-7890',
     // a BIC without its label, or the label without a code
     'COBADEFFXXX',

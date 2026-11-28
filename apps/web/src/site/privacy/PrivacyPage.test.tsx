@@ -31,7 +31,7 @@ describe('PrivacyPage', () => {
       ),
     ).toBeInTheDocument();
     expect(controller.querySelector('address')?.textContent).toBe(
-      'Anna\nBeispielweg 1\n99999 Musterstadt',
+      'Anna\nBeispielstraße 7\n12045 Berlin',
     );
     expect(within(controller).getByRole('link', { name: 'anna@example.com' })).toHaveAttribute(
       'href',
@@ -162,7 +162,7 @@ describe('PrivacyPage', () => {
     renderPage();
     expect(
       within(block('Wie lange wir Daten speichern')).getByText(
-        /Wir löschen alle Antworten und Gästedaten spätestens am 30\. September 2099\./,
+        /Wir löschen alle Antworten und Gästedaten spätestens am 31\. Dezember 2099\./,
       ),
     ).toBeVisible();
   });
@@ -174,7 +174,7 @@ describe('PrivacyPage', () => {
         privacy: {
           controllers: [{ name: 'Anna' }],
           email: 'anna@example.com',
-          deleteBy: '2099-12-31',
+          deleteBy: '2100-03-15',
           imprint: { de: 'Anna\nBeispielweg 1, 99999 Musterstadt', en: 'Anna (imprint)' },
         },
       },
@@ -185,7 +185,7 @@ describe('PrivacyPage', () => {
         'The controller of your data under the General Data Protection Regulation (GDPR) is Anna.',
       ),
     ).toBeVisible();
-    expect(screen.getByText(/by December 31, 2099 at the latest/)).toBeVisible();
+    expect(screen.getByText(/by March 15, 2100 at the latest/)).toBeVisible();
     const imprint = block('Legal notice');
     expect(imprint).toHaveAttribute('id', 'impressum');
     expect(within(imprint).getByText('Anna (imprint)')).toBeVisible();
@@ -348,7 +348,7 @@ describe('PrivacyPage', () => {
       ),
     ).toBeVisible();
     expect(screen.queryByRole('link', { name: /@/ })).toBeNull();
-    expect(screen.getByText(/30\. September 2099/)).toBeVisible();
+    expect(screen.getByText(/31\. Dezember 2099/)).toBeVisible();
   });
 
   it.each(LANGS)('is complete in %s: every placeholder filled, a back link to the page', (lang) => {
