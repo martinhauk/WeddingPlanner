@@ -37,6 +37,7 @@ area:ops|bfd4f2|Operations scripts and runbooks
 type:feature|a2eeef|New functionality
 type:chore|ededed|Tooling, setup, maintenance
 type:bug|d73a4a|Something does not work as documented
+type:epic|3e1f8c|A product capability for couples; parent of features and tasks
 priority:critical-path|b60205|On the critical path to RSVP go-live
 needs:owner|d93f0b|Blocked on a manual step by the owner
 blocked|e99695|Waiting for another issue or an external dependency

@@ -13,17 +13,18 @@ one, and set the old one's status to `Superseded by ADR NNNN`.
 
 ## Index
 
-| ADR                                                  | Decision                                                                   | Status                 |
-| ---------------------------------------------------- | -------------------------------------------------------------------------- | ---------------------- |
-| [0001](0001-hosting-azure-static-web-apps.md)        | Host on Azure Static Web Apps Free with a managed .NET 10 isolated API     | Accepted               |
-| [0002](0002-azure-table-storage.md)                  | Store runtime data in Azure Table Storage                                  | Accepted               |
-| [0003](0003-private-instance-repo-baked-at-build.md) | Content and config in a private instance repo, baked into the static build | Accepted               |
-| [0004](0004-environments-e2e-test-production.md)     | Build once, promote through e2e → test → production                        | Amended by ADR 0012    |
-| [0005](0005-feature-flags-per-environment.md)        | Per-environment feature flags enforced in UI and API                       | Accepted               |
-| [0006](0006-azure-regions.md)                        | Data in germanywestcentral, Static Web Apps in westus2 (was westeurope)    | Accepted               |
-| [0007](0007-biome-for-lint-and-format.md)            | Biome v2 for linting and formatting TS/JS                                  | Accepted               |
-| [0008](0008-azurite-via-docker-compose.md)           | Azurite via docker compose for storage integration tests                   | Accepted               |
-| [0009](0009-merge-policy.md)                         | Lead agent squash-merges after green CI and reviewer-agent approval        | Superseded by ADR 0010 |
-| [0010](0010-working-process.md)                      | Every change through a PR, CI gates every deploy, the owner merges         | Accepted               |
-| [0011](0011-client-ip.md)                            | No client-IP header on the managed API; rate limits trust no header        | Accepted               |
-| [0012](0012-production-off-until-first-customer.md)  | No live customer yet: production off, e2e and test on the fictional couple | Accepted               |
+| ADR                                                    | Decision                                                                   | Status                 |
+| ------------------------------------------------------ | -------------------------------------------------------------------------- | ---------------------- |
+| [0001](0001-hosting-azure-static-web-apps.md)          | Host on Azure Static Web Apps Free with a managed .NET 10 isolated API     | Accepted               |
+| [0002](0002-azure-table-storage.md)                    | Store runtime data in Azure Table Storage                                  | Accepted               |
+| [0003](0003-private-instance-repo-baked-at-build.md)   | Content and config in a private instance repo, baked into the static build | Accepted               |
+| [0004](0004-environments-e2e-test-production.md)       | Build once, promote through e2e → test → production                        | Amended by ADR 0012    |
+| [0005](0005-feature-flags-per-environment.md)          | Per-environment feature flags enforced in UI and API                       | Accepted               |
+| [0006](0006-azure-regions.md)                          | Data in germanywestcentral, Static Web Apps in westus2 (was westeurope)    | Accepted               |
+| [0007](0007-biome-for-lint-and-format.md)              | Biome v2 for linting and formatting TS/JS                                  | Accepted               |
+| [0008](0008-azurite-via-docker-compose.md)             | Azurite via docker compose for storage integration tests                   | Accepted               |
+| [0009](0009-merge-policy.md)                           | Lead agent squash-merges after green CI and reviewer-agent approval        | Superseded by ADR 0010 |
+| [0010](0010-working-process.md)                        | Every change through a PR, CI gates every deploy, the owner merges         | Amended by ADR 0013    |
+| [0011](0011-client-ip.md)                              | No client-IP header on the managed API; rate limits trust no header        | Accepted               |
+| [0012](0012-production-off-until-first-customer.md)    | No live customer yet: production off, e2e and test on the fictional couple | Accepted               |
+| [0013](0013-every-change-starts-from-an-open-issue.md) | Every change starts from an open issue; required `pr-policy` check         | Accepted               |

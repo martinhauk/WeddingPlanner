@@ -1,0 +1,30 @@
+name: Chore
+description: A small standalone change (tooling, docs, maintenance) outside a planned task.
+title: "chore: "
+labels: ["type:chore"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This repository is **public**. Do not include real names, places, dates, photos, emails,
+        phone numbers, hostnames or secrets. Use the fictional samples (Anna & Ben, Pablo Pérez,
+        María-José García, Jürgen Müller, example.com).
+
+        No work without an open issue: create this issue before you start, put it on the board,
+        and link it from the PR with `Closes #N`.
+  - type: textarea
+    id: what-and-why
+    attributes:
+      label: What and why
+      description: What changes, and why it is worth doing now.
+    validations:
+      required: true
+  - type: textarea
+    id: done-when
+    attributes:
+      label: Done when
+      description: How to tell that the chore is finished.
+      value: |
+        - [ ]
+    validations:
+      required: true

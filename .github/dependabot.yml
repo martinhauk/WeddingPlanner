@@ -2,7 +2,8 @@
 # one PR per major update. Security updates are not delayed by the cooldown.
 #
 # Commit messages (and so PR titles) are Conventional Commits that pass the PR-title check in
-# ci.yml: `build(deps): bump …` for packages and images, `ci(deps): bump …` for actions.
+# pr-policy.yml: `build(deps): bump …` for packages and images, `ci(deps): bump …` for actions.
+# Dependabot's PRs are exempt from its linked-issue check (ADR 0013).
 # Tool binaries pinned inside ci.yml (actionlint, shellcheck, gitleaks, Bicep) are not covered;
 # bump them by hand together with their SHA-256.
 version: 2

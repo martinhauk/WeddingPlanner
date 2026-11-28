@@ -1,0 +1,96 @@
+# PR policy (ADR 0013). The job `pr-policy` is the second required check of the `main` ruleset
+# (.github/rulesets/main.json), next to `ci-ok` from ci.yml. It also runs when the PR title or
+# body is edited, so fixing either re-runs this check without the full CI.
+#
+# - PR title: a Conventional Commit summary (docs/conventions/git-and-pull-requests.md);
+#   Dependabot's "Bump" titles pass with a valid prefix.
+# - Linked issue: the PR body links at least one open issue of this repository (Closes, Fixes,
+#   Resolves or Refs #N) that is neither a pull request nor an epic (scripts/ci/check-pr-issue.sh,
+#   tested by scripts/ci/tests/ in ci.yml). Dependabot's PRs are exempt.
+#
+# Security: pull_request only, never pull_request_target; no secrets; a read-only token that may
+# read issues. The title and body reach the scripts through env: only, never interpolated into
+# a run: script.
+name: pr-policy
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - edited
+      - reopened
+      - synchronize
+
+permissions:
+  contents: read
+
+concurrency:
+  # A newer event of the same PR (an edit, a push) cancels the superseded run.
+  group: pr-policy-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  pr-policy:
+    name: pr-policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: read
+    steps:
+      - name: Check out
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: PR title is a Conventional Commit summary
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          # docs/conventions/git-and-pull-requests.md: <type>(<optional scope>): <summary>
+          # Dependabot always capitalises "Bump"; accept its titles as long as the prefix is valid.
+          if [[ $PR_AUTHOR == 'dependabot[bot]' && $PR_TITLE =~ ^(build|ci)\(deps\):\ Bump\  ]]; then
+            printf 'PR title (Dependabot): %s\n' "$PR_TITLE"
+            echo "OK: Dependabot title."
+            exit 0
+          fi
+          types='feat|fix|docs|test|refactor|perf|build|ci|chore|revert'
+          scopes='web|api|domain|content|contracts|e2e|infra|ci|ops|docs|deps'
+          pattern="^($types)(\(($scopes)\))?!?: (.+)$"
+          printf 'PR title: %s\n' "$PR_TITLE"
+          if ! [[ $PR_TITLE =~ $pattern ]]; then
+            echo "::error::The PR title must be '<type>(<scope>): <summary>' with a type of ${types//|/, } and an optional scope of ${scopes//|/, }."
+            exit 1
+          fi
+          summary=${BASH_REMATCH[4]}
+          if [[ $summary =~ ^[[:space:]] || $summary =~ [[:space:]]$ ]]; then
+            echo "::error::The PR title summary must not start or end with whitespace."
+            exit 1
+          fi
+          if [[ $summary =~ ^[A-Z][a-z] ]]; then
+            echo "::error::Start the PR title summary in lower case (imperative mood), e.g. 'add …' instead of 'Add …'."
+            exit 1
+          fi
+          if [[ $summary == *. ]]; then
+            echo "::error::The PR title summary must not end with a period."
+            exit 1
+          fi
+          echo "OK: Conventional Commit summary."
+
+      - name: PR body links an open issue (no work without an issue)
+        # Also when the title check failed, so one run reports both problems.
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          REPO: ${{ github.repository }}
+        run: scripts/ci/check-pr-issue.sh

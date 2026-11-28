@@ -423,7 +423,7 @@ main() {
   if [ "$WARNINGS" -gt 0 ]; then
     printf '  %d warning(s); see above.\n' "$WARNINGS"
   fi
-  printf '  Next: protect main with scripts/github/apply-ruleset.sh once the ci-ok check exists.\n'
+  printf '  Next: protect main with scripts/github/apply-ruleset.sh once ci-ok and pr-policy exist.\n'
 }
 
 main "$@"

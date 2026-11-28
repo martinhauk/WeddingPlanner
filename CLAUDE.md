@@ -29,10 +29,11 @@ tests/e2e/                @weddingplanner/e2e: Playwright device matrix, screens
 tools/table-backup/       table export/restore CLI (deploy backups, nightly backup, restore drill)
 samples/instance/         the complete fictional sample instance (Anna & Ben); instance-template/
 infra/                    Bicep: bootstrap/ (owner-run, subscription scope), app/ (CI-run, RG scope)
-scripts/                  owner-run scripts: bootstrap*.sh, github/, ops/, smoke/
+scripts/                  owner-run scripts: bootstrap*.sh, github/, ops/, smoke/; ci/: CI checks
 docs/                     architecture.md, local-development.md, api.md, conventions/, adr/,
                           runbooks/, privacy/
-.github/                  workflows (ci, deploy, backup, uptime), PR/issue templates, rulesets/, CODEOWNERS
+.github/                  workflows (ci, pr-policy, deploy, backup, uptime), PR/issue templates, rulesets/,
+                          CODEOWNERS
 ```
 
 ## Commands
@@ -65,7 +66,7 @@ Tools v4, and a Docker engine (Docker Desktop or OrbStack).
 Before you open a PR, run every check that applies to your change: `pnpm lint`, `pnpm typecheck`,
 `pnpm test`, `pnpm build`, and for .NET changes `dotnet format --verify-no-changes`, build and test.
 Changes to `scripts/github/` also run `scripts/github/tests/run.sh` (fake `gh`, no network) and
-shellcheck.
+shellcheck; changes to `scripts/ci/` run `scripts/ci/tests/check-pr-issue.test.sh` and shellcheck.
 
 **Script contracts.** The root scripts delegate to workspace packages, so packages must provide:
 
@@ -86,20 +87,26 @@ Local stack details (ports, proxy, mock admin sign-in, troubleshooting):
 
 Every change to this repo goes through a PR ([ADR 0010](docs/adr/0010-working-process.md)).
 
-1. One **tracker issue per work package** (WP). PRs link it with **`Closes #N`** (or `Refs #N` while
-   it stays open); the board moves only through that automation.
+1. **No work without an open issue** ([ADR 0013](docs/adr/0013-every-change-starts-from-an-open-issue.md)):
+   one **tracker issue per work package** (WP), and a standalone bug fix, task or chore gets its own
+   issue too. If none exists, create one first and put it on the board. PRs link it with
+   **`Closes #N`** (or `Refs #N` while it stays open); an epic alone does not count. Only
+   Dependabot's version bumps are exempt.
 2. Branch from `origin/main` as **`wp-NN-short-name`** (e.g. `wp-03-write-path-e2e`), or
-   `fix-short-name` outside a WP. One git worktree per agent.
+   `fix-short-name` / `chore-short-name` outside a WP (still with an issue). One git worktree per
+   agent.
 3. Commit with [Conventional Commits](https://www.conventionalcommits.org/) (`feat(web): …`,
    `fix(api): …`, `docs: …`, `ci: …`).
 4. Open a PR: **Conventional Commit title**; body with `Closes #N` / `Refs #N`, the PR template
    checklist, how you verified it, and deviations.
-5. **`ci-ok`** must be green (the only required check).
+5. **`ci-ok`** and **`pr-policy`** must be green (the required checks). `pr-policy` checks the PR
+   title and the linked issue, and re-runs when you edit the title or body.
 6. **Review:** an independent reviewer agent (fresh context: issue + diff only) reviews every PR that
    touches a risky path: `apps/api/src/WeddingPlanner.Api/` `Security/`, `RateLimiting/`,
-   `Features/Rsvp/`, `Features/Admin/`; `infra/`; `.github/workflows/`; `scripts/bootstrap*`,
-   `scripts/ops/`; the privacy text and `docs/privacy/data-inventory.md`. The lead reviews all other
-   PRs. One fix round on the same branch, then a re-check.
+   `Features/Rsvp/`, `Features/Admin/`; `infra/`; `.github/workflows/`, `.github/rulesets/`;
+   `scripts/bootstrap*`, `scripts/ops/`, `scripts/ci/` (a PR runs its own copy of the `pr-policy`
+   check); the privacy text and `docs/privacy/data-inventory.md`. The lead reviews all other PRs.
+   One fix round on the same branch, then a re-check.
 7. **The owner merges**, squash only. Merging deploys: `deploy.yml` runs the full CI on the commit,
    then `e2e` → `test`. `production` is switched off until there is a customer
    ([ADR 0012](docs/adr/0012-production-off-until-first-customer.md)): it runs only while the

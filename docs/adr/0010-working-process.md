@@ -1,6 +1,7 @@
 # ADR 0010: Every change through a PR, CI gates every deploy, the owner merges
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR 0013](0013-every-change-starts-from-an-open-issue.md)
+  (every change starts from an open issue; `pr-policy` is a second required check)
 - **Date:** 2026-11-26
 - **Deciders:** product owner
 - **Supersedes:** [ADR 0009](0009-merge-policy.md)

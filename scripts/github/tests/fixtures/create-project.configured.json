@@ -26,6 +26,11 @@
       "description": "Something does not work as documented"
     },
     {
+      "name": "type:epic",
+      "color": "3E1F8C",
+      "description": "A product capability for couples; parent of features and tasks"
+    },
+    {
       "name": "priority:critical-path",
       "color": "B60205",
       "description": "On the critical path to RSVP go-live"

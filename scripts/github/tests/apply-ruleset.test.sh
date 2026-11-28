@@ -4,7 +4,7 @@
 # The script runs against the fake `gh` of tests/run.sh (tests/fake-gh), which serves canned
 # API responses from tests/fixtures/apply-ruleset.*.json and logs every call, so the tests need
 # no network and change nothing on GitHub. They check the ruleset's contract (the merge policy
-# of ADR 0009), that a missing ruleset is created, that a matching one is left alone
+# of ADR 0010 and ADR 0013), that a missing ruleset is created, that a matching one is left alone
 # (idempotency), that drift is repaired, that --dry-run never writes, and that CI runs and
 # non-admins are refused.
 #
@@ -78,7 +78,7 @@ ruleset_has() { jq -e "$1" "$RULESET" >/dev/null; }
 is_ruleset_file() { [ "$(printf '%s' "$1" | jq -S -c .)" = "$(jq -S -c . "$RULESET")" ]; }
 
 # ---------------------------------------------------------------------------------------
-test_case "main.json: the merge policy of ADR 0009"
+test_case "main.json: the merge policy of ADR 0010 and ADR 0013"
 : >"$LOG"
 check "is named main, active, for branches" ruleset_has \
   '.name == "main" and .enforcement == "active" and .target == "branch"'
@@ -91,10 +91,11 @@ check "requires a PR with 0 approvals, squash merges only, no code-owner review"
   '.rules[] | select(.type == "pull_request") | .parameters
    | .required_approving_review_count == 0 and .allowed_merge_methods == ["squash"]
      and .require_code_owner_review == false'
-check "requires ci-ok from GitHub Actions on an up-to-date branch" ruleset_has \
+check "requires ci-ok and pr-policy from GitHub Actions on an up-to-date branch" ruleset_has \
   '.rules[] | select(.type == "required_status_checks") | .parameters
    | .strict_required_status_checks_policy == true
-     and .required_status_checks == [{context: "ci-ok", integration_id: 15368}]'
+     and .required_status_checks == [{context: "ci-ok", integration_id: 15368},
+                                     {context: "pr-policy", integration_id: 15368}]'
 
 test_case "fresh repository: the ruleset is created"
 run "$FIXTURES/apply-ruleset.fresh.json"
@@ -150,6 +151,29 @@ state=$(variant apply-ruleset.configured.json '
 run "$state"
 check "exits 0" status_is 0
 check "no write calls" no_writes
+
+test_case "a ruleset with the same required checks in another order matches"
+state=$(variant apply-ruleset.configured.json '
+  .["GET repos/acme/wedding-demo/rulesets/101"].rules |= map(
+    if .type == "required_status_checks" then .parameters.required_status_checks |= reverse
+    else . end)')
+run "$state"
+check "exits 0" status_is 0
+check "no write calls" no_writes
+
+test_case "a ruleset that requires only ci-ok gets pr-policy added"
+state=$(variant apply-ruleset.configured.json '
+  .["GET repos/acme/wedding-demo/rulesets/101"].rules |= map(
+    if .type == "required_status_checks"
+    then .parameters.required_status_checks = [{context: "ci-ok", integration_id: 15368}]
+    else . end)')
+run "$state"
+check "exits 0" status_is 0
+check "reports the difference" output_has "update ruleset main (rule required_status_checks differs)"
+check "updates the ruleset with the content of main.json" is_ruleset_file \
+  "$(body 'PUT repos/acme/wedding-demo/rulesets/101')"
+check "exactly one change" [ "$(write_count)" -eq 1 ]
+check "names the next step" output_has "merging waits for ci-ok and pr-policy"
 
 test_case "two rulesets named main: refuses to guess"
 state=$(variant apply-ruleset.configured.json '
