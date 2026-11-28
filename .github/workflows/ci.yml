@@ -1,4 +1,5 @@
-# CI gate (S0-08). The single required check of a PR is `ci-ok` (.github/rulesets/main.json), and
+# CI gate (S0-08). `ci-ok` is one of the two required checks of a PR (.github/rulesets/main.json;
+# the other is `pr-policy`, .github/workflows/pr-policy.yml: PR title and linked issue), and
 # deploy.yml calls this workflow (workflow_call, input `ref` = the commit it deploys) before any
 # environment, so a red CI stops every deploy, also of a commit that bypassed a PR.
 #
@@ -11,8 +12,8 @@
 #                dotnet test including the storage integration tests.
 # - infra:       az bicep build + lint of infra/app and infra/bootstrap, build-params with dummy
 #                values, the offline infra tests.
-# - hygiene:     (every run) PR title, actionlint, shellcheck, gitleaks, dependency review, the
-#                offline tests of the owner-run scripts.
+# - hygiene:     (every run) actionlint, shellcheck, gitleaks, dependency review, the offline
+#                tests of the scripts (scripts/**/tests/). The PR title is checked by pr-policy.yml.
 # - e2e-build → e2e (device matrix) → screenshots: (every run) the sample site is built once and
 #                the harness's own unit tests run, every Playwright device project runs in its own
 #                job against `vite preview` of that build (API mocked), and their screenshots are
@@ -358,42 +359,6 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: PR title is a Conventional Commit summary
-        if: github.event_name == 'pull_request'
-        env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
-          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
-        run: |
-          # docs/conventions/git-and-pull-requests.md: <type>(<optional scope>): <summary>
-          # Dependabot always capitalises "Bump"; accept its titles as long as the prefix is valid.
-          if [[ $PR_AUTHOR == 'dependabot[bot]' && $PR_TITLE =~ ^(build|ci)\(deps\):\ Bump\  ]]; then
-            printf 'PR title (Dependabot): %s\n' "$PR_TITLE"
-            echo "OK: Dependabot title."
-            exit 0
-          fi
-          types='feat|fix|docs|test|refactor|perf|build|ci|chore|revert'
-          scopes='web|api|domain|content|contracts|e2e|infra|ci|ops|docs|deps'
-          pattern="^($types)(\(($scopes)\))?!?: (.+)$"
-          printf 'PR title: %s\n' "$PR_TITLE"
-          if ! [[ $PR_TITLE =~ $pattern ]]; then
-            echo "::error::The PR title must be '<type>(<scope>): <summary>' with a type of ${types//|/, } and an optional scope of ${scopes//|/, }."
-            exit 1
-          fi
-          summary=${BASH_REMATCH[4]}
-          if [[ $summary =~ ^[[:space:]] || $summary =~ [[:space:]]$ ]]; then
-            echo "::error::The PR title summary must not start or end with whitespace."
-            exit 1
-          fi
-          if [[ $summary =~ ^[A-Z][a-z] ]]; then
-            echo "::error::Start the PR title summary in lower case (imperative mood), e.g. 'add …' instead of 'Add …'."
-            exit 1
-          fi
-          if [[ $summary == *. ]]; then
-            echo "::error::The PR title summary must not end with a period."
-            exit 1
-          fi
-          echo "OK: Conventional Commit summary."
-
       - name: Install actionlint, shellcheck and gitleaks (pinned, SHA-256 verified)
         run: |
           bin="$RUNNER_TEMP/bin"
@@ -461,7 +426,7 @@ jobs:
           fail-on-severity: moderate
           comment-summary-in-pr: never
 
-      - name: Offline tests of the owner-run scripts (fake gh and az)
+      - name: Offline tests of the scripts (fake gh, az and curl)
         run: |
           git ls-files ':(glob)scripts/**/tests/**/run.sh' ':(glob)scripts/**/tests/**/*.test.sh' \
             >"$RUNNER_TEMP/suites.txt"

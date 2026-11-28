@@ -12,13 +12,16 @@
 #   --file PATH        ruleset JSON (default: .github/rulesets/main.json next to this script)
 #   --dry-run          only report what would change; make no changes
 #
-# The ruleset (docs/adr/0009-merge-policy.md): changes reach `main` only through a pull
-# request that is squash-merged (linear history) with 0 required approvals, once the `ci-ok`
-# check from GitHub Actions has passed on a branch that is up to date with `main`. Force
-# pushes and deletion are blocked and nobody can bypass it.
+# The ruleset (ADR 0010, amended by ADR 0013): changes reach `main` only through a pull request
+# that is squash-merged (linear history) with 0 required approvals, once the checks `ci-ok`
+# (ci.yml) and `pr-policy` (pr-policy.yml: PR title, linked open issue) from GitHub Actions have
+# passed on a branch that is up to date with `main`. Force pushes and deletion are blocked and
+# nobody can bypass it.
 #
-# Apply it once `ci.yml` has reported `ci-ok` on a pull request, then verify with a test PR
-# that the merge button waits for `ci-ok` and offers squash merging only.
+# Apply it once `ci.yml` and `pr-policy.yml` have reported `ci-ok` and `pr-policy` on a pull
+# request, then verify with a test PR that the merge button waits for both checks and offers
+# squash merging only. A PR opened before pr-policy.yml existed gets the check on its next push
+# or when its title or body is edited.
 #
 # Requires: gh, jq. Compatible with the bash 3.2 that ships with macOS.
 set -euo pipefail
@@ -136,9 +139,13 @@ preflight() {
 # because the update would remove it.
 ruleset_problems() {
   jq -n -r --argjson want "$1" --argjson have "$2" '
-    # Arrays of scalars (merge methods, ref patterns) are compared as sets.
+    # Arrays of scalars (merge methods, ref patterns) and of required status checks are
+    # compared as sets.
     def norm: walk(if type == "array" and all(.[]; type != "object" and type != "array")
-                   then sort else . end);
+                   then sort
+                   elif type == "array" and all(.[]; type == "object" and has("context"))
+                   then sort_by(.context, .integration_id)
+                   else . end);
     # subset(want; have): every field of want exists in have with an equal value.
     def subset($w; $h):
       if ($w | type) == "object" then
@@ -238,7 +245,8 @@ main() {
     printf '  %d change(s) would be made. Re-run without --dry-run to apply them.\n' "$CHANGES"
   else
     printf '  %d change(s) applied. Re-running this script is safe.\n' "$CHANGES"
-    printf '  Next: open a test PR and check that merging waits for ci-ok and offers squash only.\n'
+    printf '  Next: open a test PR and check that merging waits for ci-ok and pr-policy\n'
+    printf '  and offers squash merging only.\n'
   fi
 }
 

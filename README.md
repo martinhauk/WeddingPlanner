@@ -147,9 +147,13 @@ checkout outside this repo. The workflow of the instance repo is in
 ## Contributing
 
 Read [CLAUDE.md](CLAUDE.md) (it applies to humans too) and the [conventions](docs/conventions/README.md).
-Every change is an issue → branch `wp-NN-short-name` (`fix-short-name` outside a work package) → PR
-with a Conventional Commit title and `Closes #N` (or `Refs #N`). CI (`ci-ok`) must be green; PRs that
-touch security-relevant paths also get an independent reviewer. The owner merges, squash only
+No work without an open issue: every change, also a standalone bug fix, task or chore, starts from
+an open issue on the project board; if there is none, create one first
+([ADR 0013](docs/adr/0013-every-change-starts-from-an-open-issue.md)). Then branch
+`wp-NN-short-name` (`fix-short-name` or `chore-short-name` outside a work package) → PR with a
+Conventional Commit title and `Closes #N` (or `Refs #N`). The required checks `ci-ok` and
+`pr-policy` (PR title and linked issue) must be green; PRs that touch security-relevant paths also
+get an independent reviewer. The owner merges, squash only
 ([ADR 0010](docs/adr/0010-working-process.md)).
 
 ## License

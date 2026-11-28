@@ -5,6 +5,9 @@ repeats this list as a checklist; tick only what is true, and explain any item t
 
 ## Scope
 
+- [ ] The PR links an open issue with `Closes #N` (or `Refs #N`): no work without an issue, also
+      for a standalone bug fix, task or chore; an epic alone does not count
+      ([git-and-pull-requests.md](git-and-pull-requests.md#issues)).
 - [ ] Every acceptance criterion of the issue is met. Deviations are listed in the PR with reasons.
 - [ ] Only the files the work package owns changed ([file ownership](../../CLAUDE.md#file-ownership)).
 
@@ -14,7 +17,7 @@ repeats this list as a checklist; tick only what is true, and explain any item t
 - [ ] Local checks are green: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`; for .NET
       changes `dotnet format --verify-no-changes`, Release build and `dotnet test` (with Azurite).
 - [ ] The PR describes how it was verified. Never claim a check that was not run.
-- [ ] `ci-ok` is green on the PR.
+- [ ] `ci-ok` and `pr-policy` are green on the PR.
 
 ## Product safety
 

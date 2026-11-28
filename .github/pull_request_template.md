@@ -11,11 +11,18 @@ tokens or secrets anywhere in this PR (text, screenshots, logs). Use the fiction
 
 Closes #
 
+<!--
+Required (pr-policy check): link at least one OPEN issue of this repository above, e.g. "Closes #12",
+or "Refs #12" while the issue stays open. No work without an open issue: no issue yet? Create one
+first (bug, task or chore template) and put it on the board. An epic alone does not count, and
+links inside these comments do not count. Editing the PR body re-runs the check.
+-->
+
 ## Definition of Done
 
 <!-- Tick what is true. For an item that does not apply, tick it and add "n/a: <reason>". -->
 
-- [ ] All acceptance criteria of the issue are met; only files inside its Key paths changed
+- [ ] The PR links an open issue (`Closes #N` / `Refs #N`); all acceptance criteria of the issue are met; only files inside its Key paths changed
 - [ ] Tests added or updated for the new behaviour
 - [ ] Local checks green (`pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`; for .NET `dotnet format --verify-no-changes`, build, `dotnet test`)
 - [ ] **Dark-launched?** Guest-visible behaviour is behind a feature flag that is off in `production`

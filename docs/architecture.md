@@ -26,7 +26,7 @@ never real content or personal data ([repo hygiene](conventions/repo-hygiene.md)
 | Feature flags   | Per-environment `features` in `instance.json`, applied to the UI (`build.json`: a note instead of the feature) and the API (`Features__*` app settings → 404 when off). Guest-visible features ship dark. [ADR 0005](adr/0005-feature-flags-per-environment.md)                                                                                                                                                                                                                                                                           |
 | Admin auth      | SWA preconfigured `aad` provider (any Microsoft account), role `admin` via SWA invitations sent personally by the owner. GitHub provider blocked. Route rules `/admin*`, `/api/admin*`. The API re-checks role and provider. Admin is a separate HTML entry.                                                                                                                                                                                                                                                                              |
 | Tests           | Vitest + Testing Library; xUnit for Domain and API; integration tests against **Azurite via docker compose** (service container in CI). Contract fixtures shared by TS and .NET. Playwright device matrix with screenshots. [ADR 0008](adr/0008-azurite-via-docker-compose.md)                                                                                                                                                                                                                                                            |
-| Merging         | The owner merges, squash only, once `ci-ok` is green; an independent reviewer agent reviews security-relevant PRs first, and agents never merge. [ADR 0010](adr/0010-working-process.md)                                                                                                                                                                                                                                                                                                                                                  |
+| Merging         | Every change starts from an open issue. The owner merges, squash only, once `ci-ok` and `pr-policy` are green; an independent reviewer agent reviews security-relevant PRs first, and agents never merge. [ADR 0010](adr/0010-working-process.md), [ADR 0013](adr/0013-every-change-starts-from-an-open-issue.md)                                                                                                                                                                                                                         |
 
 ## 2. Repository layout
 
@@ -61,10 +61,12 @@ WeddingPlanner/
 │  └─ app/                    RG scope, CI-run: SWA Free, storage, Log Analytics / App Insights, alerts
 ├─ scripts/                   bootstrap.sh, bootstrap-cost.sh, instance/new-instance.sh,
 │                             github/{setup-repo,create-project,apply-ruleset}.sh,
-│                             ops/{lockdown,invite-admin,list-admins,remove-admin,restore-table}.sh
+│                             ops/{lockdown,invite-admin,list-admins,remove-admin,restore-table}.sh,
+│                             ci/check-pr-issue.sh (run by pr-policy.yml)
 ├─ docs/                      architecture.md, local-development.md, api.md, conventions/, adr/,
 │                             runbooks/, privacy/
-├─ .github/                   workflows/ (ci, deploy, uptime, backup), actions/, templates, CODEOWNERS
+├─ .github/                   workflows/ (ci, pr-policy, deploy, uptime, backup), actions/, templates,
+│                             rulesets/, CODEOWNERS
 └─ CLAUDE.md, package.json, pnpm-workspace.yaml, tsconfig.base.json, biome.json,
    WeddingPlanner.slnx, global.json, Directory.Build.props, Directory.Packages.props, docker-compose.yml,
    swa-cli.config.json
@@ -260,11 +262,17 @@ scheduled cold-start probe on `e2e` and App Insights durations measure the effec
 - **api:** Azurite service container, `dotnet format --verify-no-changes`, Release build, `dotnet test`
   including integration tests;
 - **infra:** Bicep build and lint;
-- **hygiene:** actionlint, shellcheck, gitleaks, dependency review, Conventional Commit PR title;
+- **hygiene:** actionlint, shellcheck, gitleaks, dependency review, offline script tests;
 - **e2e** (every PR): the Playwright device matrix in parallel, each job uploading screenshots, merged
   into the `screenshots-<sha>` artifact with an `index.html` contact sheet (14-day retention);
-- **`ci-ok`:** the only required check; passes when every needed job succeeded or was skipped by the
-  path filter.
+- **`ci-ok`:** a required check; passes when every needed job succeeded or was skipped by the path
+  filter.
+
+**Pull requests (`pr-policy.yml`; no secrets, read-only token):** the required check **`pr-policy`**,
+also re-run when the PR title or body is edited: the title is a Conventional Commit summary, and the
+body links an open issue of this repository that is neither a pull request nor an epic
+(`scripts/ci/check-pr-issue.sh`; Dependabot's PRs are exempt,
+[ADR 0013](adr/0013-every-change-starts-from-an-open-issue.md)).
 
 **Every `main` commit (`deploy.yml`):** run the same CI gate, build once, then
 
@@ -281,9 +289,9 @@ issue naming only the environment; `backup.yml` exports the tables nightly to pr
 
 **Governance:** every action is pinned by SHA; CodeQL default setup; secret scanning with push
 protection; Dependabot weekly; workflow runs from outside contributors need approval. A ruleset on
-`main` requires a PR, squash merges, linear history and `ci-ok` on an up-to-date branch, and blocks
-force-pushes and deletion. `scripts/github/setup-repo.sh` and `create-project.sh` configure the
-repository and the project board; the owner runs them, never CI.
+`main` requires a PR, squash merges, linear history and `ci-ok` and `pr-policy` on an up-to-date
+branch, and blocks force-pushes and deletion. `scripts/github/setup-repo.sh` and `create-project.sh`
+configure the repository and the project board; the owner runs them, never CI.
 
 ## 12. Cost and abuse
 

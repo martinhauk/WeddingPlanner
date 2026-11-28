@@ -1,0 +1,48 @@
+{
+  "GET repos/acme/wedding-demo/issues/10": {
+    "number": 10,
+    "title": "chore: tidy the sample media",
+    "state": "open",
+    "repository_url": "https://api.example.com/repos/acme/wedding-demo",
+    "labels": [{ "name": "type:chore" }, { "name": "area:content" }]
+  },
+  "GET repos/acme/wedding-demo/issues/11": {
+    "number": 11,
+    "title": "bug: RSVP button overlaps the footer",
+    "state": "open",
+    "repository_url": "https://api.example.com/repos/acme/wedding-demo",
+    "labels": [{ "name": "type:bug" }]
+  },
+  "GET repos/acme/wedding-demo/issues/20": {
+    "number": 20,
+    "title": "Couples can publish their own site",
+    "state": "open",
+    "repository_url": "https://api.example.com/repos/acme/wedding-demo",
+    "labels": [{ "name": "type:epic" }]
+  },
+  "GET repos/acme/wedding-demo/issues/30": {
+    "number": 30,
+    "title": "feat(web): hero section",
+    "state": "open",
+    "repository_url": "https://api.example.com/repos/acme/wedding-demo",
+    "labels": [],
+    "pull_request": { "url": "https://api.example.com/repos/acme/wedding-demo/pulls/30" }
+  },
+  "GET repos/acme/wedding-demo/issues/40": {
+    "number": 40,
+    "title": "Task that is already done",
+    "state": "closed",
+    "repository_url": "https://api.example.com/repos/acme/wedding-demo",
+    "labels": [{ "name": "type:feature" }]
+  },
+  "GET repos/acme/wedding-demo/issues/50": {
+    "number": 50,
+    "title": "Issue that moved to another repository",
+    "state": "open",
+    "repository_url": "https://api.example.com/repos/acme/other",
+    "labels": []
+  },
+  "GET repos/acme/wedding-demo/issues/60": {
+    "__error": "Server Error (HTTP 502)"
+  }
+}
